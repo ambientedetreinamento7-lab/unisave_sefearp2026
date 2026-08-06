@@ -57,20 +57,20 @@ export function Estande() {
         .eq('diagnostic_profile', diagnostic_profile)
         .maybeSingle()
 
-      const { error: upsertError } = await supabase.from('profiles').upsert(
-        {
-          name,
-          email,
-          phone_whatsapp: whatsapp || null,
-          program_id: programRow?.id ?? program,
-          curriculum_period: fase,
-          diagnostic_profile,
-          selected_track_id: trackRow?.id ?? null,
-          role: 'aluno',
-        },
-        { onConflict: 'email' },
-      )
-      if (upsertError) throw upsertError
+      // A SECURITY DEFINER RPC does this insert/update server-side instead of a
+      // client-side upsert: Postgres evaluates the UPDATE RLS policy even for a
+      // brand-new row on INSERT ... ON CONFLICT DO UPDATE, which made the plain
+      // upsert fail with 42501 regardless of how the policy was written.
+      const { error: captureError } = await supabase.rpc('capture_estande_lead', {
+        p_name: name,
+        p_email: email,
+        p_phone: whatsapp || null,
+        p_program_id: programRow?.id ?? program,
+        p_curriculum_period: fase,
+        p_diagnostic_profile: diagnostic_profile,
+        p_selected_track_id: trackRow?.id ?? null,
+      })
+      if (captureError) throw captureError
 
       const { error: otpError } = await supabase.auth.signInWithOtp({
         email,
