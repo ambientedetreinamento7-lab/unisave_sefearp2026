@@ -10,6 +10,11 @@ export type IconName =
   | "arrow-right"
   | "sparkles"
   | "party"
+  | "sun"
+  | "moon"
+  | "chevron-down"
+  | "log-out"
+  | "shield"
 
 const PATHS: Record<IconName, React.ReactNode> = {
   book: (
@@ -101,6 +106,48 @@ const PATHS: Record<IconName, React.ReactNode> = {
       stroke="currentColor"
       strokeWidth="1.6"
       strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  sun: (
+    <>
+      <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="M12 2.5v2.3M12 19.2v2.3M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.3M19.2 12h2.3M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </>
+  ),
+  moon: (
+    <path
+      d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinejoin="round"
+    />
+  ),
+  "chevron-down": (
+    <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  ),
+  "log-out": (
+    <path
+      d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  shield: (
+    <path
+      d="M12 3.5 19 6v6c0 4.5-3 7.5-7 8.5-4-1-7-4-7-8.5V6l7-2.5Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
       strokeLinejoin="round"
     />
   ),

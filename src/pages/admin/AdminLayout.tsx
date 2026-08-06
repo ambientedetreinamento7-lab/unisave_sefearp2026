@@ -23,7 +23,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
               to={l.to}
               className={({ isActive }) =>
                 `rounded-full px-4 py-2 text-sm font-semibold transition ${
-                  isActive ? 'bg-navy text-white' : 'bg-white text-ink-soft hover:text-navy'
+                  isActive ? 'bg-navy text-white' : 'bg-surface text-ink-soft hover:text-navy'
                 }`
               }
             >

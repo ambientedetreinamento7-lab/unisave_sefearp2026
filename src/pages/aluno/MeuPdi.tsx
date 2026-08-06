@@ -32,7 +32,7 @@ export function MeuPdi() {
           Plano de Desenvolvimento Individual — cruzando sua trilha do evento com a taxonomia de skills do curso.
         </p>
 
-        <div className="mt-6 flex gap-2 rounded-full bg-white p-1 shadow-sm">
+        <div className="mt-6 flex gap-2 rounded-full bg-surface p-1 shadow-sm">
           {(
             [
               ['pdi', 'Meu PDI'],

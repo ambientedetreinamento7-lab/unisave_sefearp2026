@@ -68,7 +68,7 @@ export function Dashboard() {
 
   return (
     <div className="min-h-screen bg-bg pb-16">
-      <AppHeader scarcityLabel="Vagas limitadas na trilha do evento" />
+      <AppHeader />
 
       <main className="mx-auto max-w-4xl px-4 py-8">
         <h1 className="text-2xl font-extrabold text-ink">
@@ -93,7 +93,7 @@ export function Dashboard() {
           </section>
         )}
 
-        <div className="mt-8 flex gap-2 rounded-full bg-white p-1 shadow-sm">
+        <div className="mt-8 flex gap-2 rounded-full bg-surface p-1 shadow-sm">
           <button
             onClick={() => setTab('trilha')}
             className={`flex-1 rounded-full py-2 text-sm font-semibold transition ${

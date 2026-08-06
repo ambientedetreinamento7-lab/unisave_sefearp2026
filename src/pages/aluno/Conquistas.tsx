@@ -61,7 +61,7 @@ export function Conquistas() {
                   className={`flex h-17 w-17 items-center justify-center rounded-full text-2xl ${
                     unlocked
                       ? 'bg-gradient-to-br from-gold to-yellow-300 shadow-md'
-                      : 'border-2 border-dashed border-gray-300 bg-white text-gray-300'
+                      : 'border-2 border-dashed border-navy-light bg-surface text-ink-soft'
                   }`}
                   style={{ width: 68, height: 68 }}
                 >
