@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --color-navy: #1a3b6e;
+  --color-navy-dark: #142e56;
+  --color-navy-deep: #0d1a3a;
+  --color-navy-light: #eef2f9;
+  --color-maroon: #6e1530;
+  --color-brand-red: #e30613;
+  --color-brand-red-dark: #b90510;
+  --color-success: #16a34a;
+  --color-gold: #d9a441;
+  --color-bg: #f5f6f8;
+  --color-ink: #1a2233;
+  --color-ink-soft: #6b7280;
+  --color-lavender: #eef0ff;
+  --color-lavender-ink: #4c4dc7;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background: var(--color-bg);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100svh;
+  }
+}
+
+@layer components {
+  .progress-track {
+    height: 6px;
+    border-radius: 999px;
+    background: #e5e7eb;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--color-navy), var(--color-brand-red));
+    transition: width 0.35s ease;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 1px 2px rgba(20, 30, 60, 0.05);
+  }
+
+  .card-highlight {
+    box-shadow: 0 10px 30px rgba(20, 30, 60, 0.12);
+  }
+
+  /* Hero gradient used on the public quiz flow (/estande, /resultado, /entrar) —
+     kept entirely in the blue family (no red/maroon) so navy stays dominant. */
+  .hero-gradient {
+    background: radial-gradient(130% 110% at 0% 0%, #22346f 0%, var(--color-navy) 40%, var(--color-navy-deep) 100%);
+  }
+
+  .icon-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: var(--color-lavender);
+    color: var(--color-lavender-ink);
+    flex-shrink: 0;
+  }
+
+  .glass-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: #fff;
+    backdrop-filter: blur(6px);
+  }
+}
