@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext'
 import { AdminAnalytics } from './pages/admin/AdminAnalytics'
 import { AdminGrade } from './pages/admin/AdminGrade'
 import { AdminProgramas } from './pages/admin/AdminProgramas'
+import { AdminQuizzes } from './pages/admin/AdminQuizzes'
 import { AdminTrilhas } from './pages/admin/AdminTrilhas'
 import { AdminUsuarios } from './pages/admin/AdminUsuarios'
 import { Conquistas } from './pages/aluno/Conquistas'
@@ -88,6 +89,14 @@ function App() {
           element={
             <RouteGuard allow={['admin']}>
               <AdminTrilhas />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/admin/quizzes"
+          element={
+            <RouteGuard allow={['admin']}>
+              <AdminQuizzes />
             </RouteGuard>
           }
         />

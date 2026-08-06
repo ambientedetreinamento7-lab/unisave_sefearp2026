@@ -5,6 +5,7 @@ import { AppHeader } from '../../components/AppHeader'
 const LINKS = [
   { to: '/admin/programas', label: 'Programas' },
   { to: '/admin/trilhas', label: 'Trilhas' },
+  { to: '/admin/quizzes', label: 'Quizzes' },
   { to: '/admin/grade', label: 'Grade Curricular' },
   { to: '/admin/usuarios', label: 'Usuários' },
   { to: '/admin/analytics', label: 'Analytics' },

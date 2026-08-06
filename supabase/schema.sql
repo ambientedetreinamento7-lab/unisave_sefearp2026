@@ -78,7 +78,12 @@ create table profiles (
   diagnostic_profile diagnostic_profile,
   selected_track_id uuid references tracks(id),
   role user_role not null default 'aluno',
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- Flips to true once sync_profile_with_auth reconciles this row to a real
+  -- auth.users id. Lets RLS distinguish "still an anonymous /estande lead"
+  -- from "claimed account" without querying auth.users directly (anon has
+  -- no SELECT grant there, and shouldn't).
+  claimed boolean not null default false
 );
 
 create table user_progress (
@@ -165,14 +170,16 @@ create index on pdi_plan_items (plan_id);
 -- id so `auth.uid() = profiles.id` holds for all future RLS checks. The
 -- `on update cascade` FKs above carry every progress/plan row along.
 create or replace function sync_profile_with_auth()
-returns trigger language plpgsql security definer as $$
+returns trigger language plpgsql security definer
+set search_path = public
+as $$
 begin
-  update profiles set id = new.id
+  update profiles set id = new.id, claimed = true
   where email = new.email and id <> new.id;
 
-  insert into profiles (id, name, email, role)
-  values (new.id, coalesce(new.raw_user_meta_data ->> 'name', split_part(new.email, '@', 1)), new.email, 'aluno')
-  on conflict (id) do nothing;
+  insert into profiles (id, name, email, role, claimed)
+  values (new.id, coalesce(new.raw_user_meta_data ->> 'name', split_part(new.email, '@', 1)), new.email, 'aluno', true)
+  on conflict (id) do update set claimed = true;
 
   return new;
 end;
@@ -242,6 +249,59 @@ create policy "self read profile" on profiles for select
 create policy "self update profile" on profiles for update
   using (auth.uid() = id or current_role_is('admin'));
 
+-- The /estande upsert (onConflict: 'email') issues INSERT ... ON CONFLICT DO
+-- UPDATE even for a brand-new email, so Postgres evaluates the UPDATE policy
+-- too — not just INSERT. Anon has no auth.uid() yet at that point, so allow
+-- updates on leads not yet linked to a confirmed auth user, and pin role to
+-- 'aluno' so this can't be used to self-promote to moderador/admin.
+create policy "anon updates unclaimed leads" on profiles for update
+  using (not claimed)
+  with check (not claimed and role = 'aluno');
+
+-- Postgres still requires the UPDATE policy's WITH CHECK to pass for an
+-- INSERT ... ON CONFLICT DO UPDATE even when the row is brand new (no real
+-- conflict), so the upsert above keeps failing with 42501 for first-time
+-- emails despite the policy being correct. Route the /estande capture
+-- through a SECURITY DEFINER function instead, so it runs with the
+-- function owner's privileges and skips RLS entirely for this one
+-- controlled, narrowly-scoped operation.
+create or replace function public.capture_estande_lead(
+  p_name text,
+  p_email text,
+  p_phone text,
+  p_program_id text,
+  p_curriculum_period text,
+  p_diagnostic_profile diagnostic_profile,
+  p_selected_track_id uuid
+) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into profiles (
+    name, email, phone_whatsapp, program_id, curriculum_period,
+    diagnostic_profile, selected_track_id, role
+  )
+  values (
+    p_name, p_email, p_phone, p_program_id, p_curriculum_period,
+    p_diagnostic_profile, p_selected_track_id, 'aluno'
+  )
+  on conflict (email) do update set
+    name = excluded.name,
+    phone_whatsapp = excluded.phone_whatsapp,
+    program_id = excluded.program_id,
+    curriculum_period = excluded.curriculum_period,
+    diagnostic_profile = excluded.diagnostic_profile,
+    selected_track_id = excluded.selected_track_id
+  where profiles.claimed = false;
+end;
+$$;
+
+grant execute on function public.capture_estande_lead(
+  text, text, text, text, text, diagnostic_profile, uuid
+) to anon;
+
 create policy "self manage progress" on user_progress for all
   using (auth.uid() = user_id or current_role_is('moderador') or current_role_is('admin'))
   with check (auth.uid() = user_id);
@@ -265,6 +325,24 @@ create policy "self manage plan items" on pdi_plan_items for all
       p.user_id = auth.uid() or current_role_is('moderador') or current_role_is('admin')
     ))
   );
+
+-- ============================================================
+-- STORAGE — SCORM packages
+-- ============================================================
+-- Public bucket: extracted SCORM files (html/js/css/xml/media) are served
+-- straight into the ScormPlayer iframe by public URL, one object per file
+-- (the admin upload flow unzips client-side and uploads each entry — see
+-- AdminTrilhas.tsx). Only admins may write; anyone may read.
+insert into storage.buckets (id, name, public)
+values ('scorm-packages', 'scorm-packages', true)
+on conflict (id) do nothing;
+
+create policy "public can read scorm packages" on storage.objects
+  for select using (bucket_id = 'scorm-packages');
+
+create policy "admin manages scorm packages" on storage.objects
+  for all using (bucket_id = 'scorm-packages' and current_role_is('admin'))
+  with check (bucket_id = 'scorm-packages' and current_role_is('admin'));
 
 -- ============================================================
 -- SEED DATA — 4 programas reais (spec section 1 e 3)

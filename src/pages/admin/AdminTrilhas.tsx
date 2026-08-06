@@ -1,7 +1,30 @@
+import JSZip from 'jszip'
 import { useEffect, useState } from 'react'
 import { AdminLayout } from './AdminLayout'
 import { supabase } from '../../lib/supabase'
 import type { ContentType, DiagnosticProfile, Pill, Program, Track } from '../../types/database'
+
+const CONTENT_TYPE_BY_EXT: Record<string, string> = {
+  html: 'text/html',
+  htm: 'text/html',
+  js: 'text/javascript',
+  css: 'text/css',
+  xml: 'application/xml',
+  json: 'application/json',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  svg: 'image/svg+xml',
+  mp3: 'audio/mpeg',
+  mp4: 'video/mp4',
+  swf: 'application/x-shockwave-flash',
+}
+
+function guessContentType(filename: string) {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? ''
+  return CONTENT_TYPE_BY_EXT[ext] ?? 'application/octet-stream'
+}
 
 export function AdminTrilhas() {
   const [tracks, setTracks] = useState<Track[]>([])
@@ -129,26 +152,47 @@ function PillFormModal({ trackId, onClose, onSaved }: { trackId: string; onClose
   const [manifestPath, setManifestPath] = useState('index_lms.html')
   const [uploadPct, setUploadPct] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   async function save() {
     setSaving(true)
+    setError('')
     let scormPackageUrl: string | null = null
 
     if (contentType === 'scorm' && scormFile) {
-      // Upload the raw .zip; a Supabase Edge Function should extract it into
-      // scorm-packages/{pill_id}/ per spec 10.3 — this stores the source zip.
-      const path = `scorm-packages/${crypto.randomUUID()}/${scormFile.name}`
-      const { error } = await supabase.storage.from('scorm-packages').upload(path, scormFile, {
-        upsert: true,
-      })
-      if (!error) {
-        setUploadPct(100)
-        const { data } = supabase.storage.from('scorm-packages').getPublicUrl(path.replace(/\/[^/]+$/, ''))
+      try {
+        // Extract the .zip client-side and upload every entry as its own
+        // object under scorm-packages/{packageId}/ — the player needs real
+        // files (html/js/css/xml) at that path, not the zip itself.
+        const zip = await JSZip.loadAsync(scormFile)
+        const entries = Object.values(zip.files).filter((f) => !f.dir)
+        if (entries.length === 0) throw new Error('O arquivo .zip está vazio.')
+
+        const packageId = crypto.randomUUID()
+        let uploaded = 0
+        for (const entry of entries) {
+          const blob = await entry.async('blob')
+          const { error: uploadError } = await supabase.storage
+            .from('scorm-packages')
+            .upload(`${packageId}/${entry.name}`, blob, {
+              upsert: true,
+              contentType: guessContentType(entry.name),
+            })
+          if (uploadError) throw uploadError
+          uploaded += 1
+          setUploadPct(Math.round((uploaded / entries.length) * 100))
+        }
+
+        const { data } = supabase.storage.from('scorm-packages').getPublicUrl(packageId)
         scormPackageUrl = data.publicUrl
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Falha ao processar o pacote SCORM.')
+        setSaving(false)
+        return
       }
     }
 
-    await supabase.from('pills').insert({
+    const { error: insertError } = await supabase.from('pills').insert({
       track_id: trackId,
       title,
       axis,
@@ -158,6 +202,11 @@ function PillFormModal({ trackId, onClose, onSaved }: { trackId: string; onClose
       scorm_package_url: contentType === 'scorm' ? scormPackageUrl : null,
       scorm_manifest_path: contentType === 'scorm' ? manifestPath : null,
     })
+    if (insertError) {
+      setError(insertError.message)
+      setSaving(false)
+      return
+    }
     setSaving(false)
     onSaved()
   }
@@ -183,12 +232,17 @@ function PillFormModal({ trackId, onClose, onSaved }: { trackId: string; onClose
         {contentType === 'scorm' && (
           <>
             <input type="file" accept=".zip" onChange={(e) => setScormFile(e.target.files?.[0] ?? null)} className="w-full text-sm" />
-            <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Arquivo de entrada (imsmanifest.xml → href)" value={manifestPath} onChange={(e) => setManifestPath(e.target.value)} />
-            {saving && contentType === 'scorm' && (
-              <div className="progress-track"><div className="progress-fill" style={{ width: `${uploadPct}%` }} /></div>
+            <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Arquivo de entrada (ex: index_lms.html — veja o imsmanifest.xml do pacote)" value={manifestPath} onChange={(e) => setManifestPath(e.target.value)} />
+            {saving && (
+              <div>
+                <div className="progress-track"><div className="progress-fill" style={{ width: `${uploadPct}%` }} /></div>
+                <p className="mt-1 text-xs text-ink-soft">Enviando arquivos do pacote… {uploadPct}%</p>
+              </div>
             )}
           </>
         )}
+
+        {error && <p className="text-sm text-brand-red">{error}</p>}
 
         <div className="flex gap-2 pt-2">
           <button onClick={onClose} className="flex-1 rounded-xl border border-navy-light py-2.5 font-semibold text-ink-soft">Cancelar</button>
