@@ -80,6 +80,7 @@ export function Estande() {
 
       navigate('/resultado', { state: { profile: diagnostic_profile, program, name, email } })
     } catch (err) {
+      console.error('Falha ao enviar o quiz PDI Express:', err)
       setError(err instanceof Error ? err.message : 'Não foi possível enviar. Tente novamente.')
     } finally {
       setSubmitting(false)
