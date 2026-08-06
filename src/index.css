@@ -3,13 +3,16 @@
 @theme {
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
-  --color-navy: #1a3b6e;
-  --color-navy-dark: #142e56;
-  --color-navy-deep: #0d1a3a;
-  --color-navy-light: #eef2f9;
+  /* Official brand colors (manual da marca Grupo Savegnago):
+     navy #373896 / Pantone 2736 C, red #ed1c24 / Pantone P 48-8 C.
+     -dark/-deep/-light are derived shades for hover states and gradients. */
+  --color-navy: #373896;
+  --color-navy-dark: #2b2c75;
+  --color-navy-deep: #171840;
+  --color-navy-light: #e7e7f2;
   --color-maroon: #6e1530;
-  --color-brand-red: #e30613;
-  --color-brand-red-dark: #b90510;
+  --color-brand-red: #ed1c24;
+  --color-brand-red-dark: #bd171d;
   --color-success: #16a34a;
   --color-gold: #d9a441;
   --color-bg: #f5f6f8;
@@ -29,7 +32,7 @@
   --color-surface: #182036;
   --color-ink: #eef1f8;
   --color-ink-soft: #9aa3b8;
-  --color-navy-light: #3a4570;
+  --color-navy-light: #46479c;
   --color-lavender: #232a52;
   --color-lavender-ink: #b7bdf8;
 }
@@ -76,7 +79,7 @@
   /* Hero gradient used on the public quiz flow (/estande, /resultado, /entrar) —
      kept entirely in the blue family (no red/maroon) so navy stays dominant. */
   .hero-gradient {
-    background: radial-gradient(130% 110% at 0% 0%, #22346f 0%, var(--color-navy) 40%, var(--color-navy-deep) 100%);
+    background: radial-gradient(130% 110% at 0% 0%, #5f60ab 0%, var(--color-navy) 40%, var(--color-navy-deep) 100%);
   }
 
   .icon-badge {
