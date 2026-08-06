@@ -277,13 +277,13 @@ insert into programs (id, name, mission, framework_reference, color_accent) valu
 
 -- Example skill taxonomy per program (adjust with the real PPP taxonomy).
 insert into skill_categories (program_id, name, type)
-select id, 'Ética e Responsabilidade Socioambiental', 'etica' from programs
+select id, 'Ética e Responsabilidade Socioambiental', 'etica'::skill_type from programs
 union all
-select id, 'Comunicação e Liderança', 'comportamental' from programs
+select id, 'Comunicação e Liderança', 'comportamental'::skill_type from programs
 union all
-select id, 'Análise de Dados e Tecnologia', 'tecnica' from programs
+select id, 'Análise de Dados e Tecnologia', 'tecnica'::skill_type from programs
 union all
-select id, 'Gestão do Tempo e Autogestão', 'comportamental' from programs;
+select id, 'Gestão do Tempo e Autogestão', 'comportamental'::skill_type from programs;
 
 -- One example track per program x profile combination (Admin can add the
 -- remaining ones later — not all 12 combinations need to exist).
