@@ -1,5 +1,9 @@
-// Recreated visually from reference screenshots (no original vector/PNG files were
-// available to embed) — swap for real <img> assets in public/logos/ if provided.
+// public/logos/grupo-savegnago.svg is a real asset and renders correctly (it's
+// a light/white mark, meant to sit on the dark hero gradient). unisave.svg and
+// sefea.svg from that same drop only contain a near-invisible white-on-white
+// trace each — open either file directly and the shape is there, but all
+// color information was lost in whatever tool exported them, so both stay
+// hand-recreated below until a working export is provided.
 export function HeroBrandBar({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`flex items-center ${compact ? 'justify-center' : 'justify-between'} gap-4`}>
@@ -37,26 +41,7 @@ export function HeroBrandBar({ compact = false }: { compact?: boolean }) {
         </div>
       </div>
 
-      {!compact && (
-        <div className="flex items-center gap-2 text-white/90">
-          <svg width="26" height="26" viewBox="0 0 32 32" fill="none">
-            <ellipse cx="16" cy="16" rx="14.5" ry="9.5" stroke="currentColor" strokeWidth="1.3" />
-            <path
-              d="M9 18h14l-1.5-4.5a2 2 0 0 0-1.9-1.4h-7.2a2 2 0 0 0-1.9 1.4L9 18Z"
-              stroke="currentColor"
-              strokeWidth="1.3"
-              strokeLinejoin="round"
-            />
-            <circle cx="12.5" cy="18.5" r="1.3" fill="currentColor" />
-            <circle cx="19.5" cy="18.5" r="1.3" fill="currentColor" />
-          </svg>
-          <span className="text-[10.5px] font-bold leading-tight">
-            GRUPO
-            <br />
-            <span className="text-[13px]">Savegnago</span>
-          </span>
-        </div>
-      )}
+      {!compact && <img src="/logos/grupo-savegnago.svg" alt="Grupo Savegnago" className="h-8 w-auto" />}
     </div>
   )
 }
