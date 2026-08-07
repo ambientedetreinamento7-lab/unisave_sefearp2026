@@ -2,9 +2,11 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { RouteGuard } from './components/RouteGuard'
 import { AuthProvider } from './context/AuthContext'
 import { AdminAnalytics } from './pages/admin/AdminAnalytics'
+import { AdminCertificados } from './pages/admin/AdminCertificados'
 import { AdminGrade } from './pages/admin/AdminGrade'
 import { AdminProgramas } from './pages/admin/AdminProgramas'
 import { AdminQuizzes } from './pages/admin/AdminQuizzes'
+import { AdminScormLibrary } from './pages/admin/AdminScormLibrary'
 import { AdminTrilhas } from './pages/admin/AdminTrilhas'
 import { AdminUsuarios } from './pages/admin/AdminUsuarios'
 import { Conquistas } from './pages/aluno/Conquistas'
@@ -97,6 +99,22 @@ function App() {
           element={
             <RouteGuard allow={['admin']}>
               <AdminQuizzes />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/admin/scorms"
+          element={
+            <RouteGuard allow={['admin']}>
+              <AdminScormLibrary />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/admin/certificados"
+          element={
+            <RouteGuard allow={['admin']}>
+              <AdminCertificados />
             </RouteGuard>
           }
         />

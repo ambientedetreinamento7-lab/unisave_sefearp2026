@@ -5,6 +5,8 @@ import { AppHeader } from '../../components/AppHeader'
 const LINKS = [
   { to: '/admin/programas', label: 'Programas' },
   { to: '/admin/trilhas', label: 'Cursos' },
+  { to: '/admin/scorms', label: 'Biblioteca de SCORMs' },
+  { to: '/admin/certificados', label: 'Certificados' },
   { to: '/admin/quizzes', label: 'Quizzes' },
   { to: '/admin/grade', label: 'Grade Curricular' },
   { to: '/admin/usuarios', label: 'Usuários' },

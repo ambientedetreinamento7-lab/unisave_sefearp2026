@@ -6,13 +6,14 @@ import { ScormPlayer } from '../../components/ScormPlayer'
 import { useAuth } from '../../context/AuthContext'
 import { completePill, markPillInProgress } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
-import type { Pill, UserProgress } from '../../types/database'
+import type { Pill, ScormLibraryItem, UserProgress } from '../../types/database'
 
 export function CoursePlayer() {
   const { id } = useParams<{ id: string }>()
   const { profile } = useAuth()
   const navigate = useNavigate()
   const [pill, setPill] = useState<Pill | null>(null)
+  const [scormSource, setScormSource] = useState<{ packageUrl: string; manifestPath: string } | null>(null)
   const [progress, setProgress] = useState<UserProgress | null>(null)
   const [loading, setLoading] = useState(true)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -46,8 +47,27 @@ export function CoursePlayer() {
         .eq('pill_id', id!)
         .maybeSingle()
       if (cancelled) return
-      setPill(pillData as Pill)
+      const pillRow = pillData as Pill
+      setPill(pillRow)
       setProgress(progressData as UserProgress | null)
+
+      // Prefer the SCORM Library entry when the pill references one — that
+      // way updating the library package automatically reaches every pill
+      // pointing to it, instead of each pill carrying its own stale copy.
+      if (pillRow?.content_type === 'scorm') {
+        if (pillRow.scorm_library_id) {
+          const { data: libItem } = await supabase
+            .from('scorm_library')
+            .select('*')
+            .eq('id', pillRow.scorm_library_id)
+            .maybeSingle()
+          const lib = libItem as ScormLibraryItem | null
+          if (!cancelled && lib) setScormSource({ packageUrl: lib.package_url, manifestPath: lib.manifest_path })
+        } else if (pillRow.scorm_package_url && pillRow.scorm_manifest_path) {
+          setScormSource({ packageUrl: pillRow.scorm_package_url, manifestPath: pillRow.scorm_manifest_path })
+        }
+      }
+
       setLoading(false)
       if (!progressData) await markPillInProgress(profile!.id, id!)
     }
@@ -117,12 +137,15 @@ export function CoursePlayer() {
                 allow="autoplay; fullscreen"
               />
             )}
-            {pill.content_type === 'scorm' && pill.scorm_package_url && pill.scorm_manifest_path && (
+            {pill.content_type === 'scorm' && scormSource && (
               <ScormPlayer
-                packageUrl={pill.scorm_package_url}
-                manifestPath={pill.scorm_manifest_path}
+                packageUrl={scormSource.packageUrl}
+                manifestPath={scormSource.manifestPath}
                 onProgress={handleScormProgress}
               />
+            )}
+            {pill.content_type === 'scorm' && !scormSource && (
+              <div className="flex h-full items-center justify-center text-ink-soft">Conteúdo indisponível</div>
             )}
             {!pill.content_url && pill.content_type !== 'scorm' && (
               <div className="flex h-full items-center justify-center text-ink-soft">Conteúdo indisponível</div>

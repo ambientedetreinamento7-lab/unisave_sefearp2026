@@ -53,7 +53,26 @@ create table tracks (
   carga_horaria_total numeric,
   -- Certificate is awarded once the student completes 100% of the track's
   -- pills — a fixed rule, this flag just turns eligibility on/off per curso.
-  certificate_enabled boolean not null default false
+  certificate_enabled boolean not null default false,
+  -- Recommended: cover 1326x495px, thumbnail 895x495px (spec: capa/miniatura).
+  cover_url text,
+  thumbnail_url text,
+  -- Certificate template (spec: página de criação de certificados).
+  -- Recommended background size: 1400x495px.
+  certificate_background_url text,
+  certificate_message text
+);
+
+-- Reusable SCORM packages, managed independently of any single pill (spec:
+-- Biblioteca de Scorms). A pill's scorm_library_id points here instead of
+-- carrying its own copy of the package URL, so re-uploading a package in
+-- the library updates every pill that references it automatically.
+create table scorm_library (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  package_url text not null,
+  manifest_path text not null default 'index.html',
+  created_at timestamptz not null default now()
 );
 
 create table pills (
@@ -67,7 +86,11 @@ create table pills (
   content_type content_type not null default 'video',
   content_url text,
   scorm_package_url text,
-  scorm_manifest_path text
+  scorm_manifest_path text,
+  scorm_library_id uuid references scorm_library(id) on delete set null,
+  -- Recommended: cover 1326x495px, thumbnail 895x495px (spec: capa/miniatura).
+  cover_url text,
+  thumbnail_url text
 );
 
 -- id starts decoupled from auth.users: the /estande capture step writes a
@@ -212,9 +235,16 @@ alter table skill_ratings enable row level security;
 alter table pdi_plans enable row level security;
 alter table pdi_plan_items enable row level security;
 alter table curriculum_grid enable row level security;
+alter table scorm_library enable row level security;
 
+-- SECURITY DEFINER so this bypasses profiles' own RLS instead of re-entering
+-- it — without this, the SELECT below re-triggers policies that call
+-- current_role_is() again (mutual recursion), which mostly stayed hidden
+-- behind short-circuit evaluation but blew the stack (error 54001) under
+-- the storage.objects write path. Safe to bypass RLS here: the WHERE clause
+-- is pinned to auth.uid(), so it only ever reveals the caller's own role.
 create or replace function current_role_is(role_name user_role)
-returns boolean language sql stable as $$
+returns boolean language sql stable security definer set search_path = public as $$
   select exists (
     select 1 from profiles where id = auth.uid() and role = role_name
   );
@@ -230,12 +260,15 @@ create policy "catalog readable by all" on pills for select using (true);
 create policy "catalog readable by all" on quizzes for select using (true);
 create policy "catalog readable by all" on questions for select using (true);
 create policy "catalog readable by all" on curriculum_grid for select using (true);
+create policy "catalog readable by all" on scorm_library for select using (true);
 
 create policy "admin manages catalog" on programs for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
 create policy "admin manages skills" on skill_categories for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
 create policy "admin manages tracks" on tracks for all
+  using (current_role_is('admin')) with check (current_role_is('admin'));
+create policy "admin manages scorm library" on scorm_library for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
 create policy "admin manages pills" on pills for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
@@ -353,6 +386,23 @@ create policy "admin manages scorm packages" on storage.objects
   with check (bucket_id = 'scorm-packages' and current_role_is('admin'));
 
 -- ============================================================
+-- STORAGE — cover/thumbnail/certificate images
+-- ============================================================
+-- Plain images, so unlike scorm-packages this never touches the
+-- text/html-downgrade issue — a normal public bucket is fine to read
+-- straight from its public URL.
+insert into storage.buckets (id, name, public)
+values ('covers', 'covers', true)
+on conflict (id) do nothing;
+
+create policy "public can read covers" on storage.objects
+  for select using (bucket_id = 'covers');
+
+create policy "admin manages covers" on storage.objects
+  for all using (bucket_id = 'covers' and current_role_is('admin'))
+  with check (bucket_id = 'covers' and current_role_is('admin'));
+
+-- ============================================================
 -- SEED DATA — 4 programas reais (spec section 1 e 3)
 -- ============================================================
 insert into programs (id, name, mission, framework_reference, color_accent) values
@@ -397,3 +447,79 @@ select
   'video',
   null
 from tracks t;
+
+-- ============================================================
+-- SEED DATA — Biblioteca de cursos oficiais (spec item 1)
+-- ============================================================
+-- Cadastro em "casca" (título + eixo temático) dos 52 cursos oficiais,
+-- sem conteúdo ainda — o admin preenche vídeo/SCORM depois em
+-- /admin/trilhas. Ficam todos numa trilha catálogo dedicada para não
+-- forçar um encaixe arbitrário em programa/perfil; o admin pode
+-- reorganizar depois.
+insert into tracks (title, description, program_id, diagnostic_profile)
+values (
+  'Biblioteca de Cursos',
+  'Catálogo geral de cursos oficiais — organize por trilha específica conforme necessário.',
+  'administracao',
+  'autogestao'
+);
+
+insert into pills (track_id, title, axis, description, duration, content_type, content_url)
+select t.id, v.title, v.axis,
+  'Pílula prática de ' || lower(v.title) || ' com aplicação imediata na sua rotina acadêmica e profissional.',
+  '12 min', 'video', null
+from (select id from tracks where title = 'Biblioteca de Cursos') t
+cross join (values
+  ('A arte de comunicar com assertividade', 'Comunicação'),
+  ('Economia Compartilhada', 'Futuro do Trabalho'),
+  ('Competências do Futuro', 'Futuro do Trabalho'),
+  ('A mente mente', 'Mente & Emoções'),
+  ('Dieta emocional: O funcionamento da mente', 'Mente & Emoções'),
+  ('Diálogos consultivos', 'Comunicação'),
+  ('Gestão de senhas seguras', 'Segurança Digital'),
+  ('Líder Real - Como fazer diferente', 'Liderança'),
+  ('Líder Real - A virada de chave', 'Liderança'),
+  ('Liderando a Si mesmo 1 - Práticas de Autoconhecimento', 'Autoconhecimento'),
+  ('Liderando a Si mesmo 2 - Arquétipos e Inteligência Emocional', 'Autoconhecimento'),
+  ('Propósito de Vida: Encontre o seu porquê', 'Autoconhecimento'),
+  ('A mente mente: O futuro infecta o presente', 'Mente & Emoções'),
+  ('A mente mente: Transtornos que aprisionam', 'Mente & Emoções'),
+  ('Ansiedade: como enfrentar o mal do século', 'Bem-estar'),
+  ('Burnout: Como lidar com a síndrome do esgotamento profissional', 'Bem-estar'),
+  ('Capacidade Analítica', 'Dados & Análise'),
+  ('Como desenvolver a inteligência emocional', 'Inteligência Emocional'),
+  ('Comunicação Não Violenta', 'Comunicação'),
+  ('Comunicação para líderes em momentos sensíveis', 'Comunicação'),
+  ('Conectando Gerações', 'Diversidade & Inclusão'),
+  ('Confiança', 'Cultura & Times'),
+  ('Desafios da primeira liderança', 'Liderança'),
+  ('Diversidade e Inclusão', 'Diversidade & Inclusão'),
+  ('Dominando o ChatGPT: A arte de criacao de prompt', 'IA Generativa'),
+  ('Dominando o ChatGPT: Aprender', 'IA Generativa'),
+  ('Dominando o ChatGPT: Criando seu projeto', 'IA Generativa'),
+  ('Dominando o ChatGPT: Escrever (variáveis)', 'IA Generativa'),
+  ('Dominando o ChatGPT: Introducao ao ChatGPT.', 'IA Generativa'),
+  ('Dominando o ChatGPT: Pensar (Criterização)', 'IA Generativa'),
+  ('Dominando o ChatGPT: Ter Ideias', 'IA Generativa'),
+  ('Empatia', 'Cultura & Times'),
+  ('Empresas inclusivas e viés do inconsciente', 'Diversidade & Inclusão'),
+  ('Escrita assertiva: elimine conflitos na comunicação escrita', 'Comunicação'),
+  ('Escuta Ativa', 'Comunicação'),
+  ('Feedback', 'Comunicação'),
+  ('Finanças Pessoais', 'Vida Financeira'),
+  ('Foco & Concentração: Como lidar com a SPA', 'Produtividade'),
+  ('Formação de multiplicadores de Treinamento', 'Liderança'),
+  ('Gestão das emoções no trabalho', 'Inteligência Emocional'),
+  ('Gestão do Tempo', 'Produtividade'),
+  ('Introdução a Banco de Dados', 'Dados & Análise'),
+  ('Lógica de Programação', 'Tecnologia'),
+  ('Mude seu mindset', 'Autoconhecimento'),
+  ('O Fim da Inteligência Emocional', 'Inteligência Emocional'),
+  ('O poder do networking', 'Mercado & Carreira'),
+  ('Oratória', 'Comunicação'),
+  ('Organização e planejamento', 'Produtividade'),
+  ('Pais brilhantes, profissionais fascinantes', 'Vida & Trabalho'),
+  ('Perfis Comportamentais', 'Cultura & Times'),
+  ('Protagonismo', 'Autoconhecimento'),
+  ('Segurança psicológica', 'Cultura & Times')
+) as v(title, axis);

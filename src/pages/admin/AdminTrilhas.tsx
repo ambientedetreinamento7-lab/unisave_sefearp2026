@@ -1,29 +1,17 @@
-import JSZip from 'jszip'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { AdminLayout } from './AdminLayout'
 import { supabase } from '../../lib/supabase'
-import type { ContentType, DiagnosticProfile, Pill, Program, Track } from '../../types/database'
+import type { ContentType, DiagnosticProfile, Pill, Program, ScormLibraryItem, Track } from '../../types/database'
 
-const CONTENT_TYPE_BY_EXT: Record<string, string> = {
-  html: 'text/html',
-  htm: 'text/html',
-  js: 'text/javascript',
-  css: 'text/css',
-  xml: 'application/xml',
-  json: 'application/json',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  gif: 'image/gif',
-  svg: 'image/svg+xml',
-  mp3: 'audio/mpeg',
-  mp4: 'video/mp4',
-  swf: 'application/x-shockwave-flash',
-}
-
-function guessContentType(filename: string) {
-  const ext = filename.split('.').pop()?.toLowerCase() ?? ''
-  return CONTENT_TYPE_BY_EXT[ext] ?? 'application/octet-stream'
+async function uploadCover(file: File, folder: string): Promise<string> {
+  const path = `${folder}/${crypto.randomUUID()}-${file.name}`
+  const { error } = await supabase.storage.from('covers').upload(path, file, {
+    upsert: true,
+    contentType: file.type || 'image/png',
+  })
+  if (error) throw error
+  return supabase.storage.from('covers').getPublicUrl(path).data.publicUrl
 }
 
 export function AdminTrilhas() {
@@ -33,10 +21,18 @@ export function AdminTrilhas() {
   const [loading, setLoading] = useState(true)
   const [trackForm, setTrackForm] = useState<Track | 'new' | null>(null)
   const [pillForm, setPillForm] = useState<{ trackId: string; pill: Pill | null } | null>(null)
+  const [search, setSearch] = useState('')
+  const [trackFilter, setTrackFilter] = useState<string>('all')
 
   async function deletePill(id: string) {
     if (!confirm('Remover esta pílula? Isso também apaga o progresso dos alunos nela.')) return
     await supabase.from('pills').delete().eq('id', id)
+    reload()
+  }
+
+  async function deleteTrack(id: string) {
+    if (!confirm('Excluir este curso inteiro? Todas as pílulas dele também serão removidas, junto com o progresso dos alunos.')) return
+    await supabase.from('tracks').delete().eq('id', id)
     reload()
   }
 
@@ -56,54 +52,96 @@ export function AdminTrilhas() {
     reload()
   }, [])
 
+  const visibleTracks = useMemo(() => {
+    return tracks.filter((track) => {
+      if (trackFilter !== 'all' && track.id !== trackFilter) return false
+      if (!search.trim()) return true
+      const q = search.trim().toLowerCase()
+      const trackMatches = track.title.toLowerCase().includes(q)
+      const pillMatches = pills.some((p) => p.track_id === track.id && p.title.toLowerCase().includes(q))
+      return trackMatches || pillMatches
+    })
+  }, [tracks, pills, search, trackFilter])
+
+  function pillsFor(trackId: string) {
+    const q = search.trim().toLowerCase()
+    return pills.filter((p) => p.track_id === trackId && (!q || p.title.toLowerCase().includes(q)))
+  }
+
   if (loading) return <AdminLayout><p className="text-ink-soft">Carregando…</p></AdminLayout>
 
   return (
     <AdminLayout>
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <input
+          className="min-w-[200px] flex-1 rounded-xl border border-navy-light px-4 py-2.5 text-sm"
+          placeholder="Buscar por nome do curso ou pílula…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select
+          className="rounded-xl border border-navy-light px-3 py-2.5 text-sm"
+          value={trackFilter}
+          onChange={(e) => setTrackFilter(e.target.value)}
+        >
+          <option value="all">Todas as trilhas</option>
+          {tracks.map((t) => (
+            <option key={t.id} value={t.id}>{t.title}</option>
+          ))}
+        </select>
+        <Link to="/admin/scorms" className="rounded-xl border border-navy-light px-4 py-2.5 text-sm font-semibold text-navy hover:border-navy">
+          Biblioteca de SCORMs
+        </Link>
         <button
           onClick={() => setTrackForm('new')}
-          className="rounded-xl bg-brand-red px-4 py-2 text-sm font-bold text-white hover:bg-brand-red-dark"
+          className="rounded-xl bg-brand-red px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-red-dark"
         >
           + Novo curso
         </button>
       </div>
 
       <div className="space-y-4">
-        {tracks.map((track) => (
-          <div key={track.id} className="card p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="font-bold text-ink">{track.title}</h3>
-                <p className="text-xs text-ink-soft">
-                  {programs.find((p) => p.id === track.program_id)?.name} · {track.diagnostic_profile}
-                  {track.carga_horaria_total != null && <> · {track.carga_horaria_total}h</>}
-                  {track.certificate_enabled && <> · 🎓 emite certificado</>}
-                </p>
+        {visibleTracks.map((track) => (
+          <div key={track.id} className="card overflow-hidden">
+            {track.cover_url && <img src={track.cover_url} alt="" className="h-32 w-full object-cover" />}
+            <div className="p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-bold text-ink">{track.title}</h3>
+                  <p className="text-xs text-ink-soft">
+                    {programs.find((p) => p.id === track.program_id)?.name} · {track.diagnostic_profile}
+                    {track.carga_horaria_total != null && <> · {track.carga_horaria_total}h</>}
+                    {track.certificate_enabled && <> · 🎓 emite certificado</>}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    onClick={() => setTrackForm(track)}
+                    className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    onClick={() => setPillForm({ trackId: track.id, pill: null })}
+                    className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
+                  >
+                    + Pílula
+                  </button>
+                  <button
+                    onClick={() => deleteTrack(track.id)}
+                    className="rounded-lg border border-brand-red/30 px-3 py-1.5 text-xs font-semibold text-brand-red hover:border-brand-red"
+                  >
+                    Excluir curso
+                  </button>
+                </div>
               </div>
-              <div className="flex shrink-0 gap-2">
-                <button
-                  onClick={() => setTrackForm(track)}
-                  className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
-                >
-                  Editar
-                </button>
-                <button
-                  onClick={() => setPillForm({ trackId: track.id, pill: null })}
-                  className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
-                >
-                  + Pílula
-                </button>
-              </div>
-            </div>
-            <div className="mt-3 space-y-1">
-              {pills
-                .filter((p) => p.track_id === track.id)
-                .map((p) => (
+              <div className="mt-3 space-y-1">
+                {pillsFor(track.id).map((p) => (
                   <div key={p.id} className="flex items-center justify-between gap-2 rounded-lg bg-bg px-3 py-2 text-sm">
-                    <span className="font-medium text-ink">
+                    <span className="flex items-center gap-2 font-medium text-ink">
+                      {p.thumbnail_url && <img src={p.thumbnail_url} alt="" className="h-6 w-10 rounded object-cover" />}
                       {p.title}
-                      {p.axis && <span className="ml-2 text-xs font-normal text-ink-soft">({p.axis})</span>}
+                      {p.axis && <span className="text-xs font-normal text-ink-soft">({p.axis})</span>}
                     </span>
                     <div className="flex shrink-0 items-center gap-3">
                       <span className="text-xs uppercase text-ink-soft">{p.content_type}</span>
@@ -119,13 +157,14 @@ export function AdminTrilhas() {
                     </div>
                   </div>
                 ))}
-              {pills.filter((p) => p.track_id === track.id).length === 0 && (
-                <p className="text-sm text-ink-soft">Nenhuma pílula cadastrada neste curso ainda.</p>
-              )}
+                {pillsFor(track.id).length === 0 && (
+                  <p className="text-sm text-ink-soft">Nenhuma pílula encontrada neste curso.</p>
+                )}
+              </div>
             </div>
           </div>
         ))}
-        {tracks.length === 0 && <p className="text-ink-soft">Nenhum curso cadastrado ainda.</p>}
+        {visibleTracks.length === 0 && <p className="text-ink-soft">Nenhum curso encontrado.</p>}
       </div>
 
       {trackForm && (
@@ -168,28 +207,37 @@ function TrackFormModal({
   const [certificateEnabled, setCertificateEnabled] = useState(track?.certificate_enabled ?? false)
   const [programId, setProgramId] = useState(track?.program_id ?? programs[0]?.id ?? '')
   const [profile, setProfile] = useState<DiagnosticProfile>(track?.diagnostic_profile ?? 'autogestao')
+  const [coverFile, setCoverFile] = useState<File | null>(null)
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   async function save() {
     setSaving(true)
     setError('')
-    const payload = {
-      title,
-      description,
-      objetivo_geral: objetivoGeral || null,
-      publico_alvo: publicoAlvo || null,
-      pre_requisitos: preRequisitos || null,
-      carga_horaria_total: cargaHoraria ? Number(cargaHoraria) : null,
-      certificate_enabled: certificateEnabled,
-      program_id: programId,
-      diagnostic_profile: profile,
-    }
-    const { error: saveError } = track
-      ? await supabase.from('tracks').update(payload).eq('id', track.id)
-      : await supabase.from('tracks').insert(payload)
-    if (saveError) {
-      setError(saveError.message)
+    try {
+      const coverUrl = coverFile ? await uploadCover(coverFile, 'tracks-cover') : track?.cover_url ?? null
+      const thumbnailUrl = thumbnailFile ? await uploadCover(thumbnailFile, 'tracks-thumbnail') : track?.thumbnail_url ?? null
+
+      const payload = {
+        title,
+        description,
+        objetivo_geral: objetivoGeral || null,
+        publico_alvo: publicoAlvo || null,
+        pre_requisitos: preRequisitos || null,
+        carga_horaria_total: cargaHoraria ? Number(cargaHoraria) : null,
+        certificate_enabled: certificateEnabled,
+        program_id: programId,
+        diagnostic_profile: profile,
+        cover_url: coverUrl,
+        thumbnail_url: thumbnailUrl,
+      }
+      const { error: saveError } = track
+        ? await supabase.from('tracks').update(payload).eq('id', track.id)
+        : await supabase.from('tracks').insert(payload)
+      if (saveError) throw saveError
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao salvar o curso.')
       setSaving(false)
       return
     }
@@ -236,6 +284,17 @@ function TrackFormModal({
           <option value="lideranca">Liderança</option>
         </select>
 
+        <div>
+          <label className="block text-xs font-semibold text-ink-soft">Capa (recomendado: 1326×495px)</label>
+          {track?.cover_url && !coverFile && <img src={track.cover_url} alt="" className="mt-1 h-16 rounded-lg border border-navy-light" />}
+          <input type="file" accept="image/*" onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)} className="mt-1 w-full text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-ink-soft">Miniatura (recomendado: 895×495px)</label>
+          {track?.thumbnail_url && !thumbnailFile && <img src={track.thumbnail_url} alt="" className="mt-1 h-16 rounded-lg border border-navy-light" />}
+          <input type="file" accept="image/*" onChange={(e) => setThumbnailFile(e.target.files?.[0] ?? null)} className="mt-1 w-full text-sm" />
+        </div>
+
         <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
           <input type="checkbox" checked={certificateEnabled} onChange={(e) => setCertificateEnabled(e.target.checked)} />
           Emite certificado ao concluir 100% das pílulas do curso
@@ -270,78 +329,50 @@ function PillFormModal({
   const [duration, setDuration] = useState(pill?.duration ?? '')
   const [contentType, setContentType] = useState<ContentType>(pill?.content_type ?? 'video')
   const [contentUrl, setContentUrl] = useState(pill?.content_url ?? '')
-  const [scormFile, setScormFile] = useState<File | null>(null)
-  const [manifestPath, setManifestPath] = useState(pill?.scorm_manifest_path ?? 'index.html')
-  const [uploadPct, setUploadPct] = useState(0)
+  const [scormLibraryId, setScormLibraryId] = useState(pill?.scorm_library_id ?? '')
+  const [scormLibrary, setScormLibrary] = useState<ScormLibraryItem[]>([])
+  const [coverFile, setCoverFile] = useState<File | null>(null)
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (contentType !== 'scorm') return
+    supabase.from('scorm_library').select('*').order('name').then(({ data }) => {
+      setScormLibrary((data as ScormLibraryItem[]) ?? [])
+    })
+  }, [contentType])
 
   async function save() {
     setSaving(true)
     setError('')
-    // Editing without picking a new .zip keeps whatever package is already
-    // uploaded — only swap it out when the admin explicitly selects a file.
-    let scormPackageUrl: string | null = pill?.scorm_package_url ?? null
+    try {
+      const coverUrl = coverFile ? await uploadCover(coverFile, 'pills-cover') : pill?.cover_url ?? null
+      const thumbnailUrl = thumbnailFile ? await uploadCover(thumbnailFile, 'pills-thumbnail') : pill?.thumbnail_url ?? null
 
-    if (contentType === 'scorm' && scormFile) {
-      try {
-        // Extract the .zip client-side and upload every entry as its own
-        // object under scorm-packages/{packageId}/ — the player needs real
-        // files (html/js/css/xml) at that path, not the zip itself.
-        const zip = await JSZip.loadAsync(scormFile)
-        const entries = Object.values(zip.files).filter((f) => !f.dir)
-        if (entries.length === 0) throw new Error('O arquivo .zip está vazio.')
-
-        const packageId = crypto.randomUUID()
-        let uploaded = 0
-        for (const entry of entries) {
-          const raw = await entry.async('blob')
-          const mime = guessContentType(entry.name)
-          // JSZip hands back blobs with no MIME type set on the Blob itself
-          // (only application/octet-stream implied) — some supabase-js
-          // versions read the type off the Blob instead of the `contentType`
-          // option below, so it has to be baked in here too or html/js/css
-          // land in storage as octet-stream and browsers won't parse them.
-          const blob = new Blob([raw], { type: mime })
-          const { error: uploadError } = await supabase.storage
-            .from('scorm-packages')
-            .upload(`${packageId}/${entry.name}`, blob, {
-              upsert: true,
-              contentType: mime,
-            })
-          if (uploadError) throw uploadError
-          uploaded += 1
-          setUploadPct(Math.round((uploaded / entries.length) * 100))
-        }
-
-        // The whole *.supabase.co domain rewrites any HTML-looking response
-        // to text/plain with a locked-down CSP as an anti-XSS measure — this
-        // applies to Storage AND to Edge Functions alike, so neither can
-        // serve an executable page. Route through our own Vercel API proxy
-        // instead (api/scorm/[...path].ts), which has no such restriction.
-        scormPackageUrl = `/api/scorm/${packageId}`
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Falha ao processar o pacote SCORM.')
-        setSaving(false)
-        return
+      const payload = {
+        track_id: trackId,
+        title,
+        axis,
+        duration,
+        content_type: contentType,
+        content_url: contentType !== 'scorm' ? contentUrl : null,
+        scorm_library_id: contentType === 'scorm' ? scormLibraryId || null : null,
+        // Picking a library entry replaces any older direct-upload SCORM
+        // fields; leaving no library selected keeps them untouched so
+        // pills uploaded before the library existed keep working.
+        ...(contentType === 'scorm' && scormLibraryId
+          ? { scorm_package_url: null, scorm_manifest_path: null }
+          : {}),
+        cover_url: coverUrl,
+        thumbnail_url: thumbnailUrl,
       }
-    }
-
-    const payload = {
-      track_id: trackId,
-      title,
-      axis,
-      duration,
-      content_type: contentType,
-      content_url: contentType !== 'scorm' ? contentUrl : null,
-      scorm_package_url: contentType === 'scorm' ? scormPackageUrl : null,
-      scorm_manifest_path: contentType === 'scorm' ? manifestPath : null,
-    }
-    const { error: saveError } = pill
-      ? await supabase.from('pills').update(payload).eq('id', pill.id)
-      : await supabase.from('pills').insert(payload)
-    if (saveError) {
-      setError(saveError.message)
+      const { error: saveError } = pill
+        ? await supabase.from('pills').update(payload).eq('id', pill.id)
+        : await supabase.from('pills').insert(payload)
+      if (saveError) throw saveError
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao salvar a pílula.')
       setSaving(false)
       return
     }
@@ -351,7 +382,7 @@ function PillFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="card w-full max-w-md space-y-3 p-6">
+      <div className="card max-h-[85vh] w-full max-w-md space-y-3 overflow-y-auto p-6">
         <h3 className="text-lg font-bold text-ink">{pill ? 'Editar pílula' : 'Nova pílula'}</h3>
         <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Título" value={title} onChange={(e) => setTitle(e.target.value)} />
         <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Módulo (nome do bloco/etapa do curso)" value={axis} onChange={(e) => setAxis(e.target.value)} />
@@ -368,22 +399,33 @@ function PillFormModal({
         )}
 
         {contentType === 'scorm' && (
-          <>
-            {pill?.scorm_package_url && (
-              <p className="text-xs text-ink-soft">
-                Já existe um pacote enviado. Selecione um novo .zip abaixo só se quiser substituí-lo.
-              </p>
-            )}
-            <input type="file" accept=".zip" onChange={(e) => setScormFile(e.target.files?.[0] ?? null)} className="w-full text-sm" />
-            <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Arquivo de entrada (ex: index.html — veja o imsmanifest.xml do pacote)" value={manifestPath} onChange={(e) => setManifestPath(e.target.value)} />
-            {saving && (
-              <div>
-                <div className="progress-track"><div className="progress-fill" style={{ width: `${uploadPct}%` }} /></div>
-                <p className="mt-1 text-xs text-ink-soft">Enviando arquivos do pacote… {uploadPct}%</p>
-              </div>
-            )}
-          </>
+          <div>
+            <select
+              className="w-full rounded-xl border border-navy-light px-4 py-3"
+              value={scormLibraryId}
+              onChange={(e) => setScormLibraryId(e.target.value)}
+            >
+              <option value="">Selecione um pacote da biblioteca…</option>
+              {scormLibrary.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
+            <Link to="/admin/scorms" className="mt-1 inline-block text-xs font-semibold text-navy hover:underline">
+              + Cadastrar novo pacote na Biblioteca de SCORMs
+            </Link>
+          </div>
         )}
+
+        <div>
+          <label className="block text-xs font-semibold text-ink-soft">Capa (recomendado: 1326×495px)</label>
+          {pill?.cover_url && !coverFile && <img src={pill.cover_url} alt="" className="mt-1 h-16 rounded-lg border border-navy-light" />}
+          <input type="file" accept="image/*" onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)} className="mt-1 w-full text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-ink-soft">Miniatura (recomendado: 895×495px)</label>
+          {pill?.thumbnail_url && !thumbnailFile && <img src={pill.thumbnail_url} alt="" className="mt-1 h-16 rounded-lg border border-navy-light" />}
+          <input type="file" accept="image/*" onChange={(e) => setThumbnailFile(e.target.files?.[0] ?? null)} className="mt-1 w-full text-sm" />
+        </div>
 
         {error && <p className="text-sm text-brand-red">{error}</p>}
 

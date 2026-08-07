@@ -48,6 +48,18 @@ export interface Track {
   pre_requisitos: string | null
   carga_horaria_total: number | null
   certificate_enabled: boolean
+  cover_url: string | null
+  thumbnail_url: string | null
+  certificate_background_url: string | null
+  certificate_message: string | null
+}
+
+export interface ScormLibraryItem {
+  id: string
+  name: string
+  package_url: string
+  manifest_path: string
+  created_at: string
 }
 
 export interface Pill {
@@ -62,6 +74,9 @@ export interface Pill {
   content_url: string | null
   scorm_package_url: string | null
   scorm_manifest_path: string | null
+  scorm_library_id: string | null
+  cover_url: string | null
+  thumbnail_url: string | null
 }
 
 export interface UserProgress {
@@ -133,6 +148,7 @@ export interface Database {
       skill_ratings: { Row: SkillRating; Insert: Partial<SkillRating>; Update: Partial<SkillRating> }
       pdi_plans: { Row: PdiPlan; Insert: Partial<PdiPlan>; Update: Partial<PdiPlan> }
       pdi_plan_items: { Row: PdiPlanItem; Insert: Partial<PdiPlanItem>; Update: Partial<PdiPlanItem> }
+      scorm_library: { Row: ScormLibraryItem; Insert: Partial<ScormLibraryItem>; Update: Partial<ScormLibraryItem> }
     }
   }
 }
