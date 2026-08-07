@@ -314,14 +314,12 @@ function PillFormModal({
           setUploadPct(Math.round((uploaded / entries.length) * 100))
         }
 
-        // Supabase Storage always serves public .html/.js objects as
-        // text/plain with a locked-down CSP (an anti-XSS measure — it never
-        // lets a public bucket host executable pages), so the player can't
-        // load straight from a public storage URL. Route through the
-        // scorm-proxy Edge Function instead, which re-serves the same bytes
-        // with the right Content-Type and no CSP override.
-        const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')
-        scormPackageUrl = `${supabaseUrl}/functions/v1/scorm-proxy/${packageId}`
+        // The whole *.supabase.co domain rewrites any HTML-looking response
+        // to text/plain with a locked-down CSP as an anti-XSS measure — this
+        // applies to Storage AND to Edge Functions alike, so neither can
+        // serve an executable page. Route through our own Vercel API proxy
+        // instead (api/scorm/[...path].ts), which has no such restriction.
+        scormPackageUrl = `/api/scorm/${packageId}`
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Falha ao processar o pacote SCORM.')
         setSaving(false)
