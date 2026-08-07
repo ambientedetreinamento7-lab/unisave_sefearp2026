@@ -43,6 +43,11 @@ export interface Track {
   primary_color: string | null
   program_id: string
   diagnostic_profile: DiagnosticProfile
+  objetivo_geral: string | null
+  publico_alvo: string | null
+  pre_requisitos: string | null
+  carga_horaria_total: number | null
+  certificate_enabled: boolean
 }
 
 export interface Pill {

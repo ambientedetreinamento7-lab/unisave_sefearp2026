@@ -45,7 +45,15 @@ create table tracks (
   icon text,
   primary_color text,
   program_id text not null references programs(id) on delete cascade,
-  diagnostic_profile diagnostic_profile not null
+  diagnostic_profile diagnostic_profile not null,
+  -- Curso metadata (spec: página admin de cursos).
+  objetivo_geral text,
+  publico_alvo text,
+  pre_requisitos text,
+  carga_horaria_total numeric,
+  -- Certificate is awarded once the student completes 100% of the track's
+  -- pills — a fixed rule, this flag just turns eligibility on/off per curso.
+  certificate_enabled boolean not null default false
 );
 
 create table pills (
