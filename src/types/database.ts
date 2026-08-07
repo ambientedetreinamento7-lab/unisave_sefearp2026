@@ -6,6 +6,8 @@ export type ContentType = 'video' | 'iframe' | 'scorm'
 export type PdiPlanType = 'trilha_evento' | 'plano_pessoal' | 'plano_institucional'
 export type PdiItemType = 'skill_category' | 'pill' | 'trilha'
 export type PdiItemStatus = 'nao_iniciado' | 'em_andamento' | 'concluido'
+export type PdiTier = 'abaixo' | 'proximo' | 'dentro' | 'acima'
+export type PdiJornadaBucket = 'pratica' | 'mentoria' | 'formacao'
 
 export interface Profile {
   id: string
@@ -119,6 +121,7 @@ export interface PdiPlan {
   endorsed: boolean
   progress_pct: number
   created_at: string
+  tier: PdiTier | null
 }
 
 export interface PdiPlanItem {
@@ -130,6 +133,7 @@ export interface PdiPlanItem {
   progress_total: number
   status: PdiItemStatus
   order_index: number
+  jornada_bucket: PdiJornadaBucket | null
 }
 
 // Minimal Supabase Database generic — extend with generated types once the

@@ -11,11 +11,27 @@ import {
   getSkillCategories,
   getSkillRatings,
   getUserPlans,
+  recomputeAndSaveTier,
   removePlan,
   upsertSelfRating,
 } from '../../lib/api'
+import { getProgramJourney, JORNADA_CADENCE, TIER_META } from '../../lib/pdiJourneys'
+import { TIER_LABEL, TIER_RANGE } from '../../lib/pdiTier'
 import { supabase } from '../../lib/supabase'
-import type { PdiPlan, PdiPlanItem, Pill, SkillCategory, SkillRating, Track } from '../../types/database'
+import type { PdiJornadaBucket, PdiPlan, PdiPlanItem, PdiTier, Pill, SkillCategory, SkillRating, Track } from '../../types/database'
+
+const TIER_BADGE_CLASS: Record<PdiTier, string> = {
+  abaixo: 'bg-amber-50 text-amber-700',
+  proximo: 'bg-sky-50 text-sky-700',
+  dentro: 'bg-green-50 text-success',
+  acima: 'bg-purple-50 text-purple-700',
+}
+
+const BUCKET_LABEL: Record<PdiJornadaBucket, string> = {
+  pratica: 'Prática real · 70%',
+  mentoria: 'Mentoria e exposição · 20%',
+  formacao: 'Educação formal · 10%',
+}
 
 type Tab = 'pdi' | 'balanco' | 'biblioteca'
 
@@ -52,7 +68,7 @@ export function MeuPdi() {
           ))}
         </div>
 
-        {profile && tab === 'pdi' && <MeuPdiTab userId={profile.id} programId={profile.program_id} />}
+        {profile && tab === 'pdi' && <MeuPdiTab userId={profile.id} programId={profile.program_id ?? null} />}
         {profile && tab === 'balanco' && <BalancoTab userId={profile.id} programId={profile.program_id} />}
         {profile && tab === 'biblioteca' && <BibliotecaTab userId={profile.id} />}
       </main>
@@ -69,6 +85,7 @@ function MeuPdiTab({ userId, programId }: { userId: string; programId: string | 
 
   async function reload() {
     setLoading(true)
+    await recomputeAndSaveTier(userId)
     setPlans(await getUserPlans(userId))
     setLoading(false)
   }
@@ -81,7 +98,7 @@ function MeuPdiTab({ userId, programId }: { userId: string; programId: string | 
   return (
     <div className="mt-6 space-y-5">
       {loading && <p className="text-ink-soft">Carregando…</p>}
-      {!loading && plans.map((plan) => <PlanCard key={plan.id} plan={plan} onChanged={reload} />)}
+      {!loading && plans.map((plan) => <PlanCard key={plan.id} plan={plan} programId={programId} onChanged={reload} />)}
 
       {!loading && plans.length === 0 && (
         <p className="text-ink-soft">Você ainda não tem nenhum plano. Crie o primeiro abaixo.</p>
@@ -109,7 +126,7 @@ function MeuPdiTab({ userId, programId }: { userId: string; programId: string | 
   )
 }
 
-function PlanCard({ plan, onChanged }: { plan: PdiPlan; onChanged: () => void }) {
+function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: string | null; onChanged: () => void }) {
   const [items, setItems] = useState<PdiPlanItem[]>([])
   const [labels, setLabels] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -156,6 +173,18 @@ function PlanCard({ plan, onChanged }: { plan: PdiPlan; onChanged: () => void })
     onChanged()
   }
 
+  const tier = plan.tier ?? 'abaixo'
+  const journey = getProgramJourney(programId, tier)
+  const meta = TIER_META[tier]
+  const cadence = JORNADA_CADENCE[tier]
+
+  const grouped: Record<PdiJornadaBucket, PdiPlanItem[]> = { pratica: [], mentoria: [], formacao: [] }
+  const ungrouped: PdiPlanItem[] = []
+  for (const item of items) {
+    if (item.jornada_bucket) grouped[item.jornada_bucket].push(item)
+    else ungrouped.push(item)
+  }
+
   return (
     <div className="card p-6">
       <div className="flex items-start justify-between gap-3">
@@ -173,26 +202,78 @@ function PlanCard({ plan, onChanged }: { plan: PdiPlan; onChanged: () => void })
         <ProgressBar value={pct} />
       </div>
 
-      <div className="mt-4 divide-y divide-navy-light/60">
-        {loading && <p className="py-2 text-sm text-ink-soft">Carregando itens…</p>}
+      <div className="mt-5 rounded-2xl border border-navy-light/60 bg-surface p-4">
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="font-semibold text-ink">Sua jornada agora — {meta.title}</h4>
+          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${TIER_BADGE_CLASS[tier]}`}>
+            {TIER_LABEL[tier]} <span className="opacity-70">({TIER_RANGE[tier]})</span>
+          </span>
+        </div>
+        <p className="mt-1 text-sm text-ink-soft">{meta.summary}</p>
+        {journey.inferred && (
+          <p className="mt-1 text-xs italic text-ink-soft">
+            Exemplo inferido — este curso ainda não tem PPP próprio analisado.
+          </p>
+        )}
+        <dl className="mt-3 space-y-2 text-sm">
+          <div>
+            <dt className="font-semibold text-navy">{BUCKET_LABEL.pratica}</dt>
+            <dd className="text-ink-soft">{journey.pratica}</dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-navy">{BUCKET_LABEL.mentoria}</dt>
+            <dd className="text-ink-soft">{journey.mentoria}</dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-navy">{BUCKET_LABEL.formacao}</dt>
+            <dd className="text-ink-soft">{journey.formacao}</dd>
+          </div>
+        </dl>
+        <p className="mt-3 text-xs text-ink-soft">
+          Cadência: {cadence.freq.toLowerCase()} — {cadence.detail}
+        </p>
+      </div>
+
+      <div className="mt-4 space-y-4">
+        {loading && <p className="text-sm text-ink-soft">Carregando itens…</p>}
         {!loading &&
-          items.map((item) => (
-            <div key={item.id} className="flex items-center gap-3 py-2.5">
-              <StatusCircle status={item.status} />
-              <span className="flex-1 text-sm font-medium text-navy">
-                {labels[item.ref_id] ?? item.ref_id}
-              </span>
-              <span className="text-xs text-ink-soft">
-                {item.progress_current} / {item.progress_total}
-              </span>
-            </div>
-          ))}
-        {!loading && items.length === 0 && <p className="py-2 text-sm text-ink-soft">Nenhum item ainda.</p>}
+          (['pratica', 'mentoria', 'formacao'] as PdiJornadaBucket[]).map((bucket) =>
+            grouped[bucket].length === 0 ? null : (
+              <div key={bucket}>
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{BUCKET_LABEL[bucket]}</p>
+                <div className="mt-1 divide-y divide-navy-light/60">
+                  {grouped[bucket].map((item) => (
+                    <ItemRow key={item.id} item={item} label={labels[item.ref_id] ?? item.ref_id} />
+                  ))}
+                </div>
+              </div>
+            ),
+          )}
+        {!loading && ungrouped.length > 0 && (
+          <div className="divide-y divide-navy-light/60">
+            {ungrouped.map((item) => (
+              <ItemRow key={item.id} item={item} label={labels[item.ref_id] ?? item.ref_id} />
+            ))}
+          </div>
+        )}
+        {!loading && items.length === 0 && <p className="text-sm text-ink-soft">Nenhum item ainda.</p>}
       </div>
 
       <button onClick={handleRemove} className="mt-4 text-sm font-medium text-brand-red hover:underline">
         Remover plano
       </button>
+    </div>
+  )
+}
+
+function ItemRow({ item, label }: { item: PdiPlanItem; label: string }) {
+  return (
+    <div className="flex items-center gap-3 py-2.5">
+      <StatusCircle status={item.status} />
+      <span className="flex-1 text-sm font-medium text-navy">{label}</span>
+      <span className="text-xs text-ink-soft">
+        {item.progress_current} / {item.progress_total}
+      </span>
     </div>
   )
 }
@@ -314,6 +395,7 @@ function BalancoTab({ userId, programId }: { userId: string; programId: string |
         { id: '', user_id: userId, skill_category_id: categoryId, self_rating: value, moderator_rating: null, rated_at: '' },
       ]
     })
+    await recomputeAndSaveTier(userId)
   }
 
   if (loading) return <p className="mt-6 text-ink-soft">Carregando…</p>

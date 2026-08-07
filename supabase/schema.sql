@@ -15,6 +15,12 @@ create type content_type as enum ('video', 'iframe', 'scorm');
 create type pdi_plan_type as enum ('trilha_evento', 'plano_pessoal', 'plano_institucional');
 create type pdi_item_type as enum ('skill_category', 'pill', 'trilha');
 create type pdi_item_status as enum ('nao_iniciado', 'em_andamento', 'concluido');
+-- Faixa de desempenho (spec: metodologia de PDI 70-20-10), recalculada no
+-- client (src/lib/pdiTier.ts) sempre que o Balanço de Competências muda.
+create type pdi_tier as enum ('abaixo', 'proximo', 'dentro', 'acima');
+-- Classificação 70-20-10 de cada item do plano: prática real, mentoria ou
+-- educação formal (spec: metodologia de PDI 70-20-10).
+create type pdi_jornada_bucket as enum ('pratica', 'mentoria', 'formacao');
 
 -- ============================================================
 -- TABLES
@@ -158,7 +164,9 @@ create table pdi_plans (
   type pdi_plan_type not null default 'plano_pessoal',
   endorsed boolean not null default false,
   progress_pct numeric not null default 0,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- Faixa de desempenho atual do plano (spec: metodologia de PDI 70-20-10).
+  tier pdi_tier
 );
 
 create table pdi_plan_items (
@@ -169,7 +177,9 @@ create table pdi_plan_items (
   progress_current int not null default 0,
   progress_total int not null default 4,
   status pdi_item_status not null default 'nao_iniciado',
-  order_index int not null default 0
+  order_index int not null default 0,
+  -- Classificação 70-20-10 (spec: metodologia de PDI 70-20-10).
+  jornada_bucket pdi_jornada_bucket
 );
 
 -- Grade curricular (imported via /admin/grade CSV, spec section 4)

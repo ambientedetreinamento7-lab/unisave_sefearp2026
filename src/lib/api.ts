@@ -1,5 +1,7 @@
 import { supabase } from './supabase'
+import { computeTier } from './pdiTier'
 import type {
+  PdiJornadaBucket,
   PdiPlan,
   PdiPlanItem,
   Pill,
@@ -10,6 +12,18 @@ import type {
 } from '../types/database'
 
 const DEFAULT_SKILL_TARGET = 4
+
+// Distribuição 70-20-10 (spec: metodologia de PDI): a cada 10 itens, 7
+// prática, 2 mentoria, 1 formação, ciclando pela ordem dos itens.
+const JORNADA_BUCKET_CYCLE: PdiJornadaBucket[] = [
+  'pratica', 'pratica', 'pratica', 'pratica', 'pratica', 'pratica', 'pratica',
+  'mentoria', 'mentoria',
+  'formacao',
+]
+
+function bucketForIndex(idx: number): PdiJornadaBucket {
+  return JORNADA_BUCKET_CYCLE[idx % JORNADA_BUCKET_CYCLE.length]
+}
 
 export async function getTrackWithPills(trackId: string) {
   const { data: track } = await supabase.from('tracks').select('*').eq('id', trackId).single()
@@ -106,6 +120,7 @@ export async function createPlan(
       progress_total: DEFAULT_SKILL_TARGET,
       status: 'nao_iniciado' as const,
       order_index: idx,
+      jornada_bucket: bucketForIndex(idx),
     }))
     if (items.length) await supabase.from('pdi_plan_items').insert(items)
   }
@@ -147,7 +162,8 @@ export async function addTrackToPlan(planId: string, trackId: string) {
       progress_current: 0,
       progress_total: 1,
       status: 'nao_iniciado' as const,
-      order_index: orderIndex++,
+      order_index: orderIndex,
+      jornada_bucket: bucketForIndex(orderIndex++),
     }))
 
   if (newItems.length) await supabase.from('pdi_plan_items').insert(newItems)
@@ -184,4 +200,14 @@ export async function upsertSelfRating(userId: string, skillCategoryId: string, 
 export async function getAllTracks(): Promise<Track[]> {
   const { data } = await supabase.from('tracks').select('*')
   return (data as Track[]) ?? []
+}
+
+/**
+ * Recalcula a faixa de desempenho (spec: metodologia de PDI 70-20-10) a
+ * partir do Balanço de Competências e grava em todos os planos do aluno.
+ */
+export async function recomputeAndSaveTier(userId: string): Promise<void> {
+  const ratings = await getSkillRatings(userId)
+  const { tier } = computeTier(ratings)
+  await supabase.from('pdi_plans').update({ tier }).eq('user_id', userId)
 }
