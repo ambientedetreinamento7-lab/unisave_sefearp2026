@@ -10,11 +10,15 @@
 // that dynamic-route detection wasn't reliably picked up by this project's
 // build, so this sidesteps it entirely with a plain, single, flat function.
 //
-// Deliberately avoids Node-only globals (Buffer, process) beyond a minimal
-// ambient declaration for `process.env` — this project's Vercel build
-// type-checks functions without @types/node available. Uint8Array/fetch are
-// universal Web APIs and need no extra typing.
+// This project's Vercel build type-checks functions without @types/node
+// available, so Node-only globals need minimal ambient declarations here
+// instead of pulling in the full node lib. Buffer specifically matters for
+// the response body: handing res.send() a plain Uint8Array gets treated as
+// a JSON-serializable object (each byte as an indexed property) rather than
+// raw bytes — a real Buffer is what Vercel's response helper recognizes and
+// streams back untouched.
 declare const process: { env: Record<string, string | undefined> }
+declare const Buffer: { from(data: ArrayBuffer): unknown }
 
 const CONTENT_TYPES: Record<string, string> = {
   html: 'text/html; charset=utf-8',
@@ -45,7 +49,7 @@ interface VercelLikeRequest {
 interface VercelLikeResponse {
   status(code: number): VercelLikeResponse
   setHeader(name: string, value: string): void
-  send(body: Uint8Array | string): void
+  send(body: unknown): void
 }
 
 export default async function handler(req: VercelLikeRequest, res: VercelLikeResponse) {
@@ -64,8 +68,8 @@ export default async function handler(req: VercelLikeRequest, res: VercelLikeRes
     return
   }
 
-  const bytes = new Uint8Array(await upstream.arrayBuffer())
+  const buffer = Buffer.from(await upstream.arrayBuffer())
   res.setHeader('Content-Type', contentTypeFor(objectPath))
   res.setHeader('Cache-Control', 'public, max-age=3600')
-  res.status(200).send(bytes)
+  res.status(200).send(buffer)
 }
