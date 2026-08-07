@@ -8,6 +8,8 @@ export type PdiItemType = 'skill_category' | 'pill' | 'trilha'
 export type PdiItemStatus = 'nao_iniciado' | 'em_andamento' | 'concluido'
 export type PdiTier = 'abaixo' | 'proximo' | 'dentro' | 'acima'
 export type PdiJornadaBucket = 'pratica' | 'mentoria' | 'formacao'
+export type SocialScope = 'global' | 'curso'
+export type SocialPostType = 'texto' | 'imagem' | 'carrossel'
 
 export interface Profile {
   id: string
@@ -145,6 +147,50 @@ export interface PdiPlanItem {
   jornada_bucket: PdiJornadaBucket | null
 }
 
+export interface SocialPost {
+  id: string
+  author_id: string
+  author_name: string
+  author_program_id: string | null
+  scope: SocialScope
+  program_id: string | null
+  post_type: SocialPostType
+  body: string | null
+  published: boolean
+  created_at: string
+}
+
+export interface SocialPostMedia {
+  id: string
+  post_id: string
+  url: string
+  order_index: number
+}
+
+export interface SocialLike {
+  id: string
+  post_id: string
+  user_id: string
+  created_at: string
+}
+
+export interface SocialComment {
+  id: string
+  post_id: string
+  author_id: string
+  author_name: string
+  body: string
+  created_at: string
+}
+
+export interface SocialReport {
+  id: string
+  post_id: string
+  reporter_id: string
+  reason: string
+  created_at: string
+}
+
 // Minimal Supabase Database generic — extend with generated types once the
 // project is linked (`supabase gen types typescript`).
 export interface Database {
@@ -163,6 +209,11 @@ export interface Database {
       pdi_plan_items: { Row: PdiPlanItem; Insert: Partial<PdiPlanItem>; Update: Partial<PdiPlanItem> }
       scorm_library: { Row: ScormLibraryItem; Insert: Partial<ScormLibraryItem>; Update: Partial<ScormLibraryItem> }
       track_pills: { Row: TrackPill; Insert: Partial<TrackPill>; Update: Partial<TrackPill> }
+      social_posts: { Row: SocialPost; Insert: Partial<SocialPost>; Update: Partial<SocialPost> }
+      social_post_media: { Row: SocialPostMedia; Insert: Partial<SocialPostMedia>; Update: Partial<SocialPostMedia> }
+      social_likes: { Row: SocialLike; Insert: Partial<SocialLike>; Update: Partial<SocialLike> }
+      social_comments: { Row: SocialComment; Insert: Partial<SocialComment>; Update: Partial<SocialComment> }
+      social_reports: { Row: SocialReport; Insert: Partial<SocialReport>; Update: Partial<SocialReport> }
     }
   }
 }

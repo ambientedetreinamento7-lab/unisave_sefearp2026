@@ -9,6 +9,7 @@ const TRIAL_DAYS = 14
 const NAV_LINKS = [
   { to: '/dashboard', label: 'Trilha' },
   { to: '/meu-pdi', label: 'Meu PDI' },
+  { to: '/comunidade', label: 'Comunidade' },
   { to: '/conquistas', label: 'Conquistas' },
   { to: '/certificados', label: 'Certificados' },
 ]

@@ -22,6 +22,13 @@ create type pdi_tier as enum ('abaixo', 'proximo', 'dentro', 'acima');
 -- educação formal (spec: metodologia de PDI 70-20-10).
 create type pdi_jornada_bucket as enum ('pratica', 'mentoria', 'formacao');
 
+-- Rede social interna (spec: rede social — Fase A). Escopo do post: mural
+-- global do evento ou mural exclusivo do curso do autor.
+create type social_scope as enum ('global', 'curso');
+-- Fase A cobre texto/imagem/carrossel; vídeo (Vimeo) e enquete chegam nas
+-- fases seguintes e reaproveitam esta mesma tabela de posts.
+create type social_post_type as enum ('texto', 'imagem', 'carrossel');
+
 -- ============================================================
 -- TABLES
 -- ============================================================
@@ -203,6 +210,63 @@ create table pdi_plan_items (
   jornada_bucket pdi_jornada_bucket
 );
 
+-- Rede social interna — Fase A (feed base: texto/imagem/carrossel, curtir,
+-- comentar, duas abas, moderação). Vídeo (Vimeo), enquete e stories chegam
+-- em fases seguintes.
+create table social_posts (
+  id uuid primary key default gen_random_uuid(),
+  author_id uuid not null references profiles(id) on update cascade on delete cascade,
+  -- Nome e curso do autor são gravados aqui no momento do post (não lidos
+  -- via join em profiles) porque a RLS de profiles só deixa cada aluno ler
+  -- o próprio perfil — sem isso o feed não conseguiria mostrar quem postou.
+  author_name text not null,
+  author_program_id text references programs(id),
+  scope social_scope not null,
+  -- Obrigatório quando scope='curso' (mural exclusivo daquele curso);
+  -- null quando scope='global'.
+  program_id text references programs(id),
+  post_type social_post_type not null,
+  body text,
+  -- Moderação pós-publicação (spec: admin apaga ou despublica).
+  published boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+-- Imagens do post — uma linha pra post_type='imagem' (única), várias pra
+-- 'carrossel', em order_index.
+create table social_post_media (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references social_posts(id) on delete cascade,
+  url text not null,
+  order_index int not null default 0
+);
+
+create table social_likes (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references social_posts(id) on delete cascade,
+  user_id uuid not null references profiles(id) on update cascade on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (post_id, user_id)
+);
+
+create table social_comments (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references social_posts(id) on delete cascade,
+  author_id uuid not null references profiles(id) on update cascade on delete cascade,
+  author_name text not null,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+-- Fila de denúncias — só o admin lê (spec: botão de denunciar).
+create table social_reports (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references social_posts(id) on delete cascade,
+  reporter_id uuid not null references profiles(id) on update cascade on delete cascade,
+  reason text not null,
+  created_at timestamptz not null default now()
+);
+
 -- Grade curricular (imported via /admin/grade CSV, spec section 4)
 create table curriculum_grid (
   id uuid primary key default gen_random_uuid(),
@@ -224,6 +288,12 @@ create index on questions (quiz_id);
 create index on skill_ratings (user_id);
 create index on pdi_plans (user_id);
 create index on pdi_plan_items (plan_id);
+create index on social_posts (scope, program_id, created_at);
+create index on social_posts (author_id);
+create index on social_post_media (post_id);
+create index on social_likes (post_id);
+create index on social_comments (post_id);
+create index on social_reports (post_id);
 
 -- ============================================================
 -- AUTH RECONCILIATION
@@ -270,6 +340,11 @@ alter table pdi_plan_items enable row level security;
 alter table curriculum_grid enable row level security;
 alter table scorm_library enable row level security;
 alter table track_pills enable row level security;
+alter table social_posts enable row level security;
+alter table social_post_media enable row level security;
+alter table social_likes enable row level security;
+alter table social_comments enable row level security;
+alter table social_reports enable row level security;
 
 -- SECURITY DEFINER so this bypasses profiles' own RLS instead of re-entering
 -- it — without this, the SELECT below re-triggers policies that call
@@ -404,6 +479,44 @@ create policy "self manage plan items" on pdi_plan_items for all
     ))
   );
 
+-- Rede social interna — Fase A. Pós-moderação: qualquer aluno autenticado
+-- publica direto; só o admin apaga (delete) ou despublica (update published).
+create policy "read visible posts" on social_posts for select
+  using (published or author_id = auth.uid() or current_role_is('moderador') or current_role_is('admin'));
+create policy "create own posts" on social_posts for insert
+  with check (author_id = auth.uid());
+create policy "admin moderates posts" on social_posts for update
+  using (current_role_is('admin')) with check (current_role_is('admin'));
+create policy "delete own posts or moderate" on social_posts for delete
+  using (author_id = auth.uid() or current_role_is('admin'));
+
+create policy "read media of visible posts" on social_post_media for select
+  using (exists (
+    select 1 from social_posts p where p.id = post_id
+    and (p.published or p.author_id = auth.uid() or current_role_is('moderador') or current_role_is('admin'))
+  ));
+create policy "attach media to own posts" on social_post_media for insert
+  with check (exists (select 1 from social_posts p where p.id = post_id and p.author_id = auth.uid()));
+
+create policy "likes readable by all" on social_likes for select using (true);
+create policy "like as self" on social_likes for insert with check (user_id = auth.uid());
+create policy "unlike as self" on social_likes for delete using (user_id = auth.uid());
+
+create policy "read comments of visible posts" on social_comments for select
+  using (exists (
+    select 1 from social_posts p where p.id = post_id
+    and (p.published or p.author_id = auth.uid() or current_role_is('moderador') or current_role_is('admin'))
+  ));
+create policy "comment as self" on social_comments for insert with check (author_id = auth.uid());
+create policy "delete own comment or moderate" on social_comments for delete
+  using (author_id = auth.uid() or current_role_is('admin'));
+
+create policy "report as self" on social_reports for insert with check (reporter_id = auth.uid());
+create policy "admin reads reports" on social_reports for select
+  using (current_role_is('moderador') or current_role_is('admin'));
+create policy "admin manages reports" on social_reports for delete
+  using (current_role_is('admin'));
+
 -- ============================================================
 -- STORAGE — SCORM packages
 -- ============================================================
@@ -438,6 +551,24 @@ create policy "public can read covers" on storage.objects
 create policy "admin manages covers" on storage.objects
   for all using (bucket_id = 'covers' and current_role_is('admin'))
   with check (bucket_id = 'covers' and current_role_is('admin'));
+
+-- ============================================================
+-- STORAGE — rede social (imagens de post)
+-- ============================================================
+-- Unlike covers, any authenticated aluno can write here (not just admin) —
+-- each object path is prefixed with the author's own id
+-- (social/{user_id}/{filename}) so a student can only manage their own
+-- uploads, mirroring the post ownership rule above.
+insert into storage.buckets (id, name, public)
+values ('social', 'social', true)
+on conflict (id) do nothing;
+
+create policy "public can read social media" on storage.objects
+  for select using (bucket_id = 'social');
+
+create policy "authors manage their own social uploads" on storage.objects
+  for all using (bucket_id = 'social' and auth.uid() is not null and (storage.foldername(name))[1] = auth.uid()::text)
+  with check (bucket_id = 'social' and auth.uid() is not null and (storage.foldername(name))[1] = auth.uid()::text);
 
 -- ============================================================
 -- SEED DATA — 4 programas reais (spec section 1 e 3)

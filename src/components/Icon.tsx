@@ -17,6 +17,15 @@ export type IconName =
   | "shield"
   | "maximize"
   | "minimize"
+  | "heart"
+  | "heart-filled"
+  | "message-circle"
+  | "flag"
+  | "more-horizontal"
+  | "trash"
+  | "eye-off"
+  | "image"
+  | "x"
 
 const PATHS: Record<IconName, React.ReactNode> = {
   book: (
@@ -172,6 +181,78 @@ const PATHS: Record<IconName, React.ReactNode> = {
       strokeLinecap="round"
       strokeLinejoin="round"
     />
+  ),
+  heart: (
+    <path
+      d="M12 20.5s-7.5-4.6-9.8-9.3C.6 7.7 2.4 4 6 4c2 0 3.5 1.1 4.5 2.5C11.5 5.1 13 4 15 4c3.6 0 5.4 3.7 3.8 7.2C19.5 15.9 12 20.5 12 20.5Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinejoin="round"
+    />
+  ),
+  "heart-filled": (
+    <path
+      d="M12 20.5s-7.5-4.6-9.8-9.3C.6 7.7 2.4 4 6 4c2 0 3.5 1.1 4.5 2.5C11.5 5.1 13 4 15 4c3.6 0 5.4 3.7 3.8 7.2C19.5 15.9 12 20.5 12 20.5Z"
+      fill="currentColor"
+    />
+  ),
+  "message-circle": (
+    <path
+      d="M21 12a8.5 8.5 0 0 1-12.3 7.6L4 21l1.4-4.7A8.5 8.5 0 1 1 21 12Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinejoin="round"
+    />
+  ),
+  flag: (
+    <path
+      d="M5 21V4m0 1 3-1c2 .8 3.3.8 5 0l3-1c2 .8 3.3.8 5 0v9c-1.7.8-3 .8-5 0l-3-1c-1.7-.8-3-.8-5 0Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinejoin="round"
+    />
+  ),
+  "more-horizontal": (
+    <path
+      d="M5 12h.01M12 12h.01M19 12h.01"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.6"
+      strokeLinecap="round"
+    />
+  ),
+  trash: (
+    <path
+      d="M4 7h16M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7m2 0-.6 12.4A2 2 0 0 1 14.4 21H9.6a2 2 0 0 1-2-1.6L7 7"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  "eye-off": (
+    <path
+      d="M3 3l18 18M10.6 5.2A9.4 9.4 0 0 1 12 5c5 0 9 4.5 10 7-.4.9-1 1.9-1.9 2.9M6.6 6.6C4.3 8.1 2.7 10.2 2 12c1 2.5 5 7 10 7 1.4 0 2.7-.3 3.9-.9M9.5 9.8a3 3 0 0 0 4.2 4.2"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  image: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" />
+      <path d="M4 17l5-5 4 4 3-3 4 4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  x: (
+    <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
   ),
 }
 

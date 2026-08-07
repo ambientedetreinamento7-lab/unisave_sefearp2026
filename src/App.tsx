@@ -3,6 +3,7 @@ import { RouteGuard } from './components/RouteGuard'
 import { AuthProvider } from './context/AuthContext'
 import { AdminAnalytics } from './pages/admin/AdminAnalytics'
 import { AdminCertificados } from './pages/admin/AdminCertificados'
+import { AdminComunidade } from './pages/admin/AdminComunidade'
 import { AdminGrade } from './pages/admin/AdminGrade'
 import { AdminProgramas } from './pages/admin/AdminProgramas'
 import { AdminQuizzes } from './pages/admin/AdminQuizzes'
@@ -10,6 +11,7 @@ import { AdminScormLibrary } from './pages/admin/AdminScormLibrary'
 import { AdminTrilhas } from './pages/admin/AdminTrilhas'
 import { AdminUsuarios } from './pages/admin/AdminUsuarios'
 import { Certificados } from './pages/aluno/Certificados'
+import { Comunidade } from './pages/aluno/Comunidade'
 import { Conquistas } from './pages/aluno/Conquistas'
 import { CoursePlayer } from './pages/aluno/CoursePlayer'
 import { CourseQuiz } from './pages/aluno/CourseQuiz'
@@ -77,6 +79,14 @@ function App() {
             </RouteGuard>
           }
         />
+        <Route
+          path="/comunidade"
+          element={
+            <RouteGuard>
+              <Comunidade />
+            </RouteGuard>
+          }
+        />
 
         <Route
           path="/moderador"
@@ -124,6 +134,14 @@ function App() {
           element={
             <RouteGuard allow={['admin']}>
               <AdminCertificados />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/admin/comunidade"
+          element={
+            <RouteGuard allow={['admin']}>
+              <AdminComunidade />
             </RouteGuard>
           }
         />
