@@ -9,6 +9,7 @@ import { AdminQuizzes } from './pages/admin/AdminQuizzes'
 import { AdminScormLibrary } from './pages/admin/AdminScormLibrary'
 import { AdminTrilhas } from './pages/admin/AdminTrilhas'
 import { AdminUsuarios } from './pages/admin/AdminUsuarios'
+import { Certificados } from './pages/aluno/Certificados'
 import { Conquistas } from './pages/aluno/Conquistas'
 import { CoursePlayer } from './pages/aluno/CoursePlayer'
 import { CourseQuiz } from './pages/aluno/CourseQuiz'
@@ -65,6 +66,14 @@ function App() {
           element={
             <RouteGuard>
               <MeuPdi />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/certificados"
+          element={
+            <RouteGuard>
+              <Certificados />
             </RouteGuard>
           }
         />

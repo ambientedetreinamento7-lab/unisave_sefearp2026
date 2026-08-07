@@ -10,6 +10,7 @@ const NAV_LINKS = [
   { to: '/dashboard', label: 'Trilha' },
   { to: '/meu-pdi', label: 'Meu PDI' },
   { to: '/conquistas', label: 'Conquistas' },
+  { to: '/certificados', label: 'Certificados' },
 ]
 
 function daysLeft(createdAt: string) {
