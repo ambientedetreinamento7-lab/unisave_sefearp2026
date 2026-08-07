@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AdminLayout } from './AdminLayout'
+import { linkPillToTrack, unlinkPillFromTrack } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
-import type { ContentType, DiagnosticProfile, Pill, Program, ScormLibraryItem, Track } from '../../types/database'
+import type { ContentType, DiagnosticProfile, Pill, Program, ScormLibraryItem, Track, TrackPill } from '../../types/database'
 
 async function uploadCover(file: File, folder: string): Promise<string> {
   const path = `${folder}/${crypto.randomUUID()}-${file.name}`
@@ -17,33 +18,47 @@ async function uploadCover(file: File, folder: string): Promise<string> {
 export function AdminTrilhas() {
   const [tracks, setTracks] = useState<Track[]>([])
   const [pills, setPills] = useState<Pill[]>([])
+  const [trackPills, setTrackPills] = useState<TrackPill[]>([])
   const [programs, setPrograms] = useState<Program[]>([])
   const [loading, setLoading] = useState(true)
   const [trackForm, setTrackForm] = useState<Track | 'new' | null>(null)
   const [pillForm, setPillForm] = useState<{ trackId: string; pill: Pill | null } | null>(null)
+  const [linkTrackId, setLinkTrackId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [trackFilter, setTrackFilter] = useState<string>('all')
 
   async function deletePill(id: string) {
-    if (!confirm('Remover esta pílula? Isso também apaga o progresso dos alunos nela.')) return
+    if (!confirm('Excluir esta pílula em definitivo? Ela some de todas as trilhas que a usam, junto com o progresso dos alunos.')) return
     await supabase.from('pills').delete().eq('id', id)
     reload()
   }
 
+  async function removeFromTrack(trackId: string, pillId: string) {
+    await unlinkPillFromTrack(trackId, pillId)
+    reload()
+  }
+
+  async function togglePublished(track: Track) {
+    await supabase.from('tracks').update({ published: !track.published }).eq('id', track.id)
+    reload()
+  }
+
   async function deleteTrack(id: string) {
-    if (!confirm('Excluir este curso inteiro? Todas as pílulas dele também serão removidas, junto com o progresso dos alunos.')) return
+    if (!confirm('Excluir esta trilha? O vínculo com os cursos dela é removido (os cursos em si só somem se não pertencerem a outra trilha).')) return
     await supabase.from('tracks').delete().eq('id', id)
     reload()
   }
 
   async function reload() {
-    const [{ data: t }, { data: p }, { data: prog }] = await Promise.all([
+    const [{ data: t }, { data: p }, { data: tp }, { data: prog }] = await Promise.all([
       supabase.from('tracks').select('*'),
       supabase.from('pills').select('*'),
+      supabase.from('track_pills').select('*'),
       supabase.from('programs').select('*'),
     ])
     setTracks((t as Track[]) ?? [])
     setPills((p as Pill[]) ?? [])
+    setTrackPills((tp as TrackPill[]) ?? [])
     setPrograms((prog as Program[]) ?? [])
     setLoading(false)
   }
@@ -52,20 +67,28 @@ export function AdminTrilhas() {
     reload()
   }, [])
 
+  const pillsById = useMemo(() => new Map(pills.map((p) => [p.id, p])), [pills])
+
   const visibleTracks = useMemo(() => {
     return tracks.filter((track) => {
       if (trackFilter !== 'all' && track.id !== trackFilter) return false
       if (!search.trim()) return true
       const q = search.trim().toLowerCase()
       const trackMatches = track.title.toLowerCase().includes(q)
-      const pillMatches = pills.some((p) => p.track_id === track.id && p.title.toLowerCase().includes(q))
+      const pillMatches = trackPills.some(
+        (tp) => tp.track_id === track.id && pillsById.get(tp.pill_id)?.title.toLowerCase().includes(q),
+      )
       return trackMatches || pillMatches
     })
-  }, [tracks, pills, search, trackFilter])
+  }, [tracks, trackPills, pillsById, search, trackFilter])
 
-  function pillsFor(trackId: string) {
+  function pillsFor(trackId: string): Pill[] {
     const q = search.trim().toLowerCase()
-    return pills.filter((p) => p.track_id === trackId && (!q || p.title.toLowerCase().includes(q)))
+    return trackPills
+      .filter((tp) => tp.track_id === trackId)
+      .sort((a, b) => a.order_index - b.order_index)
+      .map((tp) => pillsById.get(tp.pill_id))
+      .filter((p): p is Pill => !!p && (!q || p.title.toLowerCase().includes(q)))
   }
 
   if (loading) return <AdminLayout><p className="text-ink-soft">Carregando…</p></AdminLayout>
@@ -107,14 +130,32 @@ export function AdminTrilhas() {
             <div className="p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-ink">{track.title}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-ink">{track.title}</h3>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                        track.published ? 'bg-green-50 text-success' : 'bg-amber-50 text-amber-700'
+                      }`}
+                    >
+                      {track.published ? 'Publicado' : 'Despublicado'}
+                    </span>
+                    {track.is_catalog && (
+                      <span className="rounded-full bg-navy-light px-2 py-0.5 text-[11px] font-semibold text-navy">Biblioteca</span>
+                    )}
+                  </div>
                   <p className="text-xs text-ink-soft">
                     {programs.find((p) => p.id === track.program_id)?.name} · {track.diagnostic_profile}
                     {track.carga_horaria_total != null && <> · {track.carga_horaria_total}h</>}
                     {track.certificate_enabled && <> · 🎓 emite certificado</>}
                   </p>
                 </div>
-                <div className="flex shrink-0 gap-2">
+                <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                  <button
+                    onClick={() => togglePublished(track)}
+                    className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
+                  >
+                    {track.published ? 'Despublicar' : 'Publicar'}
+                  </button>
                   <button
                     onClick={() => setTrackForm(track)}
                     className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
@@ -122,16 +163,22 @@ export function AdminTrilhas() {
                     Editar
                   </button>
                   <button
+                    onClick={() => setLinkTrackId(track.id)}
+                    className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
+                  >
+                    + Curso existente
+                  </button>
+                  <button
                     onClick={() => setPillForm({ trackId: track.id, pill: null })}
                     className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
                   >
-                    + Pílula
+                    + Pílula nova
                   </button>
                   <button
                     onClick={() => deleteTrack(track.id)}
                     className="rounded-lg border border-brand-red/30 px-3 py-1.5 text-xs font-semibold text-brand-red hover:border-brand-red"
                   >
-                    Excluir curso
+                    Excluir trilha
                   </button>
                 </div>
               </div>
@@ -151,8 +198,14 @@ export function AdminTrilhas() {
                       >
                         Editar
                       </button>
+                      <button
+                        onClick={() => removeFromTrack(track.id, p.id)}
+                        className="text-xs font-semibold text-navy hover:underline"
+                      >
+                        Remover da trilha
+                      </button>
                       <button onClick={() => deletePill(p.id)} className="text-xs font-semibold text-brand-red hover:underline">
-                        Excluir
+                        Excluir curso
                       </button>
                     </div>
                   </div>
@@ -175,6 +228,15 @@ export function AdminTrilhas() {
           onSaved={() => { setTrackForm(null); reload() }}
         />
       )}
+      {linkTrackId && (
+        <LinkPillModal
+          trackId={linkTrackId}
+          pills={pills}
+          linkedPillIds={new Set(pillsFor(linkTrackId).map((p) => p.id))}
+          onClose={() => setLinkTrackId(null)}
+          onLinked={() => { setLinkTrackId(null); reload() }}
+        />
+      )}
       {pillForm && (
         <PillFormModal
           trackId={pillForm.trackId}
@@ -184,6 +246,69 @@ export function AdminTrilhas() {
         />
       )}
     </AdminLayout>
+  )
+}
+
+function LinkPillModal({
+  trackId,
+  pills,
+  linkedPillIds,
+  onClose,
+  onLinked,
+}: {
+  trackId: string
+  pills: Pill[]
+  linkedPillIds: Set<string>
+  onClose: () => void
+  onLinked: () => void
+}) {
+  const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState<string | null>(null)
+
+  const available = pills.filter(
+    (p) => !linkedPillIds.has(p.id) && (!search.trim() || p.title.toLowerCase().includes(search.trim().toLowerCase())),
+  )
+
+  async function add(pillId: string) {
+    setSaving(pillId)
+    await linkPillToTrack(trackId, pillId)
+    setSaving(null)
+    onLinked()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="card max-h-[80vh] w-full max-w-lg space-y-3 overflow-y-auto p-6">
+        <h3 className="text-lg font-bold text-ink">Adicionar curso existente a esta trilha</h3>
+        <input
+          className="w-full rounded-xl border border-navy-light px-4 py-3 text-sm"
+          placeholder="Buscar curso pelo nome…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="space-y-1">
+          {available.map((p) => (
+            <div key={p.id} className="flex items-center justify-between gap-2 rounded-lg bg-bg px-3 py-2 text-sm">
+              <span className="font-medium text-ink">
+                {p.title}
+                {p.axis && <span className="text-xs font-normal text-ink-soft"> ({p.axis})</span>}
+              </span>
+              <button
+                onClick={() => add(p.id)}
+                disabled={saving === p.id}
+                className="rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+              >
+                {saving === p.id ? 'Adicionando…' : '+ Adicionar'}
+              </button>
+            </div>
+          ))}
+          {available.length === 0 && <p className="text-sm text-ink-soft">Nenhum curso disponível para adicionar.</p>}
+        </div>
+        <button onClick={onClose} className="mt-2 text-sm font-medium text-ink-soft hover:text-navy">
+          Fechar
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -205,6 +330,7 @@ function TrackFormModal({
   const [preRequisitos, setPreRequisitos] = useState(track?.pre_requisitos ?? '')
   const [cargaHoraria, setCargaHoraria] = useState(track?.carga_horaria_total?.toString() ?? '')
   const [certificateEnabled, setCertificateEnabled] = useState(track?.certificate_enabled ?? false)
+  const [published, setPublished] = useState(track?.published ?? true)
   const [programId, setProgramId] = useState(track?.program_id ?? programs[0]?.id ?? '')
   const [profile, setProfile] = useState<DiagnosticProfile>(track?.diagnostic_profile ?? 'autogestao')
   const [coverFile, setCoverFile] = useState<File | null>(null)
@@ -227,6 +353,7 @@ function TrackFormModal({
         pre_requisitos: preRequisitos || null,
         carga_horaria_total: cargaHoraria ? Number(cargaHoraria) : null,
         certificate_enabled: certificateEnabled,
+        published,
         program_id: programId,
         diagnostic_profile: profile,
         cover_url: coverUrl,
@@ -300,6 +427,11 @@ function TrackFormModal({
           Emite certificado ao concluir 100% das pílulas do curso
         </label>
 
+        <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
+          <input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} />
+          Publicado (visível para os alunos)
+        </label>
+
         {error && <p className="text-sm text-brand-red">{error}</p>}
 
         <div className="flex gap-2 pt-2">
@@ -367,10 +499,16 @@ function PillFormModal({
         cover_url: coverUrl,
         thumbnail_url: thumbnailUrl,
       }
-      const { error: saveError } = pill
-        ? await supabase.from('pills').update(payload).eq('id', pill.id)
-        : await supabase.from('pills').insert(payload)
-      if (saveError) throw saveError
+      if (pill) {
+        const { error: saveError } = await supabase.from('pills').update(payload).eq('id', pill.id)
+        if (saveError) throw saveError
+      } else {
+        const { data: newPill, error: saveError } = await supabase.from('pills').insert(payload).select('id').single()
+        if (saveError) throw saveError
+        // Nova pílula nasce vinculada à trilha em que foi criada (spec:
+        // criar trilhas com cursos — track_pills é quem manda na exibição).
+        await linkPillToTrack(trackId, newPill.id)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao salvar a pílula.')
       setSaving(false)

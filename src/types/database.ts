@@ -54,6 +54,15 @@ export interface Track {
   thumbnail_url: string | null
   certificate_background_url: string | null
   certificate_message: string | null
+  published: boolean
+  is_catalog: boolean
+}
+
+export interface TrackPill {
+  id: string
+  track_id: string
+  pill_id: string
+  order_index: number
 }
 
 export interface ScormLibraryItem {
@@ -153,6 +162,7 @@ export interface Database {
       pdi_plans: { Row: PdiPlan; Insert: Partial<PdiPlan>; Update: Partial<PdiPlan> }
       pdi_plan_items: { Row: PdiPlanItem; Insert: Partial<PdiPlanItem>; Update: Partial<PdiPlanItem> }
       scorm_library: { Row: ScormLibraryItem; Insert: Partial<ScormLibraryItem>; Update: Partial<ScormLibraryItem> }
+      track_pills: { Row: TrackPill; Insert: Partial<TrackPill>; Update: Partial<TrackPill> }
     }
   }
 }

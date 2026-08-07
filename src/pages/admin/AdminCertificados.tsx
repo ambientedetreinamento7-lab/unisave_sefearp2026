@@ -113,7 +113,7 @@ function CertificateEditor({ track, onSaved }: { track: Track; onSaved: () => vo
 
       <div>
         <label className="block text-xs font-semibold text-ink-soft">Imagem de fundo do certificado</label>
-        <p className="mt-0.5 text-xs text-ink-soft">Tamanho recomendado: 1400×495px.</p>
+        <p className="mt-0.5 text-xs text-ink-soft">Tamanho recomendado: 1400×895px.</p>
         {backgroundUrl && !backgroundFile && (
           <img src={backgroundUrl} alt="Fundo do certificado" className="mt-2 max-h-32 rounded-lg border border-navy-light" />
         )}
@@ -147,7 +147,7 @@ function CertificateEditor({ track, onSaved }: { track: Track; onSaved: () => vo
 
       {preview && (
         <div
-          className="relative flex aspect-[1400/495] w-full items-center justify-center overflow-hidden rounded-xl border border-navy-light bg-cover bg-center p-6 text-center"
+          className="relative flex aspect-[1400/895] w-full items-center justify-center overflow-hidden rounded-xl border border-navy-light bg-cover bg-center p-6 text-center"
           style={backgroundUrl ? { backgroundImage: `url(${backgroundUrl})` } : undefined}
         >
           <p className="max-w-lg text-sm font-medium text-ink">

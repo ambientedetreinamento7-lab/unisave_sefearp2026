@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { Icon } from '../../components/Icon'
 import { ProgressBar } from '../../components/ProgressBar'
-import { StatusPill } from '../../components/StatusPill'
 import { useAuth } from '../../context/AuthContext'
 import { getAllPills, getTrackWithPills, getUserProgressMap, trackProgressPct } from '../../lib/api'
 import type { Pill, UserProgress, Track } from '../../types/database'
@@ -192,16 +191,22 @@ function colorForAxis(axis: string | null) {
   return BADGE_COLORS[hash % BADGE_COLORS.length]
 }
 
+const ACTION_LABEL: Record<UserProgress['status'], string> = {
+  completed: 'Revisar',
+  in_progress: 'Continuar',
+  not_started: 'Iniciar',
+}
+
 function CourseCard({ pill, status }: { pill: Pill; status: UserProgress['status'] }) {
-  const started = status !== 'not_started'
   return (
     <Link to={`/curso/${pill.id}`} className="card flex flex-col gap-3 p-4 transition hover:card-highlight">
-      <div className="flex items-start justify-between gap-3">
+      {pill.thumbnail_url ? (
+        <img src={pill.thumbnail_url} alt="" className="-mx-4 -mt-4 h-28 w-[calc(100%+2rem)] rounded-t-2xl object-cover" />
+      ) : (
         <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${colorForAxis(pill.axis)}`}>
           <Icon name="book" size={18} />
         </span>
-        <StatusPill status={status} />
-      </div>
+      )}
       <div>
         <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">
           {pill.axis} · {pill.duration}
@@ -211,7 +216,7 @@ function CourseCard({ pill, status }: { pill: Pill; status: UserProgress['status
       {pill.description && <p className="line-clamp-2 text-sm text-ink-soft">{pill.description}</p>}
       <div className="mt-auto flex items-center justify-end pt-2">
         <span className="flex items-center gap-1.5 rounded-full bg-brand-red px-3.5 py-1.5 text-xs font-bold text-white">
-          {started ? 'Continuar' : 'Iniciar'}
+          {ACTION_LABEL[status]}
           <Icon name="arrow-right" size={12} />
         </span>
       </div>

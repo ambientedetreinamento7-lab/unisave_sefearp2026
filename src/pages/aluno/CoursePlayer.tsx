@@ -16,6 +16,7 @@ export function CoursePlayer() {
   const [scormSource, setScormSource] = useState<{ packageUrl: string; manifestPath: string } | null>(null)
   const [progress, setProgress] = useState<UserProgress | null>(null)
   const [loading, setLoading] = useState(true)
+  const [unavailable, setUnavailable] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const playerRef = useRef<HTMLDivElement>(null)
 
@@ -40,6 +41,15 @@ export function CoursePlayer() {
     let cancelled = false
     async function load() {
       const { data: pillData } = await supabase.from('pills').select('*').eq('id', id).single()
+      // Unpublishing every trilha that links to this curso (spec: publicar/
+      // despublicar) makes it unavailable, even via a direct link.
+      const { data: links } = await supabase
+        .from('track_pills')
+        .select('tracks(published)')
+        .eq('pill_id', id)
+      const isAvailable = ((links as { tracks: { published: boolean } | null }[] | null) ?? []).some(
+        (l) => l.tracks?.published,
+      )
       const { data: progressData } = await supabase
         .from('user_progress')
         .select('*')
@@ -50,6 +60,11 @@ export function CoursePlayer() {
       const pillRow = pillData as Pill
       setPill(pillRow)
       setProgress(progressData as UserProgress | null)
+      setUnavailable(!isAvailable)
+      if (!isAvailable) {
+        setLoading(false)
+        return
+      }
 
       // Prefer the SCORM Library entry when the pill references one — that
       // way updating the library package automatically reaches every pill
@@ -94,6 +109,21 @@ export function CoursePlayer() {
       <div className="min-h-screen bg-bg">
         <AppHeader />
         <p className="p-8 text-center text-ink-soft">Carregando…</p>
+      </div>
+    )
+  }
+
+  if (unavailable) {
+    return (
+      <div className="min-h-screen bg-bg">
+        <AppHeader />
+        <div className="mx-auto max-w-lg px-4 py-16 text-center">
+          <h1 className="text-xl font-bold text-ink">Este curso não está disponível no momento</h1>
+          <p className="mt-2 text-ink-soft">A trilha que continha este curso foi despublicada pelo admin.</p>
+          <Link to="/dashboard" className="mt-6 inline-block rounded-xl bg-navy px-5 py-2.5 font-semibold text-white">
+            Voltar ao painel
+          </Link>
+        </div>
       </div>
     )
   }

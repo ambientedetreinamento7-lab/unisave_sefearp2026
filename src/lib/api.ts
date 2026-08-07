@@ -27,12 +27,16 @@ function bucketForIndex(idx: number): PdiJornadaBucket {
 
 export async function getTrackWithPills(trackId: string) {
   const { data: track } = await supabase.from('tracks').select('*').eq('id', trackId).single()
-  const { data: pills } = await supabase
-    .from('pills')
-    .select('*')
+  // A trilha's content is whatever is linked in track_pills — not
+  // pills.track_id directly — so the same curso can be reused across
+  // multiple trilhas (spec: criar trilhas com cursos existentes).
+  const { data: links } = await supabase
+    .from('track_pills')
+    .select('order_index, pills(*)')
     .eq('track_id', trackId)
-    .order('id')
-  return { track: track as Track | null, pills: (pills as Pill[]) ?? [] }
+    .order('order_index')
+  const pills = ((links as { pills: Pill }[] | null) ?? []).map((l) => l.pills).filter(Boolean)
+  return { track: track as Track | null, pills }
 }
 
 export async function getUserProgressMap(userId: string): Promise<Record<string, UserProgress>> {
@@ -44,9 +48,31 @@ export async function getUserProgressMap(userId: string): Promise<Record<string,
   return map
 }
 
+/** All pills reachable from at least one published trilha (spec: publicar/despublicar). */
 export async function getAllPills(): Promise<Pill[]> {
-  const { data } = await supabase.from('pills').select('*').order('axis')
-  return (data as Pill[]) ?? []
+  const { data } = await supabase
+    .from('track_pills')
+    .select('pills(*), tracks!inner(published)')
+    .eq('tracks.published', true)
+  const seen = new Set<string>()
+  const pills: Pill[] = []
+  for (const row of (data as { pills: Pill }[] | null) ?? []) {
+    if (!row.pills || seen.has(row.pills.id)) continue
+    seen.add(row.pills.id)
+    pills.push(row.pills)
+  }
+  return pills.sort((a, b) => (a.axis ?? '').localeCompare(b.axis ?? ''))
+}
+
+/** Cursos avulsos da Biblioteca de Cursos — nunca sugeridos automaticamente,
+ * só aparecem no PDI se o aluno adicionar (spec: biblioteca de cursos). */
+export async function getCatalogPills(): Promise<Pill[]> {
+  const { data } = await supabase
+    .from('track_pills')
+    .select('pills(*), tracks!inner(published, is_catalog)')
+    .eq('tracks.published', true)
+    .eq('tracks.is_catalog', true)
+  return ((data as { pills: Pill }[] | null) ?? []).map((r) => r.pills).filter(Boolean)
 }
 
 export async function markPillInProgress(userId: string, pillId: string) {
@@ -169,6 +195,46 @@ export async function addTrackToPlan(planId: string, trackId: string) {
   if (newItems.length) await supabase.from('pdi_plan_items').insert(newItems)
 }
 
+/** Adds a single avulso curso (from the Biblioteca de Cursos) to a plan. */
+export async function addPillToPlan(planId: string, pillId: string) {
+  const { data: existing } = await supabase
+    .from('pdi_plan_items')
+    .select('id')
+    .eq('plan_id', planId)
+    .eq('item_type', 'pill')
+    .eq('ref_id', pillId)
+    .maybeSingle()
+  if (existing) return
+
+  const { count } = await supabase
+    .from('pdi_plan_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('plan_id', planId)
+  const orderIndex = count ?? 0
+
+  await supabase.from('pdi_plan_items').insert({
+    plan_id: planId,
+    item_type: 'pill' as const,
+    ref_id: pillId,
+    progress_current: 0,
+    progress_total: 1,
+    status: 'nao_iniciado' as const,
+    order_index: orderIndex,
+    jornada_bucket: bucketForIndex(orderIndex),
+  })
+}
+
+export async function createPlanWithPill(userId: string, title: string, pillId: string): Promise<PdiPlan> {
+  const { data: plan, error } = await supabase
+    .from('pdi_plans')
+    .insert({ user_id: userId, title, type: 'plano_pessoal', endorsed: false, progress_pct: 0 })
+    .select('*')
+    .single()
+  if (error) throw error
+  await addPillToPlan(plan.id, pillId)
+  return plan as PdiPlan
+}
+
 export async function createPlanWithTrack(userId: string, title: string, trackId: string): Promise<PdiPlan> {
   const { data: plan, error } = await supabase
     .from('pdi_plans')
@@ -197,8 +263,10 @@ export async function upsertSelfRating(userId: string, skillCategoryId: string, 
   )
 }
 
+/** Trilhas publicadas e curadas — exclui a Biblioteca de Cursos (catálogo),
+ * que só entra no PDI se o aluno adicionar um curso avulso dela. */
 export async function getAllTracks(): Promise<Track[]> {
-  const { data } = await supabase.from('tracks').select('*')
+  const { data } = await supabase.from('tracks').select('*').eq('published', true).eq('is_catalog', false)
   return (data as Track[]) ?? []
 }
 
@@ -210,4 +278,20 @@ export async function recomputeAndSaveTier(userId: string): Promise<void> {
   const ratings = await getSkillRatings(userId)
   const { tier } = computeTier(ratings)
   await supabase.from('pdi_plans').update({ tier }).eq('user_id', userId)
+}
+
+// ---- Admin: composing trilhas out of existing cursos ----
+
+export async function linkPillToTrack(trackId: string, pillId: string) {
+  const { count } = await supabase
+    .from('track_pills')
+    .select('id', { count: 'exact', head: true })
+    .eq('track_id', trackId)
+  await supabase
+    .from('track_pills')
+    .upsert({ track_id: trackId, pill_id: pillId, order_index: count ?? 0 }, { onConflict: 'track_id,pill_id' })
+}
+
+export async function unlinkPillFromTrack(trackId: string, pillId: string) {
+  await supabase.from('track_pills').delete().eq('track_id', trackId).eq('pill_id', pillId)
 }

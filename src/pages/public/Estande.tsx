@@ -50,11 +50,16 @@ export function Estande() {
       const diagnostic_profile = computeProfile({ desafio, objetivo })
 
       const { data: programRow } = await supabase.from('programs').select('id').eq('id', program).maybeSingle()
+      // is_catalog=false: a Biblioteca de Cursos nunca deve ser sugerida
+      // automaticamente aqui, só entra no PDI se o aluno adicionar um
+      // curso avulso dela (spec: biblioteca de cursos).
       const { data: trackRow } = await supabase
         .from('tracks')
         .select('id')
         .eq('program_id', program)
         .eq('diagnostic_profile', diagnostic_profile)
+        .eq('published', true)
+        .eq('is_catalog', false)
         .maybeSingle()
 
       // A SECURITY DEFINER RPC does this insert/update server-side instead of a

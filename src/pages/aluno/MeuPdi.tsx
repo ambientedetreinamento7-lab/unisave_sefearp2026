@@ -3,10 +3,13 @@ import { AppHeader } from '../../components/AppHeader'
 import { ProgressBar } from '../../components/ProgressBar'
 import { useAuth } from '../../context/AuthContext'
 import {
+  addPillToPlan,
   addTrackToPlan,
   createPlan,
+  createPlanWithPill,
   createPlanWithTrack,
   getAllTracks,
+  getCatalogPills,
   getPlanItems,
   getSkillCategories,
   getSkillRatings,
@@ -440,18 +443,22 @@ function BalancoTab({ userId, programId }: { userId: string; programId: string |
 
 // ---------------- Biblioteca de Trilhas tab ----------------
 
+type LibraryItem = { kind: 'track'; track: Track } | { kind: 'pill'; pill: Pill }
+
 function BibliotecaTab({ userId }: { userId: string }) {
   const [tracks, setTracks] = useState<Track[]>([])
+  const [catalogPills, setCatalogPills] = useState<Pill[]>([])
   const [plans, setPlans] = useState<PdiPlan[]>([])
-  const [pickerTrack, setPickerTrack] = useState<Track | null>(null)
+  const [picker, setPicker] = useState<LibraryItem | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const [t, p] = await Promise.all([getAllTracks(), getUserPlans(userId)])
+      const [t, cp, p] = await Promise.all([getAllTracks(), getCatalogPills(), getUserPlans(userId)])
       if (!cancelled) {
         setTracks(t)
+        setCatalogPills(cp)
         setPlans(p)
         setLoading(false)
       }
@@ -462,41 +469,82 @@ function BibliotecaTab({ userId }: { userId: string }) {
     }
   }, [userId])
 
-  async function handleAdd(track: Track) {
+  async function handleAddTrack(track: Track) {
     if (plans.length === 0) {
       await createPlanWithTrack(userId, `PDI — ${track.title}`, track.id)
       setPlans(await getUserPlans(userId))
       return
     }
-    setPickerTrack(track)
+    setPicker({ kind: 'track', track })
+  }
+
+  async function handleAddPill(pill: Pill) {
+    if (plans.length === 0) {
+      await createPlanWithPill(userId, `PDI — ${pill.title}`, pill.id)
+      setPlans(await getUserPlans(userId))
+      return
+    }
+    setPicker({ kind: 'pill', pill })
   }
 
   if (loading) return <p className="mt-6 text-ink-soft">Carregando…</p>
 
   return (
-    <div className="mt-6 grid gap-4 sm:grid-cols-2">
-      {tracks.map((track) => (
-        <div key={track.id} className="card p-5">
-          <h3 className="font-bold text-ink">{track.title}</h3>
-          {track.description && <p className="mt-1 text-sm text-ink-soft">{track.description}</p>}
-          <button
-            onClick={() => handleAdd(track)}
-            className="mt-4 rounded-xl bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy-dark"
-          >
-            + Adicionar ao PDI
-          </button>
+    <div className="mt-6 space-y-8">
+      <div>
+        <h3 className="font-bold text-ink">Trilhas</h3>
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          {tracks.map((track) => (
+            <div key={track.id} className="card overflow-hidden">
+              {track.thumbnail_url && <img src={track.thumbnail_url} alt="" className="h-28 w-full object-cover" />}
+              <div className="p-5">
+                <h4 className="font-bold text-ink">{track.title}</h4>
+                {track.description && <p className="mt-1 text-sm text-ink-soft">{track.description}</p>}
+                <button
+                  onClick={() => handleAddTrack(track)}
+                  className="mt-4 rounded-xl bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy-dark"
+                >
+                  + Adicionar ao PDI
+                </button>
+              </div>
+            </div>
+          ))}
+          {tracks.length === 0 && <p className="text-ink-soft">Nenhuma trilha cadastrada ainda.</p>}
         </div>
-      ))}
-      {tracks.length === 0 && <p className="text-ink-soft">Nenhuma trilha cadastrada ainda.</p>}
+      </div>
 
-      {pickerTrack && (
+      <div>
+        <h3 className="font-bold text-ink">Cursos avulsos da Biblioteca</h3>
+        <p className="text-sm text-ink-soft">Não entram no seu PDI automaticamente — só se você adicionar.</p>
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          {catalogPills.map((pill) => (
+            <div key={pill.id} className="card overflow-hidden">
+              {pill.thumbnail_url && <img src={pill.thumbnail_url} alt="" className="h-28 w-full object-cover" />}
+              <div className="p-5">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{pill.axis}</p>
+                <h4 className="mt-0.5 font-bold text-ink">{pill.title}</h4>
+                {pill.description && <p className="mt-1 text-sm text-ink-soft">{pill.description}</p>}
+                <button
+                  onClick={() => handleAddPill(pill)}
+                  className="mt-4 rounded-xl bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy-dark"
+                >
+                  + Adicionar ao PDI
+                </button>
+              </div>
+            </div>
+          ))}
+          {catalogPills.length === 0 && <p className="text-ink-soft">Nenhum curso avulso disponível ainda.</p>}
+        </div>
+      </div>
+
+      {picker && (
         <AddToPlanModal
           userId={userId}
-          track={pickerTrack}
+          item={picker}
           plans={plans}
-          onClose={() => setPickerTrack(null)}
+          onClose={() => setPicker(null)}
           onDone={async () => {
-            setPickerTrack(null)
+            setPicker(null)
             setPlans(await getUserPlans(userId))
           }}
         />
@@ -507,29 +555,32 @@ function BibliotecaTab({ userId }: { userId: string }) {
 
 function AddToPlanModal({
   userId,
-  track,
+  item,
   plans,
   onClose,
   onDone,
 }: {
   userId: string
-  track: Track
+  item: LibraryItem
   plans: PdiPlan[]
   onClose: () => void
   onDone: () => void
 }) {
   const [saving, setSaving] = useState(false)
+  const title = item.kind === 'track' ? item.track.title : item.pill.title
 
   async function addToExisting(planId: string) {
     setSaving(true)
-    await addTrackToPlan(planId, track.id)
+    if (item.kind === 'track') await addTrackToPlan(planId, item.track.id)
+    else await addPillToPlan(planId, item.pill.id)
     setSaving(false)
     onDone()
   }
 
   async function createNew() {
     setSaving(true)
-    await createPlanWithTrack(userId, `PDI — ${track.title}`, track.id)
+    if (item.kind === 'track') await createPlanWithTrack(userId, `PDI — ${item.track.title}`, item.track.id)
+    else await createPlanWithPill(userId, `PDI — ${item.pill.title}`, item.pill.id)
     setSaving(false)
     onDone()
   }
@@ -537,7 +588,7 @@ function AddToPlanModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="card w-full max-w-md p-6">
-        <h3 className="text-lg font-bold text-ink">Adicionar "{track.title}" a qual plano?</h3>
+        <h3 className="text-lg font-bold text-ink">Adicionar "{title}" a qual plano?</h3>
         <div className="mt-4 space-y-2">
           {plans.map((plan) => (
             <button
@@ -554,7 +605,7 @@ function AddToPlanModal({
             disabled={saving}
             className="w-full rounded-xl border-2 border-dashed border-navy-light p-3 text-left font-semibold text-navy hover:border-navy disabled:opacity-60"
           >
-            + Criar novo plano com esta trilha
+            + Criar novo plano com {item.kind === 'track' ? 'esta trilha' : 'este curso'}
           </button>
         </div>
         <button onClick={onClose} className="mt-4 text-sm font-medium text-ink-soft hover:text-navy">

@@ -64,9 +64,30 @@ create table tracks (
   cover_url text,
   thumbnail_url text,
   -- Certificate template (spec: página de criação de certificados).
-  -- Recommended background size: 1400x495px.
+  -- Recommended background size: 1400x895px.
   certificate_background_url text,
-  certificate_message text
+  certificate_message text,
+  -- Unpublished tracks are hidden from every student-facing view (spec:
+  -- publicar/despublicar cursos) but stay editable in the admin panel.
+  published boolean not null default true,
+  -- Marks the general course catalog ("Biblioteca de Cursos") so it's
+  -- never picked up by the /estande recommendation match on
+  -- (program_id, diagnostic_profile) — it only reaches a student's PDI if
+  -- they add a course from it themselves (spec: biblioteca de cursos).
+  is_catalog boolean not null default false
+);
+
+-- Many-to-many: which pills (cursos) belong to which trilhas. A pill keeps
+-- a "home" track via pills.track_id (where it was created / lives in the
+-- admin list), but a trilha's actual displayed content is whatever is
+-- linked here — so the same curso can be reused across multiple trilhas
+-- (spec: criar trilhas com cursos existentes).
+create table track_pills (
+  id uuid primary key default gen_random_uuid(),
+  track_id uuid not null references tracks(id) on delete cascade,
+  pill_id uuid not null references pills(id) on delete cascade,
+  order_index int not null default 0,
+  unique (track_id, pill_id)
 );
 
 -- Reusable SCORM packages, managed independently of any single pill (spec:
@@ -196,6 +217,8 @@ create table curriculum_grid (
 create index on skill_categories (program_id);
 create index on tracks (program_id, diagnostic_profile);
 create index on pills (track_id);
+create index on track_pills (track_id);
+create index on track_pills (pill_id);
 create index on user_progress (user_id);
 create index on questions (quiz_id);
 create index on skill_ratings (user_id);
@@ -246,6 +269,7 @@ alter table pdi_plans enable row level security;
 alter table pdi_plan_items enable row level security;
 alter table curriculum_grid enable row level security;
 alter table scorm_library enable row level security;
+alter table track_pills enable row level security;
 
 -- SECURITY DEFINER so this bypasses profiles' own RLS instead of re-entering
 -- it — without this, the SELECT below re-triggers policies that call
@@ -271,6 +295,7 @@ create policy "catalog readable by all" on quizzes for select using (true);
 create policy "catalog readable by all" on questions for select using (true);
 create policy "catalog readable by all" on curriculum_grid for select using (true);
 create policy "catalog readable by all" on scorm_library for select using (true);
+create policy "catalog readable by all" on track_pills for select using (true);
 
 create policy "admin manages catalog" on programs for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
@@ -281,6 +306,8 @@ create policy "admin manages tracks" on tracks for all
 create policy "admin manages scorm library" on scorm_library for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
 create policy "admin manages pills" on pills for all
+  using (current_role_is('admin')) with check (current_role_is('admin'));
+create policy "admin manages track_pills" on track_pills for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
 create policy "admin manages quizzes" on quizzes for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
@@ -466,12 +493,13 @@ from tracks t;
 -- /admin/trilhas. Ficam todos numa trilha catálogo dedicada para não
 -- forçar um encaixe arbitrário em programa/perfil; o admin pode
 -- reorganizar depois.
-insert into tracks (title, description, program_id, diagnostic_profile)
+insert into tracks (title, description, program_id, diagnostic_profile, is_catalog)
 values (
   'Biblioteca de Cursos',
   'Catálogo geral de cursos oficiais — organize por trilha específica conforme necessário.',
   'administracao',
-  'autogestao'
+  'autogestao',
+  true
 );
 
 insert into pills (track_id, title, axis, description, duration, content_type, content_url)
@@ -533,3 +561,11 @@ cross join (values
   ('Protagonismo', 'Autoconhecimento'),
   ('Segurança psicológica', 'Cultura & Times')
 ) as v(title, axis);
+
+-- Backfill: every pill starts linked to its own home track via track_pills
+-- (the join table trilhas now read from), so nothing regresses for tracks
+-- that don't reuse courses across trilhas.
+insert into track_pills (track_id, pill_id, order_index)
+select track_id, id, row_number() over (partition by track_id order by id) - 1
+from pills
+on conflict (track_id, pill_id) do nothing;

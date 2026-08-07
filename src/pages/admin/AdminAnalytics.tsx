@@ -1,27 +1,96 @@
 import { useEffect, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { AdminLayout } from './AdminLayout'
+import { TIER_LABEL } from '../../lib/pdiTier'
 import { supabase } from '../../lib/supabase'
-import type { PdiPlan, Profile, Program, UserProgress } from '../../types/database'
+import type {
+  PdiPlan,
+  PdiTier,
+  Profile,
+  Program,
+  SkillCategory,
+  SkillRating,
+  Track,
+  TrackPill,
+  UserProgress,
+} from '../../types/database'
+
+function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
+  const escape = (v: string | number) => {
+    const s = String(v)
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const csv = [headers, ...rows].map((row) => row.map(escape).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function CsvButton({ filename, headers, rows }: { filename: string; headers: string[]; rows: (string | number)[][] }) {
+  return (
+    <button
+      onClick={() => downloadCsv(filename, headers, rows)}
+      className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
+    >
+      Baixar CSV
+    </button>
+  )
+}
+
+const TIER_ORDER: PdiTier[] = ['abaixo', 'proximo', 'dentro', 'acima']
 
 export function AdminAnalytics() {
   const [funnel, setFunnel] = useState<{ stage: string; value: number }[]>([])
   const [byProgram, setByProgram] = useState<{ program: string; alunos: number }[]>([])
+  const [tierDist, setTierDist] = useState<{ tier: PdiTier; alunos: number }[]>([])
+  const [completionByTrack, setCompletionByTrack] = useState<
+    { track: string; iniciados: number; concluidos: number; taxa: number }[]
+  >([])
+  const [skillGap, setSkillGap] = useState<
+    { skill: string; autoavaliacao: number; moderador: number | null; gap: number | null }[]
+  >([])
+  const [summary, setSummary] = useState({ alunos: 0, comPlano: 0, notaMediaQuiz: 0, taxaConclusaoGeral: 0 })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
-      const { data: profiles } = await supabase.from('profiles').select('*').eq('role', 'aluno')
-      const { data: plans } = await supabase.from('pdi_plans').select('*')
-      const { data: progress } = await supabase.from('user_progress').select('*')
-      const { data: programs } = await supabase.from('programs').select('*')
+      const [
+        { data: profiles },
+        { data: plans },
+        { data: progress },
+        { data: programs },
+        { data: tracks },
+        { data: trackPills },
+        { data: skillCategories },
+        { data: skillRatings },
+      ] = await Promise.all([
+        supabase.from('profiles').select('*').eq('role', 'aluno'),
+        supabase.from('pdi_plans').select('*'),
+        supabase.from('user_progress').select('*'),
+        supabase.from('programs').select('*'),
+        supabase.from('tracks').select('*'),
+        supabase.from('track_pills').select('*'),
+        supabase.from('skill_categories').select('*'),
+        supabase.from('skill_ratings').select('*'),
+      ])
 
-      const cadastros = (profiles as Profile[])?.length ?? 0
-      const comTrilha = (profiles as Profile[])?.filter((p) => p.selected_track_id).length ?? 0
-      const comPlano = new Set(((plans as PdiPlan[]) ?? []).map((p) => p.user_id)).size
-      const completaram = new Set(
-        ((progress as UserProgress[]) ?? []).filter((p) => p.status === 'completed').map((p) => p.user_id),
-      ).size
+      const profilesArr = (profiles as Profile[]) ?? []
+      const plansArr = (plans as PdiPlan[]) ?? []
+      const progressArr = (progress as UserProgress[]) ?? []
+      const programsArr = (programs as Program[]) ?? []
+      const tracksArr = (tracks as Track[]) ?? []
+      const trackPillsArr = (trackPills as TrackPill[]) ?? []
+      const skillCategoriesArr = (skillCategories as SkillCategory[]) ?? []
+      const skillRatingsArr = (skillRatings as SkillRating[]) ?? []
+
+      const cadastros = profilesArr.length
+      const comTrilha = profilesArr.filter((p) => p.selected_track_id).length
+      const comPlano = new Set(plansArr.map((p) => p.user_id)).size
+      const completaram = new Set(progressArr.filter((p) => p.status === 'completed').map((p) => p.user_id)).size
 
       setFunnel([
         { stage: 'Quiz iniciado (cadastros)', value: cadastros },
@@ -31,11 +100,11 @@ export function AdminAnalytics() {
       ])
 
       const grouped = new Map<string, number>()
-      for (const p of (profiles as Profile[]) ?? []) {
+      for (const p of profilesArr) {
         if (!p.program_id) continue
         grouped.set(p.program_id, (grouped.get(p.program_id) ?? 0) + 1)
       }
-      const programMap = new Map(((programs as Program[]) ?? []).map((p) => [p.id, p.name]))
+      const programMap = new Map(programsArr.map((p) => [p.id, p.name]))
       setByProgram(
         Array.from(grouped.entries()).map(([id, count]) => ({
           program: programMap.get(id) ?? id,
@@ -43,6 +112,60 @@ export function AdminAnalytics() {
         })),
       )
 
+      const tierCounts = new Map<PdiTier, Set<string>>(TIER_ORDER.map((t) => [t, new Set<string>()]))
+      for (const plan of plansArr) {
+        if (plan.tier) tierCounts.get(plan.tier)?.add(plan.user_id)
+      }
+      setTierDist(TIER_ORDER.map((tier) => ({ tier, alunos: tierCounts.get(tier)?.size ?? 0 })))
+
+      const pillToTrack = new Map<string, string>()
+      for (const tp of trackPillsArr) pillToTrack.set(tp.pill_id, tp.track_id)
+      const trackNames = new Map(tracksArr.map((t) => [t.id, t.title]))
+      const started = new Map<string, number>()
+      const completed = new Map<string, number>()
+      for (const row of progressArr) {
+        const trackId = pillToTrack.get(row.pill_id)
+        if (!trackId) continue
+        started.set(trackId, (started.get(trackId) ?? 0) + 1)
+        if (row.status === 'completed') completed.set(trackId, (completed.get(trackId) ?? 0) + 1)
+      }
+      setCompletionByTrack(
+        Array.from(started.entries())
+          .map(([trackId, iniciados]) => {
+            const concluidos = completed.get(trackId) ?? 0
+            return {
+              track: trackNames.get(trackId) ?? trackId,
+              iniciados,
+              concluidos,
+              taxa: iniciados ? Math.round((concluidos / iniciados) * 100) : 0,
+            }
+          })
+          .sort((a, b) => b.iniciados - a.iniciados),
+      )
+
+      setSkillGap(
+        skillCategoriesArr.map((cat) => {
+          const ratings = skillRatingsArr.filter((r) => r.skill_category_id === cat.id)
+          const selfVals = ratings.map((r) => r.self_rating).filter((v): v is number => v != null)
+          const modVals = ratings.map((r) => r.moderator_rating).filter((v): v is number => v != null)
+          const avgSelf = selfVals.length ? selfVals.reduce((a, b) => a + b, 0) / selfVals.length : 0
+          const avgMod = modVals.length ? modVals.reduce((a, b) => a + b, 0) / modVals.length : null
+          return {
+            skill: cat.name,
+            autoavaliacao: Math.round(avgSelf * 10) / 10,
+            moderador: avgMod != null ? Math.round(avgMod * 10) / 10 : null,
+            gap: avgMod != null ? Math.round((avgSelf - avgMod) * 10) / 10 : null,
+          }
+        }),
+      )
+
+      const scores = progressArr.filter((p) => p.status === 'completed' && p.quiz_score != null).map((p) => p.quiz_score!)
+      const notaMediaQuiz = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0
+      const totalProgress = progressArr.length
+      const totalCompleted = progressArr.filter((p) => p.status === 'completed').length
+      const taxaConclusaoGeral = totalProgress ? Math.round((totalCompleted / totalProgress) * 100) : 0
+
+      setSummary({ alunos: cadastros, comPlano, notaMediaQuiz, taxaConclusaoGeral })
       setLoading(false)
     }
     load()
@@ -52,6 +175,13 @@ export function AdminAnalytics() {
 
   return (
     <AdminLayout>
+      <div className="mb-6 grid gap-4 sm:grid-cols-4">
+        <StatCard label="Alunos cadastrados" value={summary.alunos} />
+        <StatCard label="Com plano de PDI" value={summary.comPlano} />
+        <StatCard label="Nota média de quiz" value={`${summary.notaMediaQuiz}%`} />
+        <StatCard label="Taxa de conclusão geral" value={`${summary.taxaConclusaoGeral}%`} />
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="card p-5">
           <h2 className="font-bold text-ink">Funil do evento</h2>
@@ -69,7 +199,7 @@ export function AdminAnalytics() {
         </div>
 
         <div className="card p-5">
-          <h2 className="font-bold text-ink">Engajamento por curso</h2>
+          <h2 className="font-bold text-ink">Alunos por curso (programa)</h2>
           <div className="mt-4 h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={byProgram}>
@@ -82,7 +212,110 @@ export function AdminAnalytics() {
             </ResponsiveContainer>
           </div>
         </div>
+
+        <div className="card p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-ink">Distribuição de faixas de PDI</h2>
+            <CsvButton
+              filename="faixas-pdi.csv"
+              headers={['Faixa', 'Alunos']}
+              rows={tierDist.map((r) => [TIER_LABEL[r.tier], r.alunos])}
+            />
+          </div>
+          <div className="mt-4 h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={tierDist.map((r) => ({ ...r, label: TIER_LABEL[r.tier] }))}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="alunos" fill="#1A3B6E" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="card p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-ink">Conclusão por curso</h2>
+            <CsvButton
+              filename="conclusao-por-curso.csv"
+              headers={['Curso', 'Iniciados', 'Concluídos', 'Taxa (%)']}
+              rows={completionByTrack.map((r) => [r.track, r.iniciados, r.concluidos, r.taxa])}
+            />
+          </div>
+          <div className="mt-4 max-h-72 overflow-y-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-xs uppercase text-ink-soft">
+                  <th className="pb-2">Curso</th>
+                  <th className="pb-2 text-right">Iniciados</th>
+                  <th className="pb-2 text-right">Concluídos</th>
+                  <th className="pb-2 text-right">Taxa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {completionByTrack.map((r) => (
+                  <tr key={r.track} className="border-t border-navy-light/60">
+                    <td className="py-2 font-medium text-ink">{r.track}</td>
+                    <td className="py-2 text-right text-ink-soft">{r.iniciados}</td>
+                    <td className="py-2 text-right text-ink-soft">{r.concluidos}</td>
+                    <td className="py-2 text-right font-semibold text-navy">{r.taxa}%</td>
+                  </tr>
+                ))}
+                {completionByTrack.length === 0 && (
+                  <tr><td colSpan={4} className="py-3 text-ink-soft">Sem dados ainda.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card p-5 lg:col-span-2">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-ink">Balanço de competências — autoavaliação × moderador</h2>
+            <CsvButton
+              filename="balanco-competencias.csv"
+              headers={['Competência', 'Autoavaliação média', 'Nota do moderador', 'Gap']}
+              rows={skillGap.map((r) => [r.skill, r.autoavaliacao, r.moderador ?? '', r.gap ?? ''])}
+            />
+          </div>
+          <div className="mt-4 max-h-80 overflow-y-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-xs uppercase text-ink-soft">
+                  <th className="pb-2">Competência</th>
+                  <th className="pb-2 text-right">Autoavaliação</th>
+                  <th className="pb-2 text-right">Moderador</th>
+                  <th className="pb-2 text-right">Gap</th>
+                </tr>
+              </thead>
+              <tbody>
+                {skillGap.map((r) => (
+                  <tr key={r.skill} className="border-t border-navy-light/60">
+                    <td className="py-2 font-medium text-ink">{r.skill}</td>
+                    <td className="py-2 text-right text-ink-soft">{r.autoavaliacao || '—'}</td>
+                    <td className="py-2 text-right text-ink-soft">{r.moderador ?? '—'}</td>
+                    <td className="py-2 text-right font-semibold text-navy">{r.gap ?? '—'}</td>
+                  </tr>
+                ))}
+                {skillGap.length === 0 && (
+                  <tr><td colSpan={4} className="py-3 text-ink-soft">Sem dados ainda.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </AdminLayout>
+  )
+}
+
+function StatCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="card p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{label}</p>
+      <p className="mt-1 text-2xl font-extrabold text-ink">{value}</p>
+    </div>
   )
 }
