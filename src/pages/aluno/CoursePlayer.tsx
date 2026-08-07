@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
+import { Icon } from '../../components/Icon'
 import { ScormPlayer } from '../../components/ScormPlayer'
 import { useAuth } from '../../context/AuthContext'
 import { completePill, markPillInProgress } from '../../lib/api'
@@ -14,6 +15,24 @@ export function CoursePlayer() {
   const [pill, setPill] = useState<Pill | null>(null)
   const [progress, setProgress] = useState<UserProgress | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const playerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onFullscreenChange() {
+      setIsFullscreen(document.fullscreenElement === playerRef.current)
+    }
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
+  }, [])
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen()
+    } else {
+      playerRef.current?.requestFullscreen()
+    }
+  }
 
   useEffect(() => {
     if (!id || !profile) return
@@ -74,7 +93,19 @@ export function CoursePlayer() {
           <h1 className="mt-2 text-2xl font-extrabold text-ink">{pill.title}</h1>
           {pill.description && <p className="mt-1 text-ink-soft">{pill.description}</p>}
 
-          <div className={`card mt-5 overflow-hidden ${pill.content_type === 'scorm' ? 'h-[80vh] min-h-[560px]' : 'aspect-video'}`}>
+          <div
+            ref={playerRef}
+            className={`card relative mt-5 overflow-hidden ${
+              pill.content_type === 'scorm' ? 'h-[80vh] min-h-[560px]' : 'aspect-video'
+            } ${isFullscreen ? 'h-screen w-screen rounded-none' : ''}`}
+          >
+            <button
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+              className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70"
+            >
+              <Icon name={isFullscreen ? 'minimize' : 'maximize'} size={16} />
+            </button>
             {pill.content_type === 'video' && pill.content_url && (
               <video controls className="h-full w-full" src={pill.content_url} />
             )}

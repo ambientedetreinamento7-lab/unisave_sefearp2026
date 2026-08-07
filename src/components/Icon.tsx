@@ -15,6 +15,8 @@ export type IconName =
   | "chevron-down"
   | "log-out"
   | "shield"
+  | "maximize"
+  | "minimize"
 
 const PATHS: Record<IconName, React.ReactNode> = {
   book: (
@@ -148,6 +150,26 @@ const PATHS: Record<IconName, React.ReactNode> = {
       fill="none"
       stroke="currentColor"
       strokeWidth="1.7"
+      strokeLinejoin="round"
+    />
+  ),
+  maximize: (
+    <path
+      d="M9 4H5a1 1 0 0 0-1 1v4M15 4h4a1 1 0 0 1 1 1v4M9 20H5a1 1 0 0 1-1-1v-4M15 20h4a1 1 0 0 0 1-1v-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  minimize: (
+    <path
+      d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
       strokeLinejoin="round"
     />
   ),
