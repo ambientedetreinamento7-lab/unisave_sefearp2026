@@ -82,10 +82,10 @@ export function CoursePlayer() {
   const needsFixationQuiz = pill.content_type !== 'scorm'
 
   return (
-    <div className="min-h-screen bg-bg pb-16">
+    <div className="min-h-screen w-full overflow-x-hidden bg-bg pb-16">
       <AppHeader />
 
-      <main className="mx-auto grid max-w-5xl gap-6 px-4 py-8 lg:grid-cols-[1fr_280px]">
+      <main className="mx-auto grid w-full max-w-5xl gap-6 px-4 py-8 lg:grid-cols-[1fr_280px]">
         <div>
           <Link to="/dashboard" className="text-sm font-medium text-ink-soft hover:text-navy">
             ← Voltar ao painel
