@@ -10,13 +10,15 @@
 // that dynamic-route detection wasn't reliably picked up by this project's
 // build, so this sidesteps it entirely with a plain, single, flat function.
 //
+// Writes the response with the raw Node http.ServerResponse API
+// (statusCode/setHeader/end) instead of the Express-style status()/send()
+// sugar Vercel usually layers on top — that sugar was JSON-serializing the
+// body byte-by-byte instead of writing it raw, in this project's runtime.
+// end() is the lowest-level primitive and always writes bytes untouched.
+//
 // This project's Vercel build type-checks functions without @types/node
 // available, so Node-only globals need minimal ambient declarations here
-// instead of pulling in the full node lib. Buffer specifically matters for
-// the response body: handing res.send() a plain Uint8Array gets treated as
-// a JSON-serializable object (each byte as an indexed property) rather than
-// raw bytes — a real Buffer is what Vercel's response helper recognizes and
-// streams back untouched.
+// instead of pulling in the full node lib.
 declare const process: { env: Record<string, string | undefined> }
 declare const Buffer: { from(data: ArrayBuffer): unknown }
 
@@ -47,9 +49,9 @@ interface VercelLikeRequest {
 }
 
 interface VercelLikeResponse {
-  status(code: number): VercelLikeResponse
+  statusCode: number
   setHeader(name: string, value: string): void
-  send(body: unknown): void
+  end(body?: unknown): void
 }
 
 export default async function handler(req: VercelLikeRequest, res: VercelLikeResponse) {
@@ -58,18 +60,21 @@ export default async function handler(req: VercelLikeRequest, res: VercelLikeRes
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL
   if (!supabaseUrl || !objectPath) {
-    res.status(400).send('Missing configuration or file path')
+    res.statusCode = 400
+    res.end('Missing configuration or file path')
     return
   }
 
   const upstream = await fetch(`${supabaseUrl}/storage/v1/object/public/scorm-packages/${objectPath}`)
   if (!upstream.ok) {
-    res.status(upstream.status).send('Not found')
+    res.statusCode = upstream.status
+    res.end('Not found')
     return
   }
 
   const buffer = Buffer.from(await upstream.arrayBuffer())
+  res.statusCode = 200
   res.setHeader('Content-Type', contentTypeFor(objectPath))
   res.setHeader('Cache-Control', 'public, max-age=3600')
-  res.status(200).send(buffer)
+  res.end(buffer)
 }
