@@ -1,3 +1,6 @@
 {
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/api/scorm/(.*)", "destination": "/api/scorm?path=$1" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
 }

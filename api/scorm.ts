@@ -5,11 +5,15 @@
 // text/plain with a locked-down CSP, so browsers refuse to execute it.
 // Vercel has no such restriction, so this is the reliable path.
 //
+// Reached via an explicit vercel.json rewrite (/api/scorm/(.*) ->
+// /api/scorm?path=$1) rather than the [...path].ts filesystem convention —
+// that dynamic-route detection wasn't reliably picked up by this project's
+// build, so this sidesteps it entirely with a plain, single, flat function.
+//
 // Deliberately avoids Node-only globals (Buffer, process) beyond a minimal
 // ambient declaration for `process.env` — this project's Vercel build
-// type-checks functions without @types/node available, so anything from
-// the Node lib (Buffer included) fails to compile. Uint8Array/fetch/Response
-// are universal Web APIs and need no extra typing.
+// type-checks functions without @types/node available. Uint8Array/fetch are
+// universal Web APIs and need no extra typing.
 declare const process: { env: Record<string, string | undefined> }
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -45,8 +49,8 @@ interface VercelLikeResponse {
 }
 
 export default async function handler(req: VercelLikeRequest, res: VercelLikeResponse) {
-  const segments = Array.isArray(req.query.path) ? req.query.path : [req.query.path]
-  const objectPath = segments.filter(Boolean).join('/')
+  const raw = req.query.path
+  const objectPath = Array.isArray(raw) ? raw.join('/') : raw ?? ''
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL
   if (!supabaseUrl || !objectPath) {
