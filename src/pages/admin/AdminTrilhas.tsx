@@ -31,7 +31,7 @@ export function AdminTrilhas() {
   const [pills, setPills] = useState<Pill[]>([])
   const [programs, setPrograms] = useState<Program[]>([])
   const [loading, setLoading] = useState(true)
-  const [showTrackForm, setShowTrackForm] = useState(false)
+  const [trackForm, setTrackForm] = useState<Track | 'new' | null>(null)
   const [showPillForm, setShowPillForm] = useState<string | null>(null)
 
   async function reload() {
@@ -56,47 +56,68 @@ export function AdminTrilhas() {
     <AdminLayout>
       <div className="mb-4 flex justify-end">
         <button
-          onClick={() => setShowTrackForm(true)}
+          onClick={() => setTrackForm('new')}
           className="rounded-xl bg-brand-red px-4 py-2 text-sm font-bold text-white hover:bg-brand-red-dark"
         >
-          + Nova trilha
+          + Novo curso
         </button>
       </div>
 
       <div className="space-y-4">
         {tracks.map((track) => (
           <div key={track.id} className="card p-5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="font-bold text-ink">{track.title}</h3>
                 <p className="text-xs text-ink-soft">
                   {programs.find((p) => p.id === track.program_id)?.name} · {track.diagnostic_profile}
+                  {track.carga_horaria_total != null && <> · {track.carga_horaria_total}h</>}
+                  {track.certificate_enabled && <> · 🎓 emite certificado</>}
                 </p>
               </div>
-              <button
-                onClick={() => setShowPillForm(track.id)}
-                className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
-              >
-                + Pílula
-              </button>
+              <div className="flex shrink-0 gap-2">
+                <button
+                  onClick={() => setTrackForm(track)}
+                  className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
+                >
+                  Editar
+                </button>
+                <button
+                  onClick={() => setShowPillForm(track.id)}
+                  className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
+                >
+                  + Pílula
+                </button>
+              </div>
             </div>
             <div className="mt-3 space-y-1">
               {pills
                 .filter((p) => p.track_id === track.id)
                 .map((p) => (
                   <div key={p.id} className="flex items-center justify-between rounded-lg bg-bg px-3 py-2 text-sm">
-                    <span className="font-medium text-ink">{p.title}</span>
+                    <span className="font-medium text-ink">
+                      {p.title}
+                      {p.axis && <span className="ml-2 text-xs font-normal text-ink-soft">({p.axis})</span>}
+                    </span>
                     <span className="text-xs uppercase text-ink-soft">{p.content_type}</span>
                   </div>
                 ))}
+              {pills.filter((p) => p.track_id === track.id).length === 0 && (
+                <p className="text-sm text-ink-soft">Nenhuma pílula cadastrada neste curso ainda.</p>
+              )}
             </div>
           </div>
         ))}
-        {tracks.length === 0 && <p className="text-ink-soft">Nenhuma trilha cadastrada ainda.</p>}
+        {tracks.length === 0 && <p className="text-ink-soft">Nenhum curso cadastrado ainda.</p>}
       </div>
 
-      {showTrackForm && (
-        <TrackFormModal programs={programs} onClose={() => setShowTrackForm(false)} onSaved={() => { setShowTrackForm(false); reload() }} />
+      {trackForm && (
+        <TrackFormModal
+          track={trackForm === 'new' ? null : trackForm}
+          programs={programs}
+          onClose={() => setTrackForm(null)}
+          onSaved={() => { setTrackForm(null); reload() }}
+        />
       )}
       {showPillForm && (
         <PillFormModal trackId={showPillForm} onClose={() => setShowPillForm(null)} onSaved={() => { setShowPillForm(null); reload() }} />
@@ -105,26 +126,85 @@ export function AdminTrilhas() {
   )
 }
 
-function TrackFormModal({ programs, onClose, onSaved }: { programs: Program[]; onClose: () => void; onSaved: () => void }) {
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [programId, setProgramId] = useState(programs[0]?.id ?? '')
-  const [profile, setProfile] = useState<DiagnosticProfile>('autogestao')
+function TrackFormModal({
+  track,
+  programs,
+  onClose,
+  onSaved,
+}: {
+  track: Track | null
+  programs: Program[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [title, setTitle] = useState(track?.title ?? '')
+  const [description, setDescription] = useState(track?.description ?? '')
+  const [objetivoGeral, setObjetivoGeral] = useState(track?.objetivo_geral ?? '')
+  const [publicoAlvo, setPublicoAlvo] = useState(track?.publico_alvo ?? '')
+  const [preRequisitos, setPreRequisitos] = useState(track?.pre_requisitos ?? '')
+  const [cargaHoraria, setCargaHoraria] = useState(track?.carga_horaria_total?.toString() ?? '')
+  const [certificateEnabled, setCertificateEnabled] = useState(track?.certificate_enabled ?? false)
+  const [programId, setProgramId] = useState(track?.program_id ?? programs[0]?.id ?? '')
+  const [profile, setProfile] = useState<DiagnosticProfile>(track?.diagnostic_profile ?? 'autogestao')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   async function save() {
     setSaving(true)
-    await supabase.from('tracks').insert({ title, description, program_id: programId, diagnostic_profile: profile })
+    setError('')
+    const payload = {
+      title,
+      description,
+      objetivo_geral: objetivoGeral || null,
+      publico_alvo: publicoAlvo || null,
+      pre_requisitos: preRequisitos || null,
+      carga_horaria_total: cargaHoraria ? Number(cargaHoraria) : null,
+      certificate_enabled: certificateEnabled,
+      program_id: programId,
+      diagnostic_profile: profile,
+    }
+    const { error: saveError } = track
+      ? await supabase.from('tracks').update(payload).eq('id', track.id)
+      : await supabase.from('tracks').insert(payload)
+    if (saveError) {
+      setError(saveError.message)
+      setSaving(false)
+      return
+    }
     setSaving(false)
     onSaved()
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="card w-full max-w-md space-y-3 p-6">
-        <h3 className="text-lg font-bold text-ink">Nova trilha</h3>
-        <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Título" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <textarea className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Descrição" value={description} onChange={(e) => setDescription(e.target.value)} />
+      <div className="card max-h-[85vh] w-full max-w-lg space-y-3 overflow-y-auto p-6">
+        <h3 className="text-lg font-bold text-ink">{track ? 'Editar curso' : 'Novo curso'}</h3>
+
+        <label className="block text-xs font-semibold text-ink-soft">Nome do curso</label>
+        <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Nome do curso" value={title} onChange={(e) => setTitle(e.target.value)} />
+
+        <label className="block text-xs font-semibold text-ink-soft">Descrição curta</label>
+        <textarea className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Descrição curta (aparece no catálogo)" value={description} onChange={(e) => setDescription(e.target.value)} />
+
+        <label className="block text-xs font-semibold text-ink-soft">Objetivo geral</label>
+        <textarea className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="O que o aluno vai alcançar ao concluir o curso" value={objetivoGeral} onChange={(e) => setObjetivoGeral(e.target.value)} />
+
+        <label className="block text-xs font-semibold text-ink-soft">Público-alvo</label>
+        <textarea className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Para quem é este curso" value={publicoAlvo} onChange={(e) => setPublicoAlvo(e.target.value)} />
+
+        <label className="block text-xs font-semibold text-ink-soft">Pré-requisitos</label>
+        <textarea className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Conhecimentos ou cursos necessários antes deste (opcional)" value={preRequisitos} onChange={(e) => setPreRequisitos(e.target.value)} />
+
+        <label className="block text-xs font-semibold text-ink-soft">Carga horária total (horas)</label>
+        <input
+          type="number"
+          min={0}
+          className="w-full rounded-xl border border-navy-light px-4 py-3"
+          placeholder="Ex: 40"
+          value={cargaHoraria}
+          onChange={(e) => setCargaHoraria(e.target.value)}
+        />
+
         <select className="w-full rounded-xl border border-navy-light px-4 py-3" value={programId} onChange={(e) => setProgramId(e.target.value)}>
           {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
@@ -133,9 +213,19 @@ function TrackFormModal({ programs, onClose, onSaved }: { programs: Program[]; o
           <option value="tech_ia">Tech & IA</option>
           <option value="lideranca">Liderança</option>
         </select>
+
+        <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
+          <input type="checkbox" checked={certificateEnabled} onChange={(e) => setCertificateEnabled(e.target.checked)} />
+          Emite certificado ao concluir 100% das pílulas do curso
+        </label>
+
+        {error && <p className="text-sm text-brand-red">{error}</p>}
+
         <div className="flex gap-2 pt-2">
           <button onClick={onClose} className="flex-1 rounded-xl border border-navy-light py-2.5 font-semibold text-ink-soft">Cancelar</button>
-          <button onClick={save} disabled={saving || !title} className="flex-1 rounded-xl bg-brand-red py-2.5 font-bold text-white disabled:opacity-60">Salvar</button>
+          <button onClick={save} disabled={saving || !title} className="flex-1 rounded-xl bg-brand-red py-2.5 font-bold text-white disabled:opacity-60">
+            {saving ? 'Salvando…' : 'Salvar'}
+          </button>
         </div>
       </div>
     </div>
@@ -216,7 +306,7 @@ function PillFormModal({ trackId, onClose, onSaved }: { trackId: string; onClose
       <div className="card w-full max-w-md space-y-3 p-6">
         <h3 className="text-lg font-bold text-ink">Nova pílula</h3>
         <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Título" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Eixo temático" value={axis} onChange={(e) => setAxis(e.target.value)} />
+        <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Módulo (nome do bloco/etapa do curso)" value={axis} onChange={(e) => setAxis(e.target.value)} />
         <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Duração (ex: 12 min)" value={duration} onChange={(e) => setDuration(e.target.value)} />
 
         <select className="w-full rounded-xl border border-navy-light px-4 py-3" value={contentType} onChange={(e) => setContentType(e.target.value as ContentType)}>
