@@ -32,7 +32,13 @@ export function AdminTrilhas() {
   const [programs, setPrograms] = useState<Program[]>([])
   const [loading, setLoading] = useState(true)
   const [trackForm, setTrackForm] = useState<Track | 'new' | null>(null)
-  const [showPillForm, setShowPillForm] = useState<string | null>(null)
+  const [pillForm, setPillForm] = useState<{ trackId: string; pill: Pill | null } | null>(null)
+
+  async function deletePill(id: string) {
+    if (!confirm('Remover esta pílula? Isso também apaga o progresso dos alunos nela.')) return
+    await supabase.from('pills').delete().eq('id', id)
+    reload()
+  }
 
   async function reload() {
     const [{ data: t }, { data: p }, { data: prog }] = await Promise.all([
@@ -83,7 +89,7 @@ export function AdminTrilhas() {
                   Editar
                 </button>
                 <button
-                  onClick={() => setShowPillForm(track.id)}
+                  onClick={() => setPillForm({ trackId: track.id, pill: null })}
                   className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
                 >
                   + Pílula
@@ -94,12 +100,23 @@ export function AdminTrilhas() {
               {pills
                 .filter((p) => p.track_id === track.id)
                 .map((p) => (
-                  <div key={p.id} className="flex items-center justify-between rounded-lg bg-bg px-3 py-2 text-sm">
+                  <div key={p.id} className="flex items-center justify-between gap-2 rounded-lg bg-bg px-3 py-2 text-sm">
                     <span className="font-medium text-ink">
                       {p.title}
                       {p.axis && <span className="ml-2 text-xs font-normal text-ink-soft">({p.axis})</span>}
                     </span>
-                    <span className="text-xs uppercase text-ink-soft">{p.content_type}</span>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="text-xs uppercase text-ink-soft">{p.content_type}</span>
+                      <button
+                        onClick={() => setPillForm({ trackId: track.id, pill: p })}
+                        className="text-xs font-semibold text-navy hover:underline"
+                      >
+                        Editar
+                      </button>
+                      <button onClick={() => deletePill(p.id)} className="text-xs font-semibold text-brand-red hover:underline">
+                        Excluir
+                      </button>
+                    </div>
                   </div>
                 ))}
               {pills.filter((p) => p.track_id === track.id).length === 0 && (
@@ -119,8 +136,13 @@ export function AdminTrilhas() {
           onSaved={() => { setTrackForm(null); reload() }}
         />
       )}
-      {showPillForm && (
-        <PillFormModal trackId={showPillForm} onClose={() => setShowPillForm(null)} onSaved={() => { setShowPillForm(null); reload() }} />
+      {pillForm && (
+        <PillFormModal
+          trackId={pillForm.trackId}
+          pill={pillForm.pill}
+          onClose={() => setPillForm(null)}
+          onSaved={() => { setPillForm(null); reload() }}
+        />
       )}
     </AdminLayout>
   )
@@ -232,14 +254,24 @@ function TrackFormModal({
   )
 }
 
-function PillFormModal({ trackId, onClose, onSaved }: { trackId: string; onClose: () => void; onSaved: () => void }) {
-  const [title, setTitle] = useState('')
-  const [axis, setAxis] = useState('')
-  const [duration, setDuration] = useState('')
-  const [contentType, setContentType] = useState<ContentType>('video')
-  const [contentUrl, setContentUrl] = useState('')
+function PillFormModal({
+  trackId,
+  pill,
+  onClose,
+  onSaved,
+}: {
+  trackId: string
+  pill: Pill | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [title, setTitle] = useState(pill?.title ?? '')
+  const [axis, setAxis] = useState(pill?.axis ?? '')
+  const [duration, setDuration] = useState(pill?.duration ?? '')
+  const [contentType, setContentType] = useState<ContentType>(pill?.content_type ?? 'video')
+  const [contentUrl, setContentUrl] = useState(pill?.content_url ?? '')
   const [scormFile, setScormFile] = useState<File | null>(null)
-  const [manifestPath, setManifestPath] = useState('index_lms.html')
+  const [manifestPath, setManifestPath] = useState(pill?.scorm_manifest_path ?? 'index.html')
   const [uploadPct, setUploadPct] = useState(0)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -247,7 +279,9 @@ function PillFormModal({ trackId, onClose, onSaved }: { trackId: string; onClose
   async function save() {
     setSaving(true)
     setError('')
-    let scormPackageUrl: string | null = null
+    // Editing without picking a new .zip keeps whatever package is already
+    // uploaded — only swap it out when the admin explicitly selects a file.
+    let scormPackageUrl: string | null = pill?.scorm_package_url ?? null
 
     if (contentType === 'scorm' && scormFile) {
       try {
@@ -282,7 +316,7 @@ function PillFormModal({ trackId, onClose, onSaved }: { trackId: string; onClose
       }
     }
 
-    const { error: insertError } = await supabase.from('pills').insert({
+    const payload = {
       track_id: trackId,
       title,
       axis,
@@ -291,9 +325,12 @@ function PillFormModal({ trackId, onClose, onSaved }: { trackId: string; onClose
       content_url: contentType !== 'scorm' ? contentUrl : null,
       scorm_package_url: contentType === 'scorm' ? scormPackageUrl : null,
       scorm_manifest_path: contentType === 'scorm' ? manifestPath : null,
-    })
-    if (insertError) {
-      setError(insertError.message)
+    }
+    const { error: saveError } = pill
+      ? await supabase.from('pills').update(payload).eq('id', pill.id)
+      : await supabase.from('pills').insert(payload)
+    if (saveError) {
+      setError(saveError.message)
       setSaving(false)
       return
     }
@@ -304,7 +341,7 @@ function PillFormModal({ trackId, onClose, onSaved }: { trackId: string; onClose
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="card w-full max-w-md space-y-3 p-6">
-        <h3 className="text-lg font-bold text-ink">Nova pílula</h3>
+        <h3 className="text-lg font-bold text-ink">{pill ? 'Editar pílula' : 'Nova pílula'}</h3>
         <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Título" value={title} onChange={(e) => setTitle(e.target.value)} />
         <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Módulo (nome do bloco/etapa do curso)" value={axis} onChange={(e) => setAxis(e.target.value)} />
         <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Duração (ex: 12 min)" value={duration} onChange={(e) => setDuration(e.target.value)} />
@@ -321,8 +358,13 @@ function PillFormModal({ trackId, onClose, onSaved }: { trackId: string; onClose
 
         {contentType === 'scorm' && (
           <>
+            {pill?.scorm_package_url && (
+              <p className="text-xs text-ink-soft">
+                Já existe um pacote enviado. Selecione um novo .zip abaixo só se quiser substituí-lo.
+              </p>
+            )}
             <input type="file" accept=".zip" onChange={(e) => setScormFile(e.target.files?.[0] ?? null)} className="w-full text-sm" />
-            <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Arquivo de entrada (ex: index_lms.html — veja o imsmanifest.xml do pacote)" value={manifestPath} onChange={(e) => setManifestPath(e.target.value)} />
+            <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Arquivo de entrada (ex: index.html — veja o imsmanifest.xml do pacote)" value={manifestPath} onChange={(e) => setManifestPath(e.target.value)} />
             {saving && (
               <div>
                 <div className="progress-track"><div className="progress-fill" style={{ width: `${uploadPct}%` }} /></div>
