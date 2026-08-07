@@ -1,7 +1,133 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { AdminLayout } from './AdminLayout'
 import { supabase } from '../../lib/supabase'
 import type { Track } from '../../types/database'
+
+const VARIABLES = [
+  { token: '{NOME_COMPLETO}', label: 'Nome completo' },
+  { token: '{NOME_DO_CURSO}', label: 'Nome do curso' },
+  { token: '{CARGA_HORARIA_CURSO}', label: 'Carga horária' },
+  { token: '{DATA_CONCLUSAO}', label: 'Data de conclusão' },
+]
+
+const FONT_SIZES = [
+  { value: '2', label: 'Pequeno' },
+  { value: '3', label: 'Normal' },
+  { value: '5', label: 'Grande' },
+  { value: '7', label: 'Título' },
+]
+
+function applyVariables(html: string, track: Track) {
+  return html
+    .replaceAll('{NOME_COMPLETO}', 'Nome do Aluno')
+    .replaceAll('{NOME_DO_CURSO}', track.title)
+    .replaceAll('{CARGA_HORARIA_CURSO}', String(track.carga_horaria_total ?? '—'))
+    .replaceAll('{DATA_CONCLUSAO}', new Date().toLocaleDateString('pt-BR'))
+}
+
+function RichTextEditor({ value, onChange }: { value: string; onChange: (html: string) => void }) {
+  const editorRef = useRef<HTMLDivElement>(null)
+  const initialized = useRef(false)
+
+  useEffect(() => {
+    if (initialized.current || !editorRef.current) return
+    editorRef.current.innerHTML = value
+    initialized.current = true
+  }, [value])
+
+  function exec(command: string, arg?: string) {
+    editorRef.current?.focus()
+    document.execCommand(command, false, arg)
+    if (editorRef.current) onChange(editorRef.current.innerHTML)
+  }
+
+  function insertVariable(token: string) {
+    exec('insertText', token)
+  }
+
+  return (
+    <div className="rounded-xl border border-navy-light">
+      <div className="flex flex-wrap items-center gap-1 border-b border-navy-light bg-bg px-2 py-1.5">
+        <ToolbarButton label="Negrito" onMouseDown={() => exec('bold')}><b>N</b></ToolbarButton>
+        <ToolbarButton label="Itálico" onMouseDown={() => exec('italic')}><i>I</i></ToolbarButton>
+        <ToolbarButton label="Sublinhado" onMouseDown={() => exec('underline')}><u>S</u></ToolbarButton>
+        <Divider />
+        <ToolbarButton label="Alinhar à esquerda" onMouseDown={() => exec('justifyLeft')}>⇤</ToolbarButton>
+        <ToolbarButton label="Centralizar" onMouseDown={() => exec('justifyCenter')}>≡</ToolbarButton>
+        <ToolbarButton label="Alinhar à direita" onMouseDown={() => exec('justifyRight')}>⇥</ToolbarButton>
+        <Divider />
+        <select
+          className="rounded-md border border-navy-light bg-white px-1.5 py-1 text-xs"
+          defaultValue="3"
+          onMouseDown={(e) => e.stopPropagation()}
+          onChange={(e) => exec('fontSize', e.target.value)}
+        >
+          {FONT_SIZES.map((s) => (
+            <option key={s.value} value={s.value}>{s.label}</option>
+          ))}
+        </select>
+        <input
+          type="color"
+          title="Cor do texto"
+          defaultValue="#1a1a1a"
+          className="h-7 w-8 cursor-pointer rounded-md border border-navy-light bg-white p-0.5"
+          onMouseDown={(e) => e.stopPropagation()}
+          onChange={(e) => exec('foreColor', e.target.value)}
+        />
+        <Divider />
+        <select
+          className="rounded-md border border-navy-light bg-white px-1.5 py-1 text-xs"
+          defaultValue=""
+          onMouseDown={(e) => e.stopPropagation()}
+          onChange={(e) => {
+            if (e.target.value) insertVariable(e.target.value)
+            e.target.value = ''
+          }}
+        >
+          <option value="">+ Inserir variável…</option>
+          {VARIABLES.map((v) => (
+            <option key={v.token} value={v.token}>{v.label}</option>
+          ))}
+        </select>
+      </div>
+      <div
+        ref={editorRef}
+        contentEditable
+        className="min-h-[140px] w-full px-4 py-3 text-sm outline-none"
+        onInput={(e) => onChange(e.currentTarget.innerHTML)}
+      />
+    </div>
+  )
+}
+
+function ToolbarButton({
+  label,
+  onMouseDown,
+  children,
+}: {
+  label: string
+  onMouseDown: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      onMouseDown={(e) => {
+        e.preventDefault()
+        onMouseDown()
+      }}
+      className="flex h-7 w-7 items-center justify-center rounded-md text-sm font-semibold text-ink hover:bg-navy-light"
+    >
+      {children}
+    </button>
+  )
+}
+
+function Divider() {
+  return <span className="mx-1 h-5 w-px bg-navy-light" />
+}
 
 export function AdminCertificados() {
   const [tracks, setTracks] = useState<Track[]>([])
@@ -127,16 +253,13 @@ function CertificateEditor({ track, onSaved }: { track: Track; onSaved: () => vo
 
       <div>
         <label className="block text-xs font-semibold text-ink-soft">Mensagem do certificado</label>
-        <textarea
-          className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3"
-          rows={5}
-          placeholder="Ex: Certificamos que {NOME_COMPLETO} concluiu o curso {NOME_DO_CURSO} com carga horária de {CARGA_HORARIA_CURSO} horas."
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-        />
+        <div className="mt-1">
+          <RichTextEditor value={message} onChange={setMessage} />
+        </div>
         <p className="mt-1 text-xs text-ink-soft">
-          Variáveis disponíveis: <code>{'{NOME_COMPLETO}'}</code> · <code>{'{NOME_DO_CURSO}'}</code> ·{' '}
-          <code>{'{CARGA_HORARIA_CURSO}'}</code> · <code>{'{DATA_CONCLUSAO}'}</code>
+          Formate o texto com a barra de ferramentas (negrito, cor, alinhamento…) e use "+ Inserir variável" para{' '}
+          <code>{'{NOME_COMPLETO}'}</code>, <code>{'{NOME_DO_CURSO}'}</code>, <code>{'{CARGA_HORARIA_CURSO}'}</code> e{' '}
+          <code>{'{DATA_CONCLUSAO}'}</code>.
         </p>
       </div>
 
@@ -150,13 +273,12 @@ function CertificateEditor({ track, onSaved }: { track: Track; onSaved: () => vo
           className="relative flex aspect-[1400/895] w-full items-center justify-center overflow-hidden rounded-xl border border-navy-light bg-cover bg-center p-6 text-center"
           style={backgroundUrl ? { backgroundImage: `url(${backgroundUrl})` } : undefined}
         >
-          <p className="max-w-lg text-sm font-medium text-ink">
-            {(message || 'Certificamos que {NOME_COMPLETO} concluiu o curso {NOME_DO_CURSO}.')
-              .replaceAll('{NOME_COMPLETO}', 'Nome do Aluno')
-              .replaceAll('{NOME_DO_CURSO}', track.title)
-              .replaceAll('{CARGA_HORARIA_CURSO}', String(track.carga_horaria_total ?? '—'))
-              .replaceAll('{DATA_CONCLUSAO}', new Date().toLocaleDateString('pt-BR'))}
-          </p>
+          <div
+            className="max-w-lg text-sm font-medium text-ink"
+            dangerouslySetInnerHTML={{
+              __html: applyVariables(message || 'Certificamos que {NOME_COMPLETO} concluiu o curso {NOME_DO_CURSO}.', track),
+            }}
+          />
         </div>
       )}
 
