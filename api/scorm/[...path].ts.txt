@@ -4,6 +4,14 @@
 // HTML-looking response — from Storage AND from Edge Functions — to
 // text/plain with a locked-down CSP, so browsers refuse to execute it.
 // Vercel has no such restriction, so this is the reliable path.
+//
+// Deliberately avoids Node-only globals (Buffer, process) beyond a minimal
+// ambient declaration for `process.env` — this project's Vercel build
+// type-checks functions without @types/node available, so anything from
+// the Node lib (Buffer included) fails to compile. Uint8Array/fetch/Response
+// are universal Web APIs and need no extra typing.
+declare const process: { env: Record<string, string | undefined> }
+
 const CONTENT_TYPES: Record<string, string> = {
   html: 'text/html; charset=utf-8',
   htm: 'text/html; charset=utf-8',
@@ -33,7 +41,7 @@ interface VercelLikeRequest {
 interface VercelLikeResponse {
   status(code: number): VercelLikeResponse
   setHeader(name: string, value: string): void
-  send(body: Buffer | string): void
+  send(body: Uint8Array | string): void
 }
 
 export default async function handler(req: VercelLikeRequest, res: VercelLikeResponse) {
@@ -52,8 +60,8 @@ export default async function handler(req: VercelLikeRequest, res: VercelLikeRes
     return
   }
 
-  const buffer = Buffer.from(await upstream.arrayBuffer())
+  const bytes = new Uint8Array(await upstream.arrayBuffer())
   res.setHeader('Content-Type', contentTypeFor(objectPath))
   res.setHeader('Cache-Control', 'public, max-age=3600')
-  res.status(200).send(buffer)
+  res.status(200).send(bytes)
 }
