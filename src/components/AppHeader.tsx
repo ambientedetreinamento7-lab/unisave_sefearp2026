@@ -21,12 +21,13 @@ export function AppHeader() {
   const { profile, signOut } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   const canSwitchViews = profile && profile.role !== 'aluno'
 
   return (
     <header className="bg-navy text-white">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-5 py-3">
+      <div className="mx-auto flex max-w-5xl items-center gap-x-6 gap-y-3 px-5 py-3">
         <Link to="/dashboard" className="flex items-center gap-2 shrink-0">
           <img src="/logos/UniSave.png" alt="UniSave" className="h-6 w-auto" />
           <div className="h-5 w-px bg-white/25" />
@@ -34,13 +35,14 @@ export function AppHeader() {
         </Link>
 
         {profile && (
-          <div className="leading-tight">
+          <div className="hidden leading-tight sm:block">
             <p className="max-w-[14rem] truncate text-sm font-bold uppercase tracking-wide">{profile.name}</p>
             <p className="text-xs text-white/60">Degustação: {daysLeft(profile.created_at)}d restantes</p>
           </div>
         )}
 
-        <nav className="flex flex-1 flex-wrap items-center gap-1.5">
+        {/* Desktop nav */}
+        <nav className="hidden flex-1 flex-wrap items-center gap-1.5 sm:flex">
           {NAV_LINKS.map((l) => (
             <NavLink
               key={l.to}
@@ -56,7 +58,8 @@ export function AppHeader() {
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2">
+        {/* Desktop controls */}
+        <div className="ml-auto hidden items-center gap-2 sm:flex">
           <button
             onClick={toggleTheme}
             aria-label="Alternar tema claro/escuro"
@@ -123,7 +126,101 @@ export function AppHeader() {
             <Icon name="log-out" size={15} />
           </button>
         </div>
+
+        {/* Mobile hamburger */}
+        <button
+          onClick={() => setMobileOpen((v) => !v)}
+          aria-label={mobileOpen ? 'Fechar menu' : 'Abrir menu'}
+          className="ml-auto flex h-9 w-9 items-center justify-center rounded-full border border-white/25 text-white sm:hidden"
+        >
+          {mobileOpen ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          )}
+        </button>
       </div>
+
+      {/* Mobile panel */}
+      {mobileOpen && (
+        <div className="border-t border-white/10 px-5 py-4 sm:hidden">
+          {profile && (
+            <div className="mb-3 leading-tight">
+              <p className="truncate text-sm font-bold uppercase tracking-wide">{profile.name}</p>
+              <p className="text-xs text-white/60">Degustação: {daysLeft(profile.created_at)}d restantes</p>
+            </div>
+          )}
+
+          <nav className="flex flex-col gap-1">
+            {NAV_LINKS.map((l) => (
+              <NavLink
+                key={l.to}
+                to={l.to}
+                onClick={() => setMobileOpen(false)}
+                className={({ isActive }) =>
+                  `rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    isActive ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'
+                  }`
+                }
+              >
+                {l.label}
+              </NavLink>
+            ))}
+          </nav>
+
+          {canSwitchViews && (
+            <div className="mt-3 border-t border-white/10 pt-3">
+              <p className="px-3 text-[11px] font-bold uppercase tracking-wide text-white/50">Alternar visão</p>
+              <Link
+                to="/dashboard"
+                onClick={() => setMobileOpen(false)}
+                className="block rounded-lg px-3 py-2 text-sm font-medium text-white/80 hover:bg-white/10"
+              >
+                Área do Aluno
+              </Link>
+              {(profile.role === 'moderador' || profile.role === 'admin') && (
+                <Link
+                  to="/moderador"
+                  onClick={() => setMobileOpen(false)}
+                  className="block rounded-lg px-3 py-2 text-sm font-medium text-white/80 hover:bg-white/10"
+                >
+                  Painel Moderador
+                </Link>
+              )}
+              {profile.role === 'admin' && (
+                <Link
+                  to="/admin/programas"
+                  onClick={() => setMobileOpen(false)}
+                  className="block rounded-lg px-3 py-2 text-sm font-medium text-white/80 hover:bg-white/10"
+                >
+                  Painel Admin
+                </Link>
+              )}
+            </div>
+          )}
+
+          <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
+            <button
+              onClick={toggleTheme}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/25 py-2 text-sm font-semibold text-white/90 hover:bg-white/10"
+            >
+              <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={15} />
+              {theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
+            </button>
+            <button
+              onClick={signOut}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/25 py-2 text-sm font-semibold text-white/90 hover:bg-white/10"
+            >
+              <Icon name="log-out" size={15} />
+              Sair
+            </button>
+          </div>
+        </div>
+      )}
     </header>
   )
 }
