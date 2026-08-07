@@ -314,8 +314,14 @@ function PillFormModal({
           setUploadPct(Math.round((uploaded / entries.length) * 100))
         }
 
-        const { data } = supabase.storage.from('scorm-packages').getPublicUrl(packageId)
-        scormPackageUrl = data.publicUrl
+        // Supabase Storage always serves public .html/.js objects as
+        // text/plain with a locked-down CSP (an anti-XSS measure — it never
+        // lets a public bucket host executable pages), so the player can't
+        // load straight from a public storage URL. Route through the
+        // scorm-proxy Edge Function instead, which re-serves the same bytes
+        // with the right Content-Type and no CSP override.
+        const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')
+        scormPackageUrl = `${supabaseUrl}/functions/v1/scorm-proxy/${packageId}`
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Falha ao processar o pacote SCORM.')
         setSaving(false)
