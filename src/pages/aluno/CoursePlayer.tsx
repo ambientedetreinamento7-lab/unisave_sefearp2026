@@ -74,7 +74,7 @@ export function CoursePlayer() {
           <h1 className="mt-2 text-2xl font-extrabold text-ink">{pill.title}</h1>
           {pill.description && <p className="mt-1 text-ink-soft">{pill.description}</p>}
 
-          <div className="card mt-5 aspect-video overflow-hidden">
+          <div className={`card mt-5 overflow-hidden ${pill.content_type === 'scorm' ? 'h-[80vh] min-h-[560px]' : 'aspect-video'}`}>
             {pill.content_type === 'video' && pill.content_url && (
               <video controls className="h-full w-full" src={pill.content_url} />
             )}
