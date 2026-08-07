@@ -295,12 +295,19 @@ function PillFormModal({
         const packageId = crypto.randomUUID()
         let uploaded = 0
         for (const entry of entries) {
-          const blob = await entry.async('blob')
+          const raw = await entry.async('blob')
+          const mime = guessContentType(entry.name)
+          // JSZip hands back blobs with no MIME type set on the Blob itself
+          // (only application/octet-stream implied) — some supabase-js
+          // versions read the type off the Blob instead of the `contentType`
+          // option below, so it has to be baked in here too or html/js/css
+          // land in storage as octet-stream and browsers won't parse them.
+          const blob = new Blob([raw], { type: mime })
           const { error: uploadError } = await supabase.storage
             .from('scorm-packages')
             .upload(`${packageId}/${entry.name}`, blob, {
               upsert: true,
-              contentType: guessContentType(entry.name),
+              contentType: mime,
             })
           if (uploadError) throw uploadError
           uploaded += 1
