@@ -1,11 +1,32 @@
 import { supabase } from './supabase'
-import type { SocialComment, SocialLike, SocialPost, SocialPostMedia, SocialPostType, SocialReport, SocialScope } from '../types/database'
+import type {
+  SocialComment,
+  SocialLike,
+  SocialPollOption,
+  SocialPollVote,
+  SocialPost,
+  SocialPostMedia,
+  SocialPostType,
+  SocialReport,
+  SocialScope,
+} from '../types/database'
+
+export interface PollOptionResult extends SocialPollOption {
+  voteCount: number
+}
+
+export interface PollResult {
+  options: PollOptionResult[]
+  totalVotes: number
+  myVoteOptionId: string | null
+}
 
 export interface FeedPost extends SocialPost {
   media: SocialPostMedia[]
   likeCount: number
   commentCount: number
   likedByMe: boolean
+  poll: PollResult | null
 }
 
 function groupByPostId<T extends { post_id: string }>(rows: T[]): Record<string, T[]> {
@@ -19,24 +40,49 @@ function groupByPostId<T extends { post_id: string }>(rows: T[]): Record<string,
 async function enrichPosts(posts: SocialPost[], viewerId: string): Promise<FeedPost[]> {
   if (posts.length === 0) return []
   const ids = posts.map((p) => p.id)
+  const pollIds = posts.filter((p) => p.post_type === 'enquete').map((p) => p.id)
 
-  const [{ data: media }, { data: likes }, { data: comments }] = await Promise.all([
+  const [{ data: media }, { data: likes }, { data: comments }, pollOptionsRes, pollVotesRes] = await Promise.all([
     supabase.from('social_post_media').select('*').in('post_id', ids).order('order_index'),
     supabase.from('social_likes').select('*').in('post_id', ids),
     supabase.from('social_comments').select('id, post_id').in('post_id', ids),
+    pollIds.length
+      ? supabase.from('social_poll_options').select('*').in('post_id', pollIds).order('order_index')
+      : Promise.resolve({ data: [] as SocialPollOption[] }),
+    pollIds.length
+      ? supabase.from('social_poll_votes').select('*').in('post_id', pollIds)
+      : Promise.resolve({ data: [] as SocialPollVote[] }),
   ])
 
   const mediaByPost = groupByPostId((media as SocialPostMedia[]) ?? [])
   const likesByPost = groupByPostId((likes as SocialLike[]) ?? [])
   const commentsByPost = groupByPostId((comments as { post_id: string }[]) ?? [])
+  const optionsByPost = groupByPostId((pollOptionsRes.data as SocialPollOption[]) ?? [])
+  const votesByPost = groupByPostId((pollVotesRes.data as SocialPollVote[]) ?? [])
 
-  return posts.map((p) => ({
-    ...p,
-    media: mediaByPost[p.id] ?? [],
-    likeCount: (likesByPost[p.id] ?? []).length,
-    likedByMe: (likesByPost[p.id] ?? []).some((l) => l.user_id === viewerId),
-    commentCount: (commentsByPost[p.id] ?? []).length,
-  }))
+  return posts.map((p) => {
+    const votes = votesByPost[p.id] ?? []
+    const poll: PollResult | null =
+      p.post_type === 'enquete'
+        ? {
+            options: (optionsByPost[p.id] ?? []).map((opt) => ({
+              ...opt,
+              voteCount: votes.filter((v) => v.option_id === opt.id).length,
+            })),
+            totalVotes: votes.length,
+            myVoteOptionId: votes.find((v) => v.user_id === viewerId)?.option_id ?? null,
+          }
+        : null
+
+    return {
+      ...p,
+      media: mediaByPost[p.id] ?? [],
+      likeCount: (likesByPost[p.id] ?? []).length,
+      likedByMe: (likesByPost[p.id] ?? []).some((l) => l.user_id === viewerId),
+      commentCount: (commentsByPost[p.id] ?? []).length,
+      poll,
+    }
+  })
 }
 
 export async function getFeed({
@@ -95,6 +141,43 @@ export async function createPost(input: {
     const { error: mediaError } = await supabase.from('social_post_media').insert(media)
     if (mediaError) throw mediaError
   }
+}
+
+export async function createPollPost(input: {
+  authorId: string
+  authorName: string
+  authorProgramId: string | null
+  scope: SocialScope
+  programId: string | null
+  question: string
+  options: string[]
+}): Promise<void> {
+  const { data: post, error } = await supabase
+    .from('social_posts')
+    .insert({
+      author_id: input.authorId,
+      author_name: input.authorName,
+      author_program_id: input.authorProgramId,
+      scope: input.scope,
+      program_id: input.scope === 'curso' ? input.programId : null,
+      post_type: 'enquete' as SocialPostType,
+      body: input.question,
+    })
+    .select('*')
+    .single()
+  if (error) throw error
+
+  const options = input.options.map((label, idx) => ({ post_id: post.id, label, order_index: idx }))
+  const { error: optionsError } = await supabase.from('social_poll_options').insert(options)
+  if (optionsError) throw optionsError
+}
+
+export async function voteInPoll(postId: string, optionId: string, userId: string) {
+  await supabase.from('social_poll_votes').insert({ post_id: postId, option_id: optionId, user_id: userId })
+}
+
+export async function closePoll(postId: string) {
+  await supabase.rpc('close_poll', { p_post_id: postId })
 }
 
 export async function toggleLike(postId: string, userId: string, currentlyLiked: boolean) {

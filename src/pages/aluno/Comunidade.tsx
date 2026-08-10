@@ -4,6 +4,8 @@ import { Icon } from '../../components/Icon'
 import { useAuth } from '../../context/AuthContext'
 import {
   addComment,
+  closePoll,
+  createPollPost,
   createPost,
   deleteComment,
   deletePost,
@@ -11,6 +13,7 @@ import {
   getFeed,
   reportPost,
   toggleLike,
+  voteInPoll,
   type FeedPost,
 } from '../../lib/social'
 import { supabase } from '../../lib/supabase'
@@ -125,6 +128,8 @@ export function Comunidade() {
   )
 }
 
+type ComposerMode = 'post' | 'enquete'
+
 function Composer({
   userId,
   userName,
@@ -138,9 +143,12 @@ function Composer({
   defaultScope: SocialScope
   onPosted: () => void
 }) {
+  const [mode, setMode] = useState<ComposerMode>('post')
   const [scope, setScope] = useState<SocialScope>(defaultScope)
   const [body, setBody] = useState('')
   const [images, setImages] = useState<File[]>([])
+  const [question, setQuestion] = useState('')
+  const [options, setOptions] = useState(['', ''])
   const [posting, setPosting] = useState(false)
   const [error, setError] = useState('')
 
@@ -149,68 +157,150 @@ function Composer({
   const previews = useMemo(() => images.map((f) => URL.createObjectURL(f)), [images])
   useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews])
 
+  const validOptions = options.map((o) => o.trim()).filter(Boolean)
+  const canSubmit =
+    mode === 'post' ? !!body.trim() || images.length > 0 : !!question.trim() && validOptions.length >= 2
+
+  function resetAll() {
+    setBody('')
+    setImages([])
+    setQuestion('')
+    setOptions(['', ''])
+  }
+
   async function submit() {
-    if (!body.trim() && images.length === 0) return
+    if (!canSubmit) return
     setPosting(true)
     setError('')
     try {
-      await createPost({
-        authorId: userId,
-        authorName: userName,
-        authorProgramId: myProgramId,
-        scope,
-        programId: myProgramId,
-        body: body.trim(),
-        images,
-      })
-      setBody('')
-      setImages([])
+      if (mode === 'post') {
+        await createPost({
+          authorId: userId,
+          authorName: userName,
+          authorProgramId: myProgramId,
+          scope,
+          programId: myProgramId,
+          body: body.trim(),
+          images,
+        })
+      } else {
+        await createPollPost({
+          authorId: userId,
+          authorName: userName,
+          authorProgramId: myProgramId,
+          scope,
+          programId: myProgramId,
+          question: question.trim(),
+          options: validOptions,
+        })
+      }
+      resetAll()
       onPosted()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível publicar o post.')
+      setError(err instanceof Error ? err.message : 'Não foi possível publicar.')
     }
     setPosting(false)
   }
 
   return (
     <div className="card mt-4 p-4">
-      <textarea
-        className="w-full resize-none rounded-xl border border-navy-light px-3 py-2.5 text-sm outline-none focus:border-navy"
-        rows={3}
-        placeholder="O que está rolando no seu curso?"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-      />
+      <div className="mb-3 flex gap-1.5">
+        <button
+          onClick={() => setMode('post')}
+          className={`rounded-full px-3 py-1 text-xs font-semibold ${mode === 'post' ? 'bg-navy text-white' : 'bg-bg text-ink-soft'}`}
+        >
+          Post
+        </button>
+        <button
+          onClick={() => setMode('enquete')}
+          className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
+            mode === 'enquete' ? 'bg-navy text-white' : 'bg-bg text-ink-soft'
+          }`}
+        >
+          <Icon name="target" size={12} /> Enquete
+        </button>
+      </div>
 
-      {previews.length > 0 && (
-        <div className="mt-2 grid grid-cols-4 gap-2">
-          {previews.map((src, i) => (
-            <div key={src} className="relative aspect-square overflow-hidden rounded-lg border border-navy-light">
-              <img src={src} alt="" className="h-full w-full object-cover" />
-              <button
-                onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
-                className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white"
-              >
-                <Icon name="x" size={11} />
-              </button>
+      {mode === 'post' && (
+        <>
+          <textarea
+            className="w-full resize-none rounded-xl border border-navy-light px-3 py-2.5 text-sm outline-none focus:border-navy"
+            rows={3}
+            placeholder="O que está rolando no seu curso?"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+          />
+
+          {previews.length > 0 && (
+            <div className="mt-2 grid grid-cols-4 gap-2">
+              {previews.map((src, i) => (
+                <div key={src} className="relative aspect-square overflow-hidden rounded-lg border border-navy-light">
+                  <img src={src} alt="" className="h-full w-full object-cover" />
+                  <button
+                    onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
+                    className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white"
+                  >
+                    <Icon name="x" size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {mode === 'enquete' && (
+        <div className="space-y-2">
+          <input
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="Pergunta da enquete"
+            className="w-full rounded-xl border border-navy-light px-3 py-2.5 text-sm outline-none focus:border-navy"
+          />
+          {options.map((opt, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                value={opt}
+                onChange={(e) => setOptions((prev) => prev.map((o, idx) => (idx === i ? e.target.value : o)))}
+                placeholder={`Opção ${i + 1}`}
+                className="flex-1 rounded-xl border border-navy-light px-3 py-2 text-sm outline-none focus:border-navy"
+              />
+              {options.length > 2 && (
+                <button
+                  onClick={() => setOptions((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="text-ink-faint hover:text-brand-red"
+                >
+                  <Icon name="x" size={14} />
+                </button>
+              )}
             </div>
           ))}
+          {options.length < 6 && (
+            <button
+              onClick={() => setOptions((prev) => [...prev, ''])}
+              className="text-xs font-semibold text-navy hover:underline"
+            >
+              + Adicionar opção
+            </button>
+          )}
         </div>
       )}
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-navy-light px-2.5 py-1.5 text-xs font-semibold text-navy hover:border-navy">
-            <Icon name="image" size={14} />
-            Imagens
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(e) => setImages((prev) => [...prev, ...Array.from(e.target.files ?? [])])}
-            />
-          </label>
+          {mode === 'post' && (
+            <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-navy-light px-2.5 py-1.5 text-xs font-semibold text-navy hover:border-navy">
+              <Icon name="image" size={14} />
+              Imagens
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => setImages((prev) => [...prev, ...Array.from(e.target.files ?? [])])}
+              />
+            </label>
+          )}
 
           <select
             value={scope}
@@ -225,7 +315,7 @@ function Composer({
 
         <button
           onClick={submit}
-          disabled={posting || (!body.trim() && images.length === 0)}
+          disabled={posting || !canSubmit}
           className="rounded-xl bg-brand-red px-4 py-2 text-sm font-bold text-white hover:bg-brand-red-dark disabled:opacity-50"
         >
           {posting ? 'Publicando…' : 'Publicar'}
@@ -251,6 +341,8 @@ function PostCard({
   const [likeCount, setLikeCount] = useState(post.likeCount)
   const [menuOpen, setMenuOpen] = useState(false)
   const [showComments, setShowComments] = useState(false)
+  const [poll, setPoll] = useState(post.poll)
+  const [voting, setVoting] = useState(false)
   const courseName = programs.find((p) => p.id === post.author_program_id)?.name
 
   async function handleLike() {
@@ -271,6 +363,25 @@ function PostCard({
     await reportPost(post.id, viewerId, reason)
     setMenuOpen(false)
     alert('Denúncia enviada — obrigado por ajudar a manter a comunidade saudável.')
+  }
+
+  async function handleVote(optionId: string) {
+    if (!poll || poll.myVoteOptionId || voting) return
+    setVoting(true)
+    setPoll({
+      ...poll,
+      totalVotes: poll.totalVotes + 1,
+      myVoteOptionId: optionId,
+      options: poll.options.map((o) => (o.id === optionId ? { ...o, voteCount: o.voteCount + 1 } : o)),
+    })
+    await voteInPoll(post.id, optionId, viewerId)
+    setVoting(false)
+  }
+
+  async function handleClosePoll() {
+    if (!confirm('Encerrar a votação desta enquete? Essa ação não pode ser desfeita.')) return
+    await closePoll(post.id)
+    onChanged()
   }
 
   return (
@@ -323,20 +434,54 @@ function PostCard({
       {post.body && <p className="mt-3 whitespace-pre-wrap text-sm text-ink">{post.body}</p>}
 
       {post.media.length === 1 && (
-        <div className="mt-3 overflow-hidden rounded-xl border border-navy-light">
-          <img src={post.media[0].url} alt="" className="max-h-[420px] w-full object-cover" />
+        <div className="mt-3 aspect-video overflow-hidden rounded-xl border border-navy-light bg-bg">
+          <img src={post.media[0].url} alt="" className="h-full w-full object-cover" />
         </div>
       )}
       {post.media.length > 1 && (
         <div className="mt-3 flex snap-x gap-2 overflow-x-auto rounded-xl">
           {post.media.map((m) => (
-            <img
-              key={m.id}
-              src={m.url}
-              alt=""
-              className="h-64 w-64 shrink-0 snap-start rounded-xl border border-navy-light object-cover"
-            />
+            <div key={m.id} className="h-64 w-64 shrink-0 snap-start overflow-hidden rounded-xl border border-navy-light bg-bg">
+              <img src={m.url} alt="" className="h-full w-full object-cover" />
+            </div>
           ))}
+        </div>
+      )}
+
+      {poll && (
+        <div className="mt-3 space-y-2">
+          {poll.options.map((opt) => {
+            const pct = poll.totalVotes ? Math.round((opt.voteCount / poll.totalVotes) * 100) : 0
+            const voted = poll.myVoteOptionId != null
+            const isMine = poll.myVoteOptionId === opt.id
+            return (
+              <button
+                key={opt.id}
+                onClick={() => handleVote(opt.id)}
+                disabled={voted || post.poll_closed || voting}
+                className={`relative w-full overflow-hidden rounded-lg border px-3 py-2 text-left text-sm ${
+                  isMine ? 'border-navy' : 'border-navy-light'
+                } ${voted || post.poll_closed ? 'cursor-default' : 'hover:border-navy'}`}
+              >
+                {(voted || post.poll_closed) && (
+                  <span className="absolute inset-y-0 left-0 bg-navy-light" style={{ width: `${pct}%` }} />
+                )}
+                <span className="relative flex items-center justify-between font-semibold text-ink">
+                  {opt.label}
+                  {(voted || post.poll_closed) && <span>{pct}%</span>}
+                </span>
+              </button>
+            )
+          })}
+          <p className="text-xs text-ink-faint">
+            {poll.totalVotes} {poll.totalVotes === 1 ? 'voto' : 'votos'}
+            {post.poll_closed && ' · votação encerrada'}
+            {!post.poll_closed && post.author_id === viewerId && (
+              <button onClick={handleClosePoll} className="ml-2 font-semibold text-navy hover:underline">
+                Encerrar votação
+              </button>
+            )}
+          </p>
         </div>
       )}
 

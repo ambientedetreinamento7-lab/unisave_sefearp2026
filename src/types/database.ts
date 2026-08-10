@@ -9,7 +9,7 @@ export type PdiItemStatus = 'nao_iniciado' | 'em_andamento' | 'concluido'
 export type PdiTier = 'abaixo' | 'proximo' | 'dentro' | 'acima'
 export type PdiJornadaBucket = 'pratica' | 'mentoria' | 'formacao'
 export type SocialScope = 'global' | 'curso'
-export type SocialPostType = 'texto' | 'imagem' | 'carrossel'
+export type SocialPostType = 'texto' | 'imagem' | 'carrossel' | 'enquete'
 
 export interface Profile {
   id: string
@@ -157,6 +157,22 @@ export interface SocialPost {
   post_type: SocialPostType
   body: string | null
   published: boolean
+  poll_closed: boolean
+  created_at: string
+}
+
+export interface SocialPollOption {
+  id: string
+  post_id: string
+  label: string
+  order_index: number
+}
+
+export interface SocialPollVote {
+  id: string
+  post_id: string
+  option_id: string
+  user_id: string
   created_at: string
 }
 
@@ -214,6 +230,8 @@ export interface Database {
       social_likes: { Row: SocialLike; Insert: Partial<SocialLike>; Update: Partial<SocialLike> }
       social_comments: { Row: SocialComment; Insert: Partial<SocialComment>; Update: Partial<SocialComment> }
       social_reports: { Row: SocialReport; Insert: Partial<SocialReport>; Update: Partial<SocialReport> }
+      social_poll_options: { Row: SocialPollOption; Insert: Partial<SocialPollOption>; Update: Partial<SocialPollOption> }
+      social_poll_votes: { Row: SocialPollVote; Insert: Partial<SocialPollVote>; Update: Partial<SocialPollVote> }
     }
   }
 }
