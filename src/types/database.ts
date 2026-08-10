@@ -10,6 +10,7 @@ export type PdiTier = 'abaixo' | 'proximo' | 'dentro' | 'acima'
 export type PdiJornadaBucket = 'pratica' | 'mentoria' | 'formacao'
 export type SocialScope = 'global' | 'curso'
 export type SocialPostType = 'texto' | 'imagem' | 'carrossel' | 'enquete' | 'video'
+export type SocialStoryMediaType = 'imagem' | 'video'
 
 export interface Profile {
   id: string
@@ -208,6 +209,26 @@ export interface SocialReport {
   created_at: string
 }
 
+export interface SocialStory {
+  id: string
+  author_id: string
+  author_name: string
+  author_program_id: string | null
+  media_type: SocialStoryMediaType
+  image_url: string | null
+  vimeo_id: string | null
+  created_at: string
+  expires_at: string
+}
+
+export interface SocialStoryView {
+  id: string
+  story_id: string
+  viewer_id: string
+  viewer_name: string
+  viewed_at: string
+}
+
 // Minimal Supabase Database generic — extend with generated types once the
 // project is linked (`supabase gen types typescript`).
 export interface Database {
@@ -233,6 +254,8 @@ export interface Database {
       social_reports: { Row: SocialReport; Insert: Partial<SocialReport>; Update: Partial<SocialReport> }
       social_poll_options: { Row: SocialPollOption; Insert: Partial<SocialPollOption>; Update: Partial<SocialPollOption> }
       social_poll_votes: { Row: SocialPollVote; Insert: Partial<SocialPollVote>; Update: Partial<SocialPollVote> }
+      social_stories: { Row: SocialStory; Insert: Partial<SocialStory>; Update: Partial<SocialStory> }
+      social_story_views: { Row: SocialStoryView; Insert: Partial<SocialStoryView>; Update: Partial<SocialStoryView> }
     }
   }
 }

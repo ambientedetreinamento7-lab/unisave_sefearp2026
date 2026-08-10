@@ -25,9 +25,11 @@ create type pdi_jornada_bucket as enum ('pratica', 'mentoria', 'formacao');
 -- Rede social interna (spec: rede social — Fase A). Escopo do post: mural
 -- global do evento ou mural exclusivo do curso do autor.
 create type social_scope as enum ('global', 'curso');
--- 'enquete' chegou na Fase B, 'video' na Fase C; stories ainda é fase
--- futura e reaproveita esta mesma tabela de posts.
+-- 'enquete' chegou na Fase B, 'video' na Fase C.
 create type social_post_type as enum ('texto', 'imagem', 'carrossel', 'enquete', 'video');
+-- Fase D — stories: foto ou vídeo (reaproveita o Vimeo), sempre em tabela
+-- própria já que expiram em 24h e não têm curtida/comentário, só visualização.
+create type social_story_media_type as enum ('imagem', 'video');
 
 -- ============================================================
 -- TABLES
@@ -274,6 +276,34 @@ create table social_likes (
   unique (post_id, user_id)
 );
 
+-- Fase D — stories. Expiram sozinhas em 24h via expires_at (sem job/cron:
+-- a query do feed já filtra `expires_at > now()`); autor + admin podem
+-- apagar antes disso se precisar.
+create table social_stories (
+  id uuid primary key default gen_random_uuid(),
+  author_id uuid not null references profiles(id) on update cascade on delete cascade,
+  author_name text not null,
+  author_program_id text references programs(id),
+  media_type social_story_media_type not null,
+  image_url text,
+  vimeo_id text,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null default (now() + interval '24 hours')
+);
+
+-- Só visualização, sem curtida/comentário (spec: stories). author_name é
+-- snapshotado aqui pelo mesmo motivo dos posts: a RLS de profiles não
+-- deixa ler o nome de outro aluno, e o autor do story precisa ver quem
+-- assistiu.
+create table social_story_views (
+  id uuid primary key default gen_random_uuid(),
+  story_id uuid not null references social_stories(id) on delete cascade,
+  viewer_id uuid not null references profiles(id) on update cascade on delete cascade,
+  viewer_name text not null,
+  viewed_at timestamptz not null default now(),
+  unique (story_id, viewer_id)
+);
+
 create table social_comments (
   id uuid primary key default gen_random_uuid(),
   post_id uuid not null references social_posts(id) on delete cascade,
@@ -321,6 +351,9 @@ create index on social_comments (post_id);
 create index on social_reports (post_id);
 create index on social_poll_options (post_id);
 create index on social_poll_votes (post_id);
+create index on social_stories (expires_at);
+create index on social_stories (author_id);
+create index on social_story_views (story_id);
 
 -- ============================================================
 -- AUTH RECONCILIATION
@@ -374,6 +407,8 @@ alter table social_comments enable row level security;
 alter table social_reports enable row level security;
 alter table social_poll_options enable row level security;
 alter table social_poll_votes enable row level security;
+alter table social_stories enable row level security;
+alter table social_story_views enable row level security;
 
 -- SECURITY DEFINER so this bypasses profiles' own RLS instead of re-entering
 -- it — without this, the SELECT below re-triggers policies that call
@@ -569,6 +604,24 @@ begin
   where id = p_post_id and author_id = auth.uid() and post_type = 'enquete';
 end;
 $$;
+
+-- Fase D — stories.
+create policy "read active or own stories" on social_stories for select
+  using (expires_at > now() or author_id = auth.uid() or current_role_is('moderador') or current_role_is('admin'));
+create policy "create own stories" on social_stories for insert
+  with check (author_id = auth.uid());
+create policy "delete own stories or moderate" on social_stories for delete
+  using (author_id = auth.uid() or current_role_is('admin'));
+
+-- Só o autor do story (pra saber quem assistiu) e o próprio espectador
+-- (sua própria visualização) enxergam uma linha de social_story_views.
+create policy "read views on own story or self" on social_story_views for select
+  using (
+    viewer_id = auth.uid()
+    or exists (select 1 from social_stories s where s.id = story_id and s.author_id = auth.uid())
+    or current_role_is('admin')
+  );
+create policy "record own view" on social_story_views for insert with check (viewer_id = auth.uid());
 
 grant execute on function public.close_poll(uuid) to authenticated;
 

@@ -5,21 +5,30 @@ import { useAuth } from '../../context/AuthContext'
 import {
   addComment,
   closePoll,
+  createImageStory,
   createPollPost,
   createPost,
   createVideoPost,
+  createVideoStory,
   deleteComment,
   deletePost,
+  deleteStory,
+  getActiveStoryGroups,
   getComments,
   getFeed,
+  getStoryViewers,
+  recordStoryView,
   reportPost,
   toggleLike,
   voteInPoll,
   type FeedPost,
+  type StoryGroup,
 } from '../../lib/social'
 import { supabase } from '../../lib/supabase'
 import { MAX_VIDEO_DURATION_SECONDS, readVideoDuration, uploadVideoToVimeo } from '../../lib/vimeo'
-import type { Program, SocialComment, SocialScope } from '../../types/database'
+import type { Program, SocialComment, SocialScope, SocialStoryView } from '../../types/database'
+
+const MAX_STORY_VIDEO_SECONDS = 50
 
 const AVATAR_COLORS = ['#2f6f5e', '#a8842a', '#b5541f', '#1a3b6e', '#7c3aed', '#0891b2']
 
@@ -51,6 +60,7 @@ export function Comunidade() {
   const [tab, setTab] = useState<SocialScope>('global')
   const [posts, setPosts] = useState<FeedPost[]>([])
   const [loading, setLoading] = useState(true)
+  const [storyGroups, setStoryGroups] = useState<StoryGroup[]>([])
 
   const myProgram = programs.find((p) => p.id === profile?.program_id) ?? null
 
@@ -69,10 +79,20 @@ export function Comunidade() {
     setLoading(false)
   }
 
+  async function reloadStories() {
+    if (!profile) return
+    setStoryGroups(await getActiveStoryGroups(profile.id))
+  }
+
   useEffect(() => {
     reload()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, tab])
+
+  useEffect(() => {
+    reloadStories()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile])
 
   if (!profile) return null
 
@@ -82,6 +102,15 @@ export function Comunidade() {
       <main className="mx-auto max-w-2xl px-4 py-8">
         <h1 className="text-2xl font-extrabold text-ink">Comunidade</h1>
         <p className="mt-1 text-ink-soft">Compartilhe o andamento do seu curso com os colegas.</p>
+
+        <StoriesRow
+          userId={profile.id}
+          userName={profile.name}
+          myProgramId={profile.program_id}
+          accessToken={session?.access_token ?? ''}
+          groups={storyGroups}
+          onChanged={reloadStories}
+        />
 
         <div className="mt-6 flex gap-2 rounded-full bg-surface p-1 shadow-sm">
           <button
@@ -660,6 +689,347 @@ function Comments({ postId, viewerId, viewerName }: { postId: string; viewerId: 
         <button onClick={submit} className="rounded-full bg-navy px-4 py-1.5 text-xs font-semibold text-white">
           Enviar
         </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------- Fase D: stories ----------------
+
+function StoriesRow({
+  userId,
+  userName,
+  myProgramId,
+  accessToken,
+  groups,
+  onChanged,
+}: {
+  userId: string
+  userName: string
+  myProgramId: string | null
+  accessToken: string
+  groups: StoryGroup[]
+  onChanged: () => void
+}) {
+  const [creating, setCreating] = useState(false)
+  const [viewingGroup, setViewingGroup] = useState<StoryGroup | null>(null)
+  const myGroup = groups.find((g) => g.authorId === userId)
+  const otherGroups = groups.filter((g) => g.authorId !== userId)
+
+  return (
+    <div className="mt-6 flex gap-3 overflow-x-auto pb-1">
+      <button onClick={() => setCreating(true)} className="flex shrink-0 flex-col items-center gap-1.5">
+        <span className="relative flex h-14 w-14 items-center justify-center rounded-full border-2 border-dashed border-navy-light text-navy">
+          <Icon name="video" size={18} />
+          <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-brand-red text-white">
+            <Icon name="x" size={10} className="rotate-45" />
+          </span>
+        </span>
+        <span className="max-w-14 truncate text-[11px] font-medium text-ink-soft">Seu story</span>
+      </button>
+
+      {myGroup && (
+        <button onClick={() => setViewingGroup(myGroup)} className="flex shrink-0 flex-col items-center gap-1.5">
+          <span
+            className="flex h-14 w-14 items-center justify-center rounded-full p-0.5"
+            style={{ background: myGroup.allSeen ? '#d3ccbc' : 'linear-gradient(135deg,#ed1c24,#a8842a)' }}
+          >
+            <span
+              className="flex h-full w-full items-center justify-center rounded-full text-sm font-bold text-white"
+              style={{ background: colorForName(myGroup.authorName) }}
+            >
+              {initials(myGroup.authorName)}
+            </span>
+          </span>
+          <span className="max-w-14 truncate text-[11px] font-medium text-ink-soft">Você</span>
+        </button>
+      )}
+
+      {otherGroups.map((g) => (
+        <button key={g.authorId} onClick={() => setViewingGroup(g)} className="flex shrink-0 flex-col items-center gap-1.5">
+          <span
+            className="flex h-14 w-14 items-center justify-center rounded-full p-0.5"
+            style={{ background: g.allSeen ? '#d3ccbc' : 'linear-gradient(135deg,#ed1c24,#a8842a)' }}
+          >
+            <span
+              className="flex h-full w-full items-center justify-center rounded-full text-sm font-bold text-white"
+              style={{ background: colorForName(g.authorName) }}
+            >
+              {initials(g.authorName)}
+            </span>
+          </span>
+          <span className="max-w-14 truncate text-[11px] font-medium text-ink-soft">{g.authorName.split(' ')[0]}</span>
+        </button>
+      ))}
+
+      {creating && (
+        <CreateStoryModal
+          userId={userId}
+          userName={userName}
+          myProgramId={myProgramId}
+          accessToken={accessToken}
+          onClose={() => setCreating(false)}
+          onCreated={() => {
+            setCreating(false)
+            onChanged()
+          }}
+        />
+      )}
+
+      {viewingGroup && (
+        <StoryViewerModal
+          group={viewingGroup}
+          viewerId={userId}
+          viewerName={userName}
+          onClose={() => setViewingGroup(null)}
+          onChanged={onChanged}
+        />
+      )}
+    </div>
+  )
+}
+
+function CreateStoryModal({
+  userId,
+  userName,
+  myProgramId,
+  accessToken,
+  onClose,
+  onCreated,
+}: {
+  userId: string
+  userName: string
+  myProgramId: string | null
+  accessToken: string
+  onClose: () => void
+  onCreated: () => void
+}) {
+  const [file, setFile] = useState<File | null>(null)
+  const [isVideo, setIsVideo] = useState(false)
+  const [uploadPct, setUploadPct] = useState<number | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file])
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
+
+  async function handleSelect(f: File | undefined) {
+    if (!f) return
+    setError('')
+    const video = f.type.startsWith('video/')
+    if (video) {
+      try {
+        const duration = await readVideoDuration(f)
+        if (duration > MAX_STORY_VIDEO_SECONDS) {
+          setError(`Vídeo muito longo — máximo de ${MAX_STORY_VIDEO_SECONDS} segundos.`)
+          return
+        }
+      } catch {
+        setError('Não foi possível ler esse vídeo.')
+        return
+      }
+    }
+    setIsVideo(video)
+    setFile(f)
+  }
+
+  async function submit() {
+    if (!file) return
+    setSaving(true)
+    setError('')
+    try {
+      if (isVideo) {
+        setUploadPct(0)
+        const { vimeoId } = await uploadVideoToVimeo(file, accessToken, setUploadPct)
+        await createVideoStory({ authorId: userId, authorName: userName, authorProgramId: myProgramId, vimeoId })
+      } else {
+        await createImageStory({ authorId: userId, authorName: userName, authorProgramId: myProgramId, image: file })
+      }
+      onCreated()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível publicar o story.')
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="card w-full max-w-sm p-5">
+        <h3 className="text-lg font-bold text-ink">Novo story</h3>
+        <p className="mt-1 text-xs text-ink-soft">Foto ou vídeo de até {MAX_STORY_VIDEO_SECONDS}s — some em 24h.</p>
+
+        {preview ? (
+          <div className="relative mt-3 aspect-[9/16] max-h-80 overflow-hidden rounded-xl border border-navy-light bg-black">
+            {isVideo ? (
+              <video src={preview} className="h-full w-full object-cover" controls />
+            ) : (
+              <img src={preview} alt="" className="h-full w-full object-cover" />
+            )}
+            {!saving && (
+              <button
+                onClick={() => setFile(null)}
+                className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white"
+              >
+                <Icon name="x" size={14} />
+              </button>
+            )}
+          </div>
+        ) : (
+          <label className="mt-3 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-navy-light py-10 text-sm font-semibold text-navy hover:border-navy">
+            <Icon name="image" size={18} />
+            Escolher foto ou vídeo
+            <input
+              type="file"
+              accept="image/*,video/*"
+              className="hidden"
+              onChange={(e) => handleSelect(e.target.files?.[0])}
+            />
+          </label>
+        )}
+
+        {uploadPct != null && (
+          <div className="mt-2">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-navy-light">
+              <div className="h-full bg-brand-red transition-all" style={{ width: `${uploadPct}%` }} />
+            </div>
+            <p className="mt-1 text-xs text-ink-soft">Enviando vídeo para o Vimeo… {uploadPct}%</p>
+          </div>
+        )}
+        {error && <p className="mt-2 text-xs text-brand-red">{error}</p>}
+
+        <div className="mt-4 flex gap-2">
+          <button onClick={onClose} className="flex-1 rounded-xl border border-navy-light py-2.5 font-semibold text-ink-soft">
+            Cancelar
+          </button>
+          <button
+            onClick={submit}
+            disabled={!file || saving}
+            className="flex-1 rounded-xl bg-brand-red py-2.5 font-bold text-white disabled:opacity-50"
+          >
+            {saving ? 'Publicando…' : 'Publicar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const STORY_DURATION_MS = 6000
+
+function StoryViewerModal({
+  group,
+  viewerId,
+  viewerName,
+  onClose,
+  onChanged,
+}: {
+  group: StoryGroup
+  viewerId: string
+  viewerName: string
+  onClose: () => void
+  onChanged: () => void
+}) {
+  const [index, setIndex] = useState(0)
+  const [viewers, setViewers] = useState<SocialStoryView[] | null>(null)
+  const story = group.stories[index]
+  const isMine = group.authorId === viewerId
+
+  useEffect(() => {
+    if (!story) return
+    recordStoryView(story.id, viewerId, viewerName)
+  }, [story, viewerId, viewerName])
+
+  useEffect(() => {
+    setViewers(null)
+    if (!story) return
+    const timer = setTimeout(() => {
+      if (index < group.stories.length - 1) setIndex((i) => i + 1)
+      else onClose()
+    }, STORY_DURATION_MS)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [story])
+
+  if (!story) return null
+
+  async function handleDelete() {
+    if (!confirm('Excluir este story?')) return
+    await deleteStory(story.id)
+    onChanged()
+    onClose()
+  }
+
+  async function loadViewers() {
+    setViewers(await getStoryViewers(story.id))
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black p-4">
+      <div className="relative flex h-full max-h-[720px] w-full max-w-sm flex-col overflow-hidden rounded-2xl bg-black">
+        <div className="absolute inset-x-2 top-2 z-10 flex gap-1">
+          {group.stories.map((s, i) => (
+            <div key={s.id} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
+              {i <= index && <div className="h-full w-full bg-white" />}
+            </div>
+          ))}
+        </div>
+
+        <div className="absolute inset-x-3 top-6 z-10 flex items-center gap-2">
+          <span
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+            style={{ background: colorForName(group.authorName) }}
+          >
+            {initials(group.authorName)}
+          </span>
+          <span className="text-sm font-semibold text-white drop-shadow">{group.authorName}</span>
+          <button onClick={onClose} className="ml-auto flex h-8 w-8 items-center justify-center rounded-full bg-black/30 text-white">
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+
+        <div className="relative flex-1">
+          {story.media_type === 'video' && story.vimeo_id ? (
+            <iframe
+              key={story.id}
+              src={`https://player.vimeo.com/video/${story.vimeo_id}?autoplay=1&background=0`}
+              className="h-full w-full"
+              allow="autoplay; fullscreen"
+              title="Story"
+            />
+          ) : (
+            <img src={story.image_url ?? ''} alt="" className="h-full w-full object-cover" />
+          )}
+
+          <button
+            onClick={() => (index > 0 ? setIndex(index - 1) : onClose())}
+            className="absolute inset-y-0 left-0 w-1/3"
+            aria-label="Anterior"
+          />
+          <button
+            onClick={() => (index < group.stories.length - 1 ? setIndex(index + 1) : onClose())}
+            className="absolute inset-y-0 right-0 w-1/3"
+            aria-label="Próximo"
+          />
+        </div>
+
+        {isMine && (
+          <div className="z-10 flex items-center justify-between bg-black/70 px-3 py-2">
+            {viewers == null ? (
+              <button onClick={loadViewers} className="text-xs font-semibold text-white/90 hover:underline">
+                👁 Ver quem assistiu
+              </button>
+            ) : (
+              <p className="max-h-16 overflow-y-auto text-xs text-white/90">
+                {viewers.length === 0
+                  ? 'Ninguém viu ainda.'
+                  : viewers.map((v) => v.viewer_name).join(', ')}
+              </p>
+            )}
+            <button onClick={handleDelete} className="ml-3 shrink-0 text-xs font-semibold text-brand-red hover:underline">
+              Excluir
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

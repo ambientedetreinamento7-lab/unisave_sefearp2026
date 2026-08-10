@@ -9,6 +9,8 @@ import type {
   SocialPostType,
   SocialReport,
   SocialScope,
+  SocialStory,
+  SocialStoryView,
 } from '../types/database'
 
 export interface PollOptionResult extends SocialPollOption {
@@ -254,4 +256,102 @@ export async function getReports(): Promise<ReportWithPost[]> {
   const { data: posts } = await supabase.from('social_posts').select('*').in('id', postIds)
   const postMap = new Map(((posts as SocialPost[]) ?? []).map((p) => [p.id, p]))
   return reportRows.map((r) => ({ ...r, post: postMap.get(r.post_id) ?? null }))
+}
+
+// ---- Fase D: stories (foto/vídeo, expiram em 24h) ----
+
+export interface StoryGroup {
+  authorId: string
+  authorName: string
+  authorProgramId: string | null
+  stories: SocialStory[]
+  allSeen: boolean
+}
+
+export async function getActiveStoryGroups(viewerId: string): Promise<StoryGroup[]> {
+  const { data: stories } = await supabase
+    .from('social_stories')
+    .select('*')
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: true })
+  const storyRows = (stories as SocialStory[]) ?? []
+  if (storyRows.length === 0) return []
+
+  const { data: views } = await supabase
+    .from('social_story_views')
+    .select('story_id')
+    .eq('viewer_id', viewerId)
+    .in('story_id', storyRows.map((s) => s.id))
+  const seenIds = new Set(((views as { story_id: string }[]) ?? []).map((v) => v.story_id))
+
+  const groups = new Map<string, StoryGroup>()
+  for (const s of storyRows) {
+    if (!groups.has(s.author_id)) {
+      groups.set(s.author_id, {
+        authorId: s.author_id,
+        authorName: s.author_name,
+        authorProgramId: s.author_program_id,
+        stories: [],
+        allSeen: true,
+      })
+    }
+    const group = groups.get(s.author_id)!
+    group.stories.push(s)
+    if (!seenIds.has(s.id)) group.allSeen = false
+  }
+  return Array.from(groups.values())
+}
+
+export async function createImageStory(input: {
+  authorId: string
+  authorName: string
+  authorProgramId: string | null
+  image: File
+}): Promise<void> {
+  const path = `${input.authorId}/story-${Date.now()}-${crypto.randomUUID()}-${input.image.name}`
+  const { error: uploadError } = await supabase.storage
+    .from('social')
+    .upload(path, input.image, { upsert: true, contentType: input.image.type || 'image/jpeg' })
+  if (uploadError) throw uploadError
+  const url = supabase.storage.from('social').getPublicUrl(path).data.publicUrl
+
+  const { error } = await supabase.from('social_stories').insert({
+    author_id: input.authorId,
+    author_name: input.authorName,
+    author_program_id: input.authorProgramId,
+    media_type: 'imagem',
+    image_url: url,
+  })
+  if (error) throw error
+}
+
+export async function createVideoStory(input: {
+  authorId: string
+  authorName: string
+  authorProgramId: string | null
+  vimeoId: string
+}): Promise<void> {
+  const { error } = await supabase.from('social_stories').insert({
+    author_id: input.authorId,
+    author_name: input.authorName,
+    author_program_id: input.authorProgramId,
+    media_type: 'video',
+    vimeo_id: input.vimeoId,
+  })
+  if (error) throw error
+}
+
+export async function recordStoryView(storyId: string, viewerId: string, viewerName: string) {
+  await supabase
+    .from('social_story_views')
+    .upsert({ story_id: storyId, viewer_id: viewerId, viewer_name: viewerName }, { onConflict: 'story_id,viewer_id' })
+}
+
+export async function getStoryViewers(storyId: string): Promise<SocialStoryView[]> {
+  const { data } = await supabase.from('social_story_views').select('*').eq('story_id', storyId).order('viewed_at')
+  return (data as SocialStoryView[]) ?? []
+}
+
+export async function deleteStory(storyId: string) {
+  await supabase.from('social_stories').delete().eq('id', storyId)
 }
