@@ -108,15 +108,12 @@ export default async function handler(req: VercelLikeRequest, res: VercelLikeRes
     return
   }
 
-  const data = (await vimeoRes.json()) as { upload: { upload_link: string }; uri: string; link?: string }
-  // Unlisted videos only play when the embed URL includes their unlisted
-  // hash (?h=...) — without it the player shows a generic error even with
-  // the domain and view/embed privacy all correctly set. Vimeo puts that
-  // hash as the last path segment of `link`, e.g.
-  // "https://vimeo.com/816967760/1a2b3c4d5e".
-  const hash = data.link?.split('/').pop() || null
-
+  const data = (await vimeoRes.json()) as { upload: { upload_link: string }; uri: string }
+  // The unlisted hash (needed later to embed the video — see
+  // api/vimeo-status.ts) isn't reliably populated on this initial create
+  // call, before the file itself has been uploaded — it has to be fetched
+  // afterwards once the video resource is fully settled.
   res.statusCode = 200
   res.setHeader('Content-Type', 'application/json')
-  res.end(JSON.stringify({ uploadLink: data.upload.upload_link, videoUri: data.uri, hash }))
+  res.end(JSON.stringify({ uploadLink: data.upload.upload_link, videoUri: data.uri }))
 }
