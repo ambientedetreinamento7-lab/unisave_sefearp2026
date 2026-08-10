@@ -26,6 +26,7 @@ export type IconName =
   | "eye-off"
   | "image"
   | "x"
+  | "video"
 
 const PATHS: Record<IconName, React.ReactNode> = {
   book: (
@@ -253,6 +254,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   x: (
     <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+  ),
+  video: (
+    <>
+      <rect x="2.5" y="6" width="13" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M15.5 10.5 21 7.5v9l-5.5-3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    </>
   ),
 }
 

@@ -7,6 +7,7 @@ import {
   closePoll,
   createPollPost,
   createPost,
+  createVideoPost,
   deleteComment,
   deletePost,
   getComments,
@@ -17,6 +18,7 @@ import {
   type FeedPost,
 } from '../../lib/social'
 import { supabase } from '../../lib/supabase'
+import { MAX_VIDEO_DURATION_SECONDS, readVideoDuration, uploadVideoToVimeo } from '../../lib/vimeo'
 import type { Program, SocialComment, SocialScope } from '../../types/database'
 
 const AVATAR_COLORS = ['#2f6f5e', '#a8842a', '#b5541f', '#1a3b6e', '#7c3aed', '#0891b2']
@@ -44,7 +46,7 @@ function relativeTime(iso: string) {
 }
 
 export function Comunidade() {
-  const { profile } = useAuth()
+  const { profile, session } = useAuth()
   const [programs, setPrograms] = useState<Program[]>([])
   const [tab, setTab] = useState<SocialScope>('global')
   const [posts, setPosts] = useState<FeedPost[]>([])
@@ -105,6 +107,7 @@ export function Comunidade() {
           userId={profile.id}
           userName={profile.name}
           myProgramId={profile.program_id}
+          accessToken={session?.access_token ?? ''}
           defaultScope={tab}
           onPosted={reload}
         />
@@ -128,18 +131,20 @@ export function Comunidade() {
   )
 }
 
-type ComposerMode = 'post' | 'enquete'
+type ComposerMode = 'post' | 'video' | 'enquete'
 
 function Composer({
   userId,
   userName,
   myProgramId,
+  accessToken,
   defaultScope,
   onPosted,
 }: {
   userId: string
   userName: string
   myProgramId: string | null
+  accessToken: string
   defaultScope: SocialScope
   onPosted: () => void
 }) {
@@ -147,6 +152,8 @@ function Composer({
   const [scope, setScope] = useState<SocialScope>(defaultScope)
   const [body, setBody] = useState('')
   const [images, setImages] = useState<File[]>([])
+  const [video, setVideo] = useState<File | null>(null)
+  const [uploadPct, setUploadPct] = useState<number | null>(null)
   const [question, setQuestion] = useState('')
   const [options, setOptions] = useState(['', ''])
   const [posting, setPosting] = useState(false)
@@ -156,16 +163,39 @@ function Composer({
 
   const previews = useMemo(() => images.map((f) => URL.createObjectURL(f)), [images])
   useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews])
+  const videoPreview = useMemo(() => (video ? URL.createObjectURL(video) : null), [video])
+  useEffect(() => () => { if (videoPreview) URL.revokeObjectURL(videoPreview) }, [videoPreview])
 
   const validOptions = options.map((o) => o.trim()).filter(Boolean)
   const canSubmit =
-    mode === 'post' ? !!body.trim() || images.length > 0 : !!question.trim() && validOptions.length >= 2
+    mode === 'post'
+      ? !!body.trim() || images.length > 0
+      : mode === 'video'
+        ? !!video
+        : !!question.trim() && validOptions.length >= 2
 
   function resetAll() {
     setBody('')
     setImages([])
+    setVideo(null)
+    setUploadPct(null)
     setQuestion('')
     setOptions(['', ''])
+  }
+
+  async function handleVideoSelect(file: File | undefined) {
+    if (!file) return
+    setError('')
+    try {
+      const duration = await readVideoDuration(file)
+      if (duration > MAX_VIDEO_DURATION_SECONDS) {
+        setError(`Vídeo muito longo — máximo de ${Math.round(MAX_VIDEO_DURATION_SECONDS / 60)} minutos.`)
+        return
+      }
+      setVideo(file)
+    } catch {
+      setError('Não foi possível ler esse vídeo.')
+    }
   }
 
   async function submit() {
@@ -182,6 +212,19 @@ function Composer({
           programId: myProgramId,
           body: body.trim(),
           images,
+        })
+      } else if (mode === 'video') {
+        if (!video) return
+        setUploadPct(0)
+        const { vimeoId } = await uploadVideoToVimeo(video, accessToken, setUploadPct)
+        await createVideoPost({
+          authorId: userId,
+          authorName: userName,
+          authorProgramId: myProgramId,
+          scope,
+          programId: myProgramId,
+          body: body.trim(),
+          vimeoId,
         })
       } else {
         await createPollPost({
@@ -212,6 +255,14 @@ function Composer({
           Post
         </button>
         <button
+          onClick={() => setMode('video')}
+          className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
+            mode === 'video' ? 'bg-navy text-white' : 'bg-bg text-ink-soft'
+          }`}
+        >
+          <Icon name="video" size={12} /> Vídeo
+        </button>
+        <button
           onClick={() => setMode('enquete')}
           className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
             mode === 'enquete' ? 'bg-navy text-white' : 'bg-bg text-ink-soft'
@@ -221,32 +272,67 @@ function Composer({
         </button>
       </div>
 
-      {mode === 'post' && (
-        <>
-          <textarea
-            className="w-full resize-none rounded-xl border border-navy-light px-3 py-2.5 text-sm outline-none focus:border-navy"
-            rows={3}
-            placeholder="O que está rolando no seu curso?"
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-          />
+      {(mode === 'post' || mode === 'video') && (
+        <textarea
+          className="w-full resize-none rounded-xl border border-navy-light px-3 py-2.5 text-sm outline-none focus:border-navy"
+          rows={3}
+          placeholder={mode === 'video' ? 'Conte um pouco sobre o vídeo (opcional)' : 'O que está rolando no seu curso?'}
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+        />
+      )}
 
-          {previews.length > 0 && (
-            <div className="mt-2 grid grid-cols-4 gap-2">
-              {previews.map((src, i) => (
-                <div key={src} className="relative aspect-square overflow-hidden rounded-lg border border-navy-light">
-                  <img src={src} alt="" className="h-full w-full object-cover" />
-                  <button
-                    onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
-                    className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white"
-                  >
-                    <Icon name="x" size={11} />
-                  </button>
-                </div>
-              ))}
+      {mode === 'post' && previews.length > 0 && (
+        <div className="mt-2 grid grid-cols-4 gap-2">
+          {previews.map((src, i) => (
+            <div key={src} className="relative aspect-square overflow-hidden rounded-lg border border-navy-light">
+              <img src={src} alt="" className="h-full w-full object-cover" />
+              <button
+                onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
+                className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white"
+              >
+                <Icon name="x" size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {mode === 'video' && (
+        <div className="mt-2">
+          {videoPreview ? (
+            <div className="relative overflow-hidden rounded-xl border border-navy-light">
+              <video src={videoPreview} className="max-h-64 w-full" controls />
+              {!posting && (
+                <button
+                  onClick={() => setVideo(null)}
+                  className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white"
+                >
+                  <Icon name="x" size={13} />
+                </button>
+              )}
+            </div>
+          ) : (
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-navy-light py-6 text-sm font-semibold text-navy hover:border-navy">
+              <Icon name="video" size={16} />
+              Escolher vídeo (máx. {Math.round(MAX_VIDEO_DURATION_SECONDS / 60)} min)
+              <input
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => handleVideoSelect(e.target.files?.[0])}
+              />
+            </label>
+          )}
+          {uploadPct != null && (
+            <div className="mt-2">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-navy-light">
+                <div className="h-full bg-brand-red transition-all" style={{ width: `${uploadPct}%` }} />
+              </div>
+              <p className="mt-1 text-xs text-ink-soft">Enviando vídeo para o Vimeo… {uploadPct}%</p>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {mode === 'enquete' && (
@@ -445,6 +531,18 @@ function PostCard({
               <img src={m.url} alt="" className="h-full w-full object-cover" />
             </div>
           ))}
+        </div>
+      )}
+
+      {post.post_type === 'video' && post.vimeo_id && (
+        <div className="mt-3 aspect-video overflow-hidden rounded-xl border border-navy-light bg-black">
+          <iframe
+            src={`https://player.vimeo.com/video/${post.vimeo_id}`}
+            className="h-full w-full"
+            allow="autoplay; fullscreen; picture-in-picture"
+            allowFullScreen
+            title={post.body ?? 'Vídeo'}
+          />
         </div>
       )}
 

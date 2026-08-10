@@ -9,7 +9,7 @@ export type PdiItemStatus = 'nao_iniciado' | 'em_andamento' | 'concluido'
 export type PdiTier = 'abaixo' | 'proximo' | 'dentro' | 'acima'
 export type PdiJornadaBucket = 'pratica' | 'mentoria' | 'formacao'
 export type SocialScope = 'global' | 'curso'
-export type SocialPostType = 'texto' | 'imagem' | 'carrossel' | 'enquete'
+export type SocialPostType = 'texto' | 'imagem' | 'carrossel' | 'enquete' | 'video'
 
 export interface Profile {
   id: string
@@ -158,6 +158,7 @@ export interface SocialPost {
   body: string | null
   published: boolean
   poll_closed: boolean
+  vimeo_id: string | null
   created_at: string
 }
 

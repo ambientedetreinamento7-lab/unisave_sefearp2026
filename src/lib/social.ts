@@ -143,6 +143,28 @@ export async function createPost(input: {
   }
 }
 
+export async function createVideoPost(input: {
+  authorId: string
+  authorName: string
+  authorProgramId: string | null
+  scope: SocialScope
+  programId: string | null
+  body: string
+  vimeoId: string
+}): Promise<void> {
+  const { error } = await supabase.from('social_posts').insert({
+    author_id: input.authorId,
+    author_name: input.authorName,
+    author_program_id: input.authorProgramId,
+    scope: input.scope,
+    program_id: input.scope === 'curso' ? input.programId : null,
+    post_type: 'video' as SocialPostType,
+    body: input.body || null,
+    vimeo_id: input.vimeoId,
+  })
+  if (error) throw error
+}
+
 export async function createPollPost(input: {
   authorId: string
   authorName: string

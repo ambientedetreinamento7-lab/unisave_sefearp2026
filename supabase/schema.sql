@@ -25,9 +25,9 @@ create type pdi_jornada_bucket as enum ('pratica', 'mentoria', 'formacao');
 -- Rede social interna (spec: rede social — Fase A). Escopo do post: mural
 -- global do evento ou mural exclusivo do curso do autor.
 create type social_scope as enum ('global', 'curso');
--- Fase A cobre texto/imagem/carrossel; vídeo (Vimeo) e enquete chegam nas
--- fases seguintes e reaproveitam esta mesma tabela de posts.
-create type social_post_type as enum ('texto', 'imagem', 'carrossel');
+-- 'enquete' chegou na Fase B, 'video' na Fase C; stories ainda é fase
+-- futura e reaproveita esta mesma tabela de posts.
+create type social_post_type as enum ('texto', 'imagem', 'carrossel', 'enquete', 'video');
 
 -- ============================================================
 -- TABLES
@@ -211,8 +211,8 @@ create table pdi_plan_items (
 );
 
 -- Rede social interna — Fase A (feed base: texto/imagem/carrossel, curtir,
--- comentar, duas abas, moderação). Vídeo (Vimeo), enquete e stories chegam
--- em fases seguintes.
+-- comentar, duas abas, moderação) + Fase B (enquete). Vídeo (Vimeo) e
+-- stories chegam em fases seguintes.
 create table social_posts (
   id uuid primary key default gen_random_uuid(),
   author_id uuid not null references profiles(id) on update cascade on delete cascade,
@@ -229,6 +229,13 @@ create table social_posts (
   body text,
   -- Moderação pós-publicação (spec: admin apaga ou despublica).
   published boolean not null default true,
+  -- Enquete de escolha única, sem prazo automático — só o autor encerra
+  -- (spec: proposta de enquete), via a função close_poll() abaixo.
+  poll_closed boolean not null default false,
+  -- ID numérico do vídeo no Vimeo (post_type='video'), ex.: "1234567890",
+  -- extraído do "uri" retornado por api/vimeo-upload.ts. Embutido via
+  -- player.vimeo.com/video/{vimeo_id} (spec: Fase C).
+  vimeo_id text,
   created_at timestamptz not null default now()
 );
 
@@ -239,6 +246,24 @@ create table social_post_media (
   post_id uuid not null references social_posts(id) on delete cascade,
   url text not null,
   order_index int not null default 0
+);
+
+-- Opções e votos de enquete (post_type='enquete'). Um voto por aluno por
+-- enquete, sem troca depois de votado (unique em social_poll_votes).
+create table social_poll_options (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references social_posts(id) on delete cascade,
+  label text not null,
+  order_index int not null default 0
+);
+
+create table social_poll_votes (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references social_posts(id) on delete cascade,
+  option_id uuid not null references social_poll_options(id) on delete cascade,
+  user_id uuid not null references profiles(id) on update cascade on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (post_id, user_id)
 );
 
 create table social_likes (
@@ -294,6 +319,8 @@ create index on social_post_media (post_id);
 create index on social_likes (post_id);
 create index on social_comments (post_id);
 create index on social_reports (post_id);
+create index on social_poll_options (post_id);
+create index on social_poll_votes (post_id);
 
 -- ============================================================
 -- AUTH RECONCILIATION
@@ -345,6 +372,8 @@ alter table social_post_media enable row level security;
 alter table social_likes enable row level security;
 alter table social_comments enable row level security;
 alter table social_reports enable row level security;
+alter table social_poll_options enable row level security;
+alter table social_poll_votes enable row level security;
 
 -- SECURITY DEFINER so this bypasses profiles' own RLS instead of re-entering
 -- it — without this, the SELECT below re-triggers policies that call
@@ -516,6 +545,32 @@ create policy "admin reads reports" on social_reports for select
   using (current_role_is('moderador') or current_role_is('admin'));
 create policy "admin manages reports" on social_reports for delete
   using (current_role_is('admin'));
+
+-- Fase B — enquetes.
+create policy "read poll options of visible posts" on social_poll_options for select
+  using (exists (
+    select 1 from social_posts p where p.id = post_id
+    and (p.published or p.author_id = auth.uid() or current_role_is('moderador') or current_role_is('admin'))
+  ));
+create policy "attach options to own posts" on social_poll_options for insert
+  with check (exists (select 1 from social_posts p where p.id = post_id and p.author_id = auth.uid()));
+
+create policy "poll votes readable by all" on social_poll_votes for select using (true);
+create policy "vote as self" on social_poll_votes for insert with check (user_id = auth.uid());
+
+-- SECURITY DEFINER so the author can flip poll_closed without an UPDATE
+-- policy on social_posts that would otherwise let them touch `published`
+-- too (undermining admin moderation). Only closes — never reopens, never
+-- touches any other column.
+create or replace function public.close_poll(p_post_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  update social_posts set poll_closed = true
+  where id = p_post_id and author_id = auth.uid() and post_type = 'enquete';
+end;
+$$;
+
+grant execute on function public.close_poll(uuid) to authenticated;
 
 -- ============================================================
 -- STORAGE — SCORM packages
