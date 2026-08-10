@@ -93,8 +93,11 @@ export default async function handler(req: VercelLikeRequest, res: VercelLikeRes
       upload: { approach: 'tus', size: String(size) },
       name: body.name || 'Post da Comunidade',
       // Unlisted: not searchable/discoverable on Vimeo, playable only via
-      // direct link/embed — see spec section "configuração recomendada".
-      privacy: { view: 'unlisted' },
+      // direct link/embed. embed: 'public' lets the player load on any
+      // domain (including ours) instead of depending on a per-account
+      // domain whitelist that isn't guaranteed to apply to new uploads —
+      // that mismatch was causing the player's generic error screen.
+      privacy: { view: 'unlisted', embed: 'public' },
     }),
   })
 
