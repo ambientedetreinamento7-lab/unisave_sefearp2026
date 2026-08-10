@@ -245,7 +245,7 @@ function Composer({
       } else if (mode === 'video') {
         if (!video) return
         setUploadPct(0)
-        const { vimeoId } = await uploadVideoToVimeo(video, accessToken, setUploadPct)
+        const { vimeoId, vimeoHash } = await uploadVideoToVimeo(video, accessToken, setUploadPct)
         await createVideoPost({
           authorId: userId,
           authorName: userName,
@@ -254,6 +254,7 @@ function Composer({
           programId: myProgramId,
           body: body.trim(),
           vimeoId,
+          vimeoHash,
         })
       } else {
         await createPollPost({
@@ -566,7 +567,7 @@ function PostCard({
       {post.post_type === 'video' && post.vimeo_id && (
         <div className="mt-3 aspect-video overflow-hidden rounded-xl border border-navy-light bg-black">
           <iframe
-            src={`https://player.vimeo.com/video/${post.vimeo_id}`}
+            src={`https://player.vimeo.com/video/${post.vimeo_id}${post.vimeo_hash ? `?h=${post.vimeo_hash}` : ''}`}
             className="h-full w-full"
             allow="autoplay; fullscreen; picture-in-picture"
             allowFullScreen
@@ -840,8 +841,8 @@ function CreateStoryModal({
     try {
       if (isVideo) {
         setUploadPct(0)
-        const { vimeoId } = await uploadVideoToVimeo(file, accessToken, setUploadPct)
-        await createVideoStory({ authorId: userId, authorName: userName, authorProgramId: myProgramId, vimeoId })
+        const { vimeoId, vimeoHash } = await uploadVideoToVimeo(file, accessToken, setUploadPct)
+        await createVideoStory({ authorId: userId, authorName: userName, authorProgramId: myProgramId, vimeoId, vimeoHash })
       } else {
         await createImageStory({ authorId: userId, authorName: userName, authorProgramId: myProgramId, image: file })
       }
@@ -991,7 +992,7 @@ function StoryViewerModal({
           {story.media_type === 'video' && story.vimeo_id ? (
             <iframe
               key={story.id}
-              src={`https://player.vimeo.com/video/${story.vimeo_id}?autoplay=1&background=0`}
+              src={`https://player.vimeo.com/video/${story.vimeo_id}?autoplay=1&background=0${story.vimeo_hash ? `&h=${story.vimeo_hash}` : ''}`}
               className="h-full w-full"
               allow="autoplay; fullscreen"
               title="Story"

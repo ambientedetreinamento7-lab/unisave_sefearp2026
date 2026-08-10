@@ -18,6 +18,7 @@ export function readVideoDuration(file: File): Promise<number> {
 
 export interface VimeoUploadResult {
   vimeoId: string
+  vimeoHash: string | null
 }
 
 /**
@@ -40,7 +41,11 @@ export async function uploadVideoToVimeo(
     const text = await linkRes.text()
     throw new Error(text || 'Não foi possível iniciar o upload do vídeo.')
   }
-  const { uploadLink, videoUri } = (await linkRes.json()) as { uploadLink: string; videoUri: string }
+  const { uploadLink, videoUri, hash } = (await linkRes.json()) as {
+    uploadLink: string
+    videoUri: string
+    hash: string | null
+  }
 
   await new Promise<void>((resolve, reject) => {
     const upload = new Upload(file, {
@@ -54,5 +59,5 @@ export async function uploadVideoToVimeo(
     upload.start()
   })
 
-  return { vimeoId: videoUri.split('/').pop() ?? '' }
+  return { vimeoId: videoUri.split('/').pop() ?? '', vimeoHash: hash }
 }

@@ -238,6 +238,9 @@ create table social_posts (
   -- extraído do "uri" retornado por api/vimeo-upload.ts. Embutido via
   -- player.vimeo.com/video/{vimeo_id} (spec: Fase C).
   vimeo_id text,
+  -- Hash de vídeo "unlisted" do Vimeo — sem ele o player recusa tocar
+  -- mesmo com domínio/privacidade de embed corretos (?h=... na URL).
+  vimeo_hash text,
   created_at timestamptz not null default now()
 );
 
@@ -287,6 +290,7 @@ create table social_stories (
   media_type social_story_media_type not null,
   image_url text,
   vimeo_id text,
+  vimeo_hash text,
   created_at timestamptz not null default now(),
   expires_at timestamptz not null default (now() + interval '24 hours')
 );
