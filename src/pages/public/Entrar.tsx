@@ -53,15 +53,20 @@ export function Entrar() {
               onClick={() => setMode('magic')}
               className={`flex-1 rounded-full py-2 ${mode === 'magic' ? 'bg-navy text-white' : 'text-navy'}`}
             >
-              Aluno
+              Link mágico
             </button>
             <button
               onClick={() => setMode('senha')}
               className={`flex-1 rounded-full py-2 ${mode === 'senha' ? 'bg-navy text-white' : 'text-navy'}`}
             >
-              Moderador/Admin
+              Senha
             </button>
           </div>
+          {mode === 'magic' && (
+            <p className="mb-3 text-xs text-ink-soft">
+              Primeira vez ou esqueceu a senha? Use o link mágico — você define uma senha assim que entrar.
+            </p>
+          )}
 
           <input
             className="mb-3 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"

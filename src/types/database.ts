@@ -23,6 +23,7 @@ export interface Profile {
   selected_track_id: string | null
   role: UserRole
   created_at: string
+  password_set: boolean
 }
 
 export interface Program {

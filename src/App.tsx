@@ -16,6 +16,7 @@ import { Conquistas } from './pages/aluno/Conquistas'
 import { CoursePlayer } from './pages/aluno/CoursePlayer'
 import { CourseQuiz } from './pages/aluno/CourseQuiz'
 import { Dashboard } from './pages/aluno/Dashboard'
+import { DefinirSenha } from './pages/aluno/DefinirSenha'
 import { MeuPdi } from './pages/aluno/MeuPdi'
 import { Moderador } from './pages/moderador/Moderador'
 import { Entrar } from './pages/public/Entrar'
@@ -36,6 +37,14 @@ function App() {
           element={
             <RouteGuard>
               <Dashboard />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/definir-senha"
+          element={
+            <RouteGuard>
+              <DefinirSenha />
             </RouteGuard>
           }
         />
