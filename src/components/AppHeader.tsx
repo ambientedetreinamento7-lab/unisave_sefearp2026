@@ -14,6 +14,7 @@ const NAV_LINKS = [
   { to: '/comunidade', label: 'Comunidade' },
   { to: '/conquistas', label: 'Conquistas' },
   { to: '/certificados', label: 'Certificados' },
+  { to: '/ranking', label: 'Ranking' },
 ]
 
 function daysLeft(createdAt: string) {

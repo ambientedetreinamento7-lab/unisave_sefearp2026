@@ -15,7 +15,7 @@ export function AdminGamificacao() {
   async function reload() {
     const [{ data: r }, { data: l }] = await Promise.all([
       supabase.from('gamification_rules').select('*').order('key'),
-      supabase.from('gamification_levels').select('*').order('order_index'),
+      supabase.from('gamification_levels').select('*').order('min_points'),
     ])
     setRules((r as GamificationRule[]) ?? [])
     setLevels((l as GamificationLevel[]) ?? [])
@@ -80,7 +80,9 @@ export function AdminGamificacao() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-bold text-ink">Níveis</h2>
-            <p className="mt-1 text-sm text-ink-soft">A badge/nível do aluno é definido pelo maior nível cujos pontos mínimos ele já atingiu.</p>
+            <p className="mt-1 text-sm text-ink-soft">
+              Organizados automaticamente pelos pontos mínimos — o nível do aluno é o de maior pontuação mínima que ele já atingiu.
+            </p>
           </div>
           <button
             onClick={() => setLevelForm('new')}
@@ -123,7 +125,6 @@ export function AdminGamificacao() {
       {levelForm && (
         <LevelFormModal
           level={levelForm === 'new' ? null : levelForm}
-          nextOrderIndex={levels.length}
           onClose={() => setLevelForm(null)}
           onSaved={() => { setLevelForm(null); reload() }}
         />
@@ -136,6 +137,7 @@ function RuleFormModal({ rule, onClose, onSaved }: { rule: GamificationRule; onC
   const [label, setLabel] = useState(rule.label)
   const [points, setPoints] = useState(rule.points)
   const [recurrenceDays, setRecurrenceDays] = useState(rule.recurrence_days ?? '')
+  const [streakDays, setStreakDays] = useState(rule.streak_days ?? '')
   const [saving, setSaving] = useState(false)
 
   async function submit() {
@@ -146,6 +148,7 @@ function RuleFormModal({ rule, onClose, onSaved }: { rule: GamificationRule; onC
         label: label.trim(),
         points,
         recurrence_days: recurrenceDays === '' ? null : Number(recurrenceDays),
+        streak_days: streakDays === '' ? null : Number(streakDays),
       })
       .eq('key', rule.key)
     setSaving(false)
@@ -185,6 +188,19 @@ function RuleFormModal({ rule, onClose, onSaved }: { rule: GamificationRule; onC
           </>
         )}
 
+        {rule.key === 'streak_bonus' && (
+          <>
+            <label className="mt-3 block text-xs font-semibold text-ink-soft">Dias seguidos pra repetir o bônus</label>
+            <input
+              type="number"
+              min={2}
+              className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5"
+              value={streakDays}
+              onChange={(e) => setStreakDays(e.target.value === '' ? '' : Number(e.target.value))}
+            />
+          </>
+        )}
+
         <div className="mt-5 flex gap-2">
           <button onClick={onClose} className="flex-1 rounded-xl border border-navy-light py-2.5 font-semibold text-ink-soft">
             Cancelar
@@ -204,24 +220,21 @@ function RuleFormModal({ rule, onClose, onSaved }: { rule: GamificationRule; onC
 
 function LevelFormModal({
   level,
-  nextOrderIndex,
   onClose,
   onSaved,
 }: {
   level: GamificationLevel | null
-  nextOrderIndex: number
   onClose: () => void
   onSaved: () => void
 }) {
   const [name, setName] = useState(level?.name ?? '')
   const [minPoints, setMinPoints] = useState(level?.min_points ?? 0)
   const [badgeIcon, setBadgeIcon] = useState(level?.badge_icon ?? '🏅')
-  const [orderIndex, setOrderIndex] = useState(level?.order_index ?? nextOrderIndex)
   const [saving, setSaving] = useState(false)
 
   async function submit() {
     setSaving(true)
-    const payload = { name: name.trim(), min_points: minPoints, badge_icon: badgeIcon.trim(), order_index: orderIndex }
+    const payload = { name: name.trim(), min_points: minPoints, badge_icon: badgeIcon.trim() }
     if (level) {
       await supabase.from('gamification_levels').update(payload).eq('id', level.id)
     } else {
@@ -256,14 +269,6 @@ function LevelFormModal({
           className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5"
           value={badgeIcon}
           onChange={(e) => setBadgeIcon(e.target.value)}
-        />
-
-        <label className="mt-3 block text-xs font-semibold text-ink-soft">Ordem</label>
-        <input
-          type="number"
-          className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5"
-          value={orderIndex}
-          onChange={(e) => setOrderIndex(Number(e.target.value))}
         />
 
         <div className="mt-5 flex gap-2">

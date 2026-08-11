@@ -22,6 +22,7 @@ import { DefinirSenha } from './pages/aluno/DefinirSenha'
 import { MeuPdi } from './pages/aluno/MeuPdi'
 import { MeuPerfil } from './pages/aluno/MeuPerfil'
 import { PerfilPublico } from './pages/aluno/PerfilPublico'
+import { Ranking } from './pages/aluno/Ranking'
 import { Moderador } from './pages/moderador/Moderador'
 import { Entrar } from './pages/public/Entrar'
 import { Estande } from './pages/public/Estande'
@@ -66,6 +67,14 @@ function App() {
           element={
             <RouteGuard>
               <PerfilPublico />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/ranking"
+          element={
+            <RouteGuard>
+              <Ranking />
             </RouteGuard>
           }
         />

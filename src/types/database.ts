@@ -27,6 +27,8 @@ export interface Profile {
   password_set: boolean
   avatar_url: string | null
   total_points: number
+  access_streak: number
+  last_access_date: string | null
 }
 
 export interface PublicProfile {
@@ -268,6 +270,7 @@ export interface GamificationRule {
   points: number
   enabled: boolean
   recurrence_days: number | null
+  streak_days: number | null
   updated_at: string
 }
 
@@ -276,7 +279,6 @@ export interface GamificationLevel {
   name: string
   min_points: number
   badge_icon: string
-  order_index: number
 }
 
 export interface UserPointsEvent {

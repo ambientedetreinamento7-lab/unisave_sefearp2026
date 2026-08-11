@@ -171,7 +171,11 @@ create table profiles (
   -- Gamificação: total acumulado, denormalizado (mesmo padrão de
   -- progress_pct em pdi_plans) pra ranking barato — sem isso, a tela de
   -- ranking teria que somar o ledger inteiro de todo mundo toda vez.
-  total_points int not null default 0
+  total_points int not null default 0,
+  -- Sequência de dias seguidos de acesso e a última data resgatada — só
+  -- usados pelo cálculo do bônus de streak (claimDailyAccess).
+  access_streak int not null default 0,
+  last_access_date date
 );
 
 create table user_progress (
@@ -399,17 +403,20 @@ create table gamification_rules (
   -- Só usado pela regra 'daily_access': intervalo em dias entre resgates
   -- do pop-up "Receber pontos" (spec: acesso diário ou recorrência definida).
   recurrence_days int,
+  -- Só usado pela regra 'streak_bonus': a cada quantos dias seguidos de
+  -- acesso o bônus se repete (spec: pontuação por acesso em dias seguidos).
+  streak_days int,
   updated_at timestamptz not null default now()
 );
 
--- Níveis — renomeáveis pelo admin, cruzados pelo total_points do aluno
--- (o nível vigente é o de maior min_points que ainda é <= total_points).
+-- Níveis — renomeáveis pelo admin, sempre ordenados por min_points (não
+-- tem campo de ordem manual: a posição de cada nível é o próprio ponto
+-- de corte, spec: "níveis se organizam conforme os pontos").
 create table gamification_levels (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  min_points int not null,
-  badge_icon text not null,
-  order_index int not null unique
+  min_points int not null unique,
+  badge_icon text not null
 );
 
 -- Ledger de pontos concedidos. ref_id desambigua o "primeiro" de cada
@@ -960,22 +967,24 @@ on conflict (track_id, pill_id) do nothing;
 
 -- Gamificação — regras seedadas (admin ajusta points/enabled/label em
 -- /admin/gamificacao) e níveis de exemplo (renomeáveis).
-insert into gamification_rules (key, label, points, recurrence_days) values
-  ('course_completed', 'Conclusão de curso/pílula', 10, null),
-  ('daily_access', 'Acesso recorrente', 2, 1),
-  ('certificate_earned', 'Certificado obtido', 20, null),
-  ('avatar_changed', 'Alterou a foto de perfil', 5, null),
-  ('first_post_texto', 'Primeira postagem de texto', 5, null),
-  ('first_post_imagem', 'Primeira postagem de imagem', 5, null),
-  ('first_post_carrossel', 'Primeira postagem em carrossel', 5, null),
-  ('first_post_video', 'Primeira postagem de vídeo', 5, null),
-  ('first_post_enquete', 'Primeira enquete criada', 5, null),
-  ('first_story', 'Primeiro story publicado', 5, null)
+insert into gamification_rules (key, label, points, recurrence_days, streak_days) values
+  ('pill_started', 'Iniciar um curso/pílula', 2, null, null),
+  ('course_completed', 'Conclusão de curso/pílula', 10, null, null),
+  ('daily_access', 'Acesso recorrente', 2, 1, null),
+  ('streak_bonus', 'Bônus por dias seguidos de acesso', 15, null, 7),
+  ('certificate_earned', 'Certificado obtido', 20, null, null),
+  ('avatar_changed', 'Alterou a foto de perfil', 5, null, null),
+  ('first_post_texto', 'Primeira postagem de texto', 5, null, null),
+  ('first_post_imagem', 'Primeira postagem de imagem', 5, null, null),
+  ('first_post_carrossel', 'Primeira postagem em carrossel', 5, null, null),
+  ('first_post_video', 'Primeira postagem de vídeo', 5, null, null),
+  ('first_post_enquete', 'Primeira enquete criada', 5, null, null),
+  ('first_story', 'Primeiro story publicado', 5, null, null)
 on conflict (key) do nothing;
 
-insert into gamification_levels (name, min_points, badge_icon, order_index) values
-  ('Bronze', 0, '🥉', 0),
-  ('Prata', 50, '🥈', 1),
-  ('Ouro', 150, '🥇', 2),
-  ('Platina', 300, '💎', 3)
-on conflict (order_index) do nothing;
+insert into gamification_levels (name, min_points, badge_icon) values
+  ('Bronze', 0, '🥉'),
+  ('Prata', 50, '🥈'),
+  ('Ouro', 150, '🥇'),
+  ('Platina', 300, '💎')
+on conflict (min_points) do nothing;

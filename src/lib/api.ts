@@ -81,6 +81,7 @@ export async function markPillInProgress(userId: string, pillId: string) {
   await supabase
     .from('user_progress')
     .upsert({ user_id: userId, pill_id: pillId, status: 'in_progress' }, { onConflict: 'user_id,pill_id' })
+  await awardPoints(userId, 'pill_started', pillId)
 }
 
 export async function completePill(

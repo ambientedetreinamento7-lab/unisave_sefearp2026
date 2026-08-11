@@ -13,7 +13,7 @@ export async function getRule(key: string): Promise<GamificationRule | null> {
 }
 
 export async function getLevels(): Promise<GamificationLevel[]> {
-  const { data } = await supabase.from('gamification_levels').select('*').order('order_index')
+  const { data } = await supabase.from('gamification_levels').select('*').order('min_points')
   return (data as GamificationLevel[]) ?? []
 }
 
@@ -53,6 +53,44 @@ export async function awardPoints(
   const currentTotal = (profile as { total_points: number } | null)?.total_points ?? 0
   await supabase.from('profiles').update({ total_points: currentTotal + points }).eq('id', userId)
   await notifyPoints(userId, points, rule.label)
+}
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function yesterdayStr() {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
+/**
+ * Resgata os pontos de acesso do dia (chamado pelo botão "Receber
+ * pontos") e atualiza a sequência de dias seguidos: se o último acesso
+ * resgatado foi ontem, a sequência continua; qualquer outra coisa, ela
+ * reinicia em 1. Quando a sequência bate um múltiplo de
+ * gamification_rules.streak_days (regra 'streak_bonus'), concede o bônus
+ * — o ref_id é o número do ciclo, então cada marco só pontua uma vez.
+ */
+export async function claimDailyAccess(userId: string) {
+  const today = todayStr()
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('access_streak, last_access_date')
+    .eq('id', userId)
+    .single()
+  const current = profile as { access_streak: number; last_access_date: string | null } | null
+  const newStreak = current?.last_access_date === yesterdayStr() ? (current.access_streak ?? 0) + 1 : 1
+
+  await supabase.from('profiles').update({ access_streak: newStreak, last_access_date: today }).eq('id', userId)
+  await awardPoints(userId, 'daily_access', today)
+
+  const streakRule = await getRule('streak_bonus')
+  const target = streakRule?.streak_days
+  if (streakRule && target && target > 0 && newStreak % target === 0) {
+    await awardPoints(userId, 'streak_bonus', `cycle-${newStreak / target}`)
+  }
 }
 
 export async function getLastPointsEvent(userId: string, ruleKey: string): Promise<UserPointsEvent | null> {
