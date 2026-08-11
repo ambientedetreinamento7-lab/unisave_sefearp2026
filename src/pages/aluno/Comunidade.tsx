@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppHeader } from '../../components/AppHeader'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { Icon } from '../../components/Icon'
 import { useAuth } from '../../context/AuthContext'
 import {
@@ -441,6 +442,7 @@ function PostCard({
   programs: Program[]
   onChanged: () => void
 }) {
+  const confirm = useConfirm()
   const [liked, setLiked] = useState(post.likedByMe)
   const [likeCount, setLikeCount] = useState(post.likeCount)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -456,7 +458,7 @@ function PostCard({
   }
 
   async function handleDelete() {
-    if (!confirm('Excluir este post?')) return
+    if (!(await confirm('Excluir este post?', { danger: true, confirmLabel: 'Excluir' }))) return
     await deletePost(post.id)
     onChanged()
   }
@@ -483,7 +485,7 @@ function PostCard({
   }
 
   async function handleClosePoll() {
-    if (!confirm('Encerrar a votação desta enquete? Essa ação não pode ser desfeita.')) return
+    if (!(await confirm('Encerrar a votação desta enquete? Essa ação não pode ser desfeita.', { confirmLabel: 'Encerrar' }))) return
     await closePoll(post.id)
     onChanged()
   }
@@ -918,6 +920,7 @@ function StoryViewerModal({
   onClose: () => void
   onChanged: () => void
 }) {
+  const confirm = useConfirm()
   const [index, setIndex] = useState(0)
   const [viewers, setViewers] = useState<SocialStoryView[] | null>(null)
   const story = group.stories[index]
@@ -942,7 +945,7 @@ function StoryViewerModal({
   if (!story) return null
 
   async function handleDelete() {
-    if (!confirm('Excluir este story?')) return
+    if (!(await confirm('Excluir este story?', { danger: true, confirmLabel: 'Excluir' }))) return
     await deleteStory(story.id)
     onChanged()
     onClose()

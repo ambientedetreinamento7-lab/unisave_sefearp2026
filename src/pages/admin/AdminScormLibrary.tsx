@@ -1,6 +1,7 @@
 import JSZip from 'jszip'
 import { useEffect, useState } from 'react'
 import { AdminLayout } from './AdminLayout'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { supabase } from '../../lib/supabase'
 import type { ScormLibraryItem } from '../../types/database'
 
@@ -27,6 +28,7 @@ function guessContentType(filename: string) {
 }
 
 export function AdminScormLibrary() {
+  const confirm = useConfirm()
   const [items, setItems] = useState<ScormLibraryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [formItem, setFormItem] = useState<ScormLibraryItem | 'new' | null>(null)
@@ -42,7 +44,13 @@ export function AdminScormLibrary() {
   }, [])
 
   async function deleteItem(id: string) {
-    if (!confirm('Remover este pacote da biblioteca? Pílulas que apontam para ele ficam sem conteúdo até você trocar.')) return
+    if (
+      !(await confirm('Remover este pacote da biblioteca? Pílulas que apontam para ele ficam sem conteúdo até você trocar.', {
+        danger: true,
+        confirmLabel: 'Remover',
+      }))
+    )
+      return
     await supabase.from('scorm_library').delete().eq('id', id)
     reload()
   }

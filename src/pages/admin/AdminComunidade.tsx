@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { AdminLayout } from './AdminLayout'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { useAuth } from '../../context/AuthContext'
 import { deletePost, getModerationFeed, getReports, setPostPublished, type FeedPost, type ReportWithPost } from '../../lib/social'
 
 type Tab = 'posts' | 'denuncias'
 
 export function AdminComunidade() {
+  const confirm = useConfirm()
   const { profile } = useAuth()
   const [tab, setTab] = useState<Tab>('posts')
   const [posts, setPosts] = useState<FeedPost[]>([])
@@ -32,7 +34,7 @@ export function AdminComunidade() {
   }
 
   async function remove(postId: string) {
-    if (!confirm('Excluir este post em definitivo?')) return
+    if (!(await confirm('Excluir este post em definitivo?', { danger: true, confirmLabel: 'Excluir' }))) return
     await deletePost(postId)
     reload()
   }

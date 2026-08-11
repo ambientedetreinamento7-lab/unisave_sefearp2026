@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AdminLayout } from './AdminLayout'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { linkPillToTrack, unlinkPillFromTrack } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import type { ContentType, DiagnosticProfile, Pill, Program, ScormLibraryItem, Track, TrackPill } from '../../types/database'
@@ -16,6 +17,7 @@ async function uploadCover(file: File, folder: string): Promise<string> {
 }
 
 export function AdminTrilhas() {
+  const confirm = useConfirm()
   const [tracks, setTracks] = useState<Track[]>([])
   const [pills, setPills] = useState<Pill[]>([])
   const [trackPills, setTrackPills] = useState<TrackPill[]>([])
@@ -28,7 +30,13 @@ export function AdminTrilhas() {
   const [trackFilter, setTrackFilter] = useState<string>('all')
 
   async function deletePill(id: string) {
-    if (!confirm('Excluir esta pílula em definitivo? Ela some de todas as trilhas que a usam, junto com o progresso dos alunos.')) return
+    if (
+      !(await confirm('Excluir esta pílula em definitivo? Ela some de todas as trilhas que a usam, junto com o progresso dos alunos.', {
+        danger: true,
+        confirmLabel: 'Excluir',
+      }))
+    )
+      return
     await supabase.from('pills').delete().eq('id', id)
     reload()
   }
@@ -44,7 +52,13 @@ export function AdminTrilhas() {
   }
 
   async function deleteTrack(id: string) {
-    if (!confirm('Excluir esta trilha? O vínculo com os cursos dela é removido (os cursos em si só somem se não pertencerem a outra trilha).')) return
+    if (
+      !(await confirm(
+        'Excluir esta trilha? O vínculo com os cursos dela é removido (os cursos em si só somem se não pertencerem a outra trilha).',
+        { danger: true, confirmLabel: 'Excluir' },
+      ))
+    )
+      return
     await supabase.from('tracks').delete().eq('id', id)
     reload()
   }

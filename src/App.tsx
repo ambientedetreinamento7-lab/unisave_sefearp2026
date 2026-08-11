@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { ConfirmProvider } from './components/ConfirmDialog'
 import { RouteGuard } from './components/RouteGuard'
 import { AuthProvider } from './context/AuthContext'
 import { AdminAnalytics } from './pages/admin/AdminAnalytics'
@@ -27,6 +28,7 @@ import { Resultado } from './pages/public/Resultado'
 function App() {
   return (
     <AuthProvider>
+      <ConfirmProvider>
       <Routes>
         <Route path="/" element={<Navigate to="/estande" replace />} />
         <Route path="/estande" element={<Estande />} />
@@ -190,6 +192,7 @@ function App() {
 
         <Route path="*" element={<Navigate to="/estande" replace />} />
       </Routes>
+      </ConfirmProvider>
     </AuthProvider>
   )
 }

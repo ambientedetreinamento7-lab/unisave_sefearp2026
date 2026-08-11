@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppHeader } from '../../components/AppHeader'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { ProgressBar } from '../../components/ProgressBar'
 import { useAuth } from '../../context/AuthContext'
 import {
@@ -130,6 +131,7 @@ function MeuPdiTab({ userId, programId }: { userId: string; programId: string | 
 }
 
 function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: string | null; onChanged: () => void }) {
+  const confirm = useConfirm()
   const [items, setItems] = useState<PdiPlanItem[]>([])
   const [labels, setLabels] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -171,7 +173,7 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
   }, [items])
 
   async function handleRemove() {
-    if (!confirm(`Remover o plano "${plan.title}"? Esta ação não pode ser desfeita.`)) return
+    if (!(await confirm(`Remover o plano "${plan.title}"? Esta ação não pode ser desfeita.`, { danger: true, confirmLabel: 'Remover' }))) return
     await removePlan(plan.id)
     onChanged()
   }

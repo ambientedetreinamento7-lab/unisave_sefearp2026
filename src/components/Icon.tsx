@@ -27,6 +27,8 @@ export type IconName =
   | "image"
   | "x"
   | "video"
+  | "alert-triangle"
+  | "help-circle"
 
 const PATHS: Record<IconName, React.ReactNode> = {
   book: (
@@ -259,6 +261,29 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <rect x="2.5" y="6" width="13" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="1.7" />
       <path d="M15.5 10.5 21 7.5v9l-5.5-3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    </>
+  ),
+  "alert-triangle": (
+    <path
+      d="M12 4 2.5 20h19L12 4Zm0 6.5v4M12 17h.01"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  "help-circle": (
+    <>
+      <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="M9.3 9.3a2.7 2.7 0 1 1 3.9 2.4c-.8.4-1.2.9-1.2 1.8V14M12 17h.01"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </>
   ),
 }
