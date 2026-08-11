@@ -117,12 +117,16 @@ export default async function handler(req: VercelLikeRequest, res: VercelLikeRes
   if (folderId) {
     const videoId = data.uri.split('/').pop()
     try {
-      await fetch(`https://api.vimeo.com/me/projects/${folderId}/videos/${videoId}`, {
+      const moveRes = await fetch(`https://api.vimeo.com/me/projects/${folderId}/videos/${videoId}`, {
         method: 'PUT',
         headers: { Authorization: `bearer ${vimeoToken}` },
       })
-    } catch {
+      if (!moveRes.ok) {
+        console.error('vimeo folder move failed', moveRes.status, await moveRes.text())
+      }
+    } catch (err) {
       // ignore — video still plays fine, it just stays in Minha Biblioteca
+      console.error('vimeo folder move error', err)
     }
   }
 
