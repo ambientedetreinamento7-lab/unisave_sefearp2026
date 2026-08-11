@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext'
 import { AdminAnalytics } from './pages/admin/AdminAnalytics'
 import { AdminCertificados } from './pages/admin/AdminCertificados'
 import { AdminComunidade } from './pages/admin/AdminComunidade'
+import { AdminGamificacao } from './pages/admin/AdminGamificacao'
 import { AdminGrade } from './pages/admin/AdminGrade'
 import { AdminProgramas } from './pages/admin/AdminProgramas'
 import { AdminQuizzes } from './pages/admin/AdminQuizzes'
@@ -20,6 +21,7 @@ import { Dashboard } from './pages/aluno/Dashboard'
 import { DefinirSenha } from './pages/aluno/DefinirSenha'
 import { MeuPdi } from './pages/aluno/MeuPdi'
 import { MeuPerfil } from './pages/aluno/MeuPerfil'
+import { PerfilPublico } from './pages/aluno/PerfilPublico'
 import { Moderador } from './pages/moderador/Moderador'
 import { Entrar } from './pages/public/Entrar'
 import { Estande } from './pages/public/Estande'
@@ -56,6 +58,14 @@ function App() {
           element={
             <RouteGuard>
               <MeuPerfil />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/perfil/:userId"
+          element={
+            <RouteGuard>
+              <PerfilPublico />
             </RouteGuard>
           }
         />
@@ -170,6 +180,14 @@ function App() {
           element={
             <RouteGuard allow={['admin']}>
               <AdminGrade />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/admin/gamificacao"
+          element={
+            <RouteGuard allow={['admin']}>
+              <AdminGamificacao />
             </RouteGuard>
           }
         />

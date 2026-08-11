@@ -10,6 +10,7 @@ const TYPE_ICON: Record<NotificationType, IconName> = {
   reaction: 'heart-filled',
   course_completed: 'graduation-cap',
   pdi_progress: 'target',
+  points: 'sparkles',
 }
 
 export function NotificationBell({ mobile = false }: { mobile?: boolean }) {

@@ -479,6 +479,7 @@ function PillFormModal({
   const [scormLibrary, setScormLibrary] = useState<ScormLibraryItem[]>([])
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
+  const [pointsOverride, setPointsOverride] = useState(pill?.points_override != null ? String(pill.points_override) : '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -512,6 +513,7 @@ function PillFormModal({
           : {}),
         cover_url: coverUrl,
         thumbnail_url: thumbnailUrl,
+        points_override: pointsOverride === '' ? null : Number(pointsOverride),
       }
       if (pill) {
         const { error: saveError } = await supabase.from('pills').update(payload).eq('id', pill.id)
@@ -577,6 +579,19 @@ function PillFormModal({
           <label className="block text-xs font-semibold text-ink-soft">Miniatura (recomendado: 895×495px)</label>
           {pill?.thumbnail_url && !thumbnailFile && <img src={pill.thumbnail_url} alt="" className="mt-1 h-16 rounded-lg border border-navy-light" />}
           <input type="file" accept="image/*" onChange={(e) => setThumbnailFile(e.target.files?.[0] ?? null)} className="mt-1 w-full text-sm" />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-ink-soft">
+            Pontos de gamificação (substitui o padrão de "Conclusão de curso/pílula")
+          </label>
+          <input
+            type="number"
+            placeholder="Deixe em branco pra usar o padrão"
+            className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3"
+            value={pointsOverride}
+            onChange={(e) => setPointsOverride(e.target.value)}
+          />
         </div>
 
         {error && <p className="text-sm text-brand-red">{error}</p>}

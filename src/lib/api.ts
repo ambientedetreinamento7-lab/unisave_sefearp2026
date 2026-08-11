@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { computeTier } from './pdiTier'
+import { awardPoints } from './gamification'
 import { notifyCourseCompleted, notifyPdiProgress } from './notifications'
 import type {
   PdiJornadaBucket,
@@ -82,7 +83,13 @@ export async function markPillInProgress(userId: string, pillId: string) {
     .upsert({ user_id: userId, pill_id: pillId, status: 'in_progress' }, { onConflict: 'user_id,pill_id' })
 }
 
-export async function completePill(userId: string, pillId: string, score: number | null, pillTitle: string) {
+export async function completePill(
+  userId: string,
+  pillId: string,
+  score: number | null,
+  pillTitle: string,
+  pointsOverride?: number | null,
+) {
   const { data: existing } = await supabase
     .from('user_progress')
     .select('status')
@@ -106,6 +113,9 @@ export async function completePill(userId: string, pillId: string, score: number
   // depois não deve gerar spam de notificação nem reprocessar o plano.
   if (alreadyCompleted) return
   await notifyCourseCompleted(userId, pillTitle)
+  await awardPoints(userId, 'course_completed', pillId, {
+    overridePoints: pointsOverride ?? undefined,
+  })
   await syncPillCompletionToPdi(userId, pillId, pillTitle)
 }
 

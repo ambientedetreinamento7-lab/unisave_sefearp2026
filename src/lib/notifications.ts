@@ -59,3 +59,13 @@ export async function notifyPdiProgress(userId: string, message: string) {
     link: '/meu-pdi',
   })
 }
+
+export async function notifyPoints(userId: string, points: number, label: string) {
+  await createNotification({
+    userId,
+    type: 'points',
+    title: `+${points} pontos`,
+    body: label,
+    link: '/meu-perfil',
+  })
+}
