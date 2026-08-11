@@ -314,6 +314,16 @@ create table social_story_views (
   unique (story_id, viewer_id)
 );
 
+-- Reação simples (coração), um por espectador por story — mesmo padrão de
+-- social_likes, mas em story_id em vez de post_id.
+create table social_story_reactions (
+  id uuid primary key default gen_random_uuid(),
+  story_id uuid not null references social_stories(id) on delete cascade,
+  user_id uuid not null references profiles(id) on update cascade on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (story_id, user_id)
+);
+
 create table social_comments (
   id uuid primary key default gen_random_uuid(),
   post_id uuid not null references social_posts(id) on delete cascade,
@@ -364,6 +374,7 @@ create index on social_poll_votes (post_id);
 create index on social_stories (expires_at);
 create index on social_stories (author_id);
 create index on social_story_views (story_id);
+create index on social_story_reactions (story_id);
 
 -- ============================================================
 -- AUTH RECONCILIATION
@@ -419,6 +430,7 @@ alter table social_poll_options enable row level security;
 alter table social_poll_votes enable row level security;
 alter table social_stories enable row level security;
 alter table social_story_views enable row level security;
+alter table social_story_reactions enable row level security;
 
 -- SECURITY DEFINER so this bypasses profiles' own RLS instead of re-entering
 -- it — without this, the SELECT below re-triggers policies that call
@@ -632,6 +644,10 @@ create policy "read views on own story or self" on social_story_views for select
     or current_role_is('admin')
   );
 create policy "record own view" on social_story_views for insert with check (viewer_id = auth.uid());
+
+create policy "story reactions readable by all" on social_story_reactions for select using (true);
+create policy "react to story as self" on social_story_reactions for insert with check (user_id = auth.uid());
+create policy "unreact to story as self" on social_story_reactions for delete using (user_id = auth.uid());
 
 grant execute on function public.close_poll(uuid) to authenticated;
 

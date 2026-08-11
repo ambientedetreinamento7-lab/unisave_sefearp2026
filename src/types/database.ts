@@ -231,6 +231,13 @@ export interface SocialStoryView {
   viewed_at: string
 }
 
+export interface SocialStoryReaction {
+  id: string
+  story_id: string
+  user_id: string
+  created_at: string
+}
+
 // Minimal Supabase Database generic — extend with generated types once the
 // project is linked (`supabase gen types typescript`).
 export interface Database {
@@ -258,6 +265,7 @@ export interface Database {
       social_poll_votes: { Row: SocialPollVote; Insert: Partial<SocialPollVote>; Update: Partial<SocialPollVote> }
       social_stories: { Row: SocialStory; Insert: Partial<SocialStory>; Update: Partial<SocialStory> }
       social_story_views: { Row: SocialStoryView; Insert: Partial<SocialStoryView>; Update: Partial<SocialStoryView> }
+      social_story_reactions: { Row: SocialStoryReaction; Insert: Partial<SocialStoryReaction>; Update: Partial<SocialStoryReaction> }
     }
   }
 }

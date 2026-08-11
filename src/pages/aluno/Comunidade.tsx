@@ -21,6 +21,7 @@ import {
   recordStoryView,
   reportPost,
   toggleLike,
+  toggleStoryReaction,
   voteInPoll,
   type FeedPost,
   type StoryGroup,
@@ -318,6 +319,11 @@ function Composer({
 
       {mode === 'video' && (
         <div className="mt-2">
+          <p className="mb-2 flex items-start gap-1.5 text-xs text-ink-soft">
+            <Icon name="clock" size={13} className="mt-0.5 shrink-0" />
+            Vídeos passam por um processamento depois do envio — pode levar
+            alguns minutos até aparecer no feed.
+          </p>
           {videoPreview ? (
             <div className="relative overflow-hidden rounded-xl border border-navy-light">
               <video src={videoPreview} className="max-h-64 w-full" controls />
@@ -847,6 +853,13 @@ function CreateStoryModal({
       <div className="card w-full max-w-sm p-5">
         <h3 className="text-lg font-bold text-ink">Novo story</h3>
         <p className="mt-1 text-xs text-ink-soft">Foto ou vídeo de até {MAX_STORY_VIDEO_SECONDS}s — some em 24h.</p>
+        {isVideo && (
+          <p className="mt-2 flex items-start gap-1.5 text-xs text-ink-soft">
+            <Icon name="clock" size={13} className="mt-0.5 shrink-0" />
+            Vídeos passam por um processamento depois do envio — pode levar
+            alguns minutos até aparecer.
+          </p>
+        )}
 
         {preview ? (
           <div className="relative mt-3 aspect-[9/16] max-h-80 overflow-hidden rounded-xl border border-navy-light bg-black">
@@ -922,6 +935,8 @@ function StoryViewerModal({
   const confirm = useConfirm()
   const [index, setIndex] = useState(0)
   const [viewers, setViewers] = useState<SocialStoryView[] | null>(null)
+  const [reacted, setReacted] = useState(false)
+  const [reactionCount, setReactionCount] = useState(0)
   const story = group.stories[index]
   const isMine = group.authorId === viewerId
 
@@ -933,6 +948,8 @@ function StoryViewerModal({
   useEffect(() => {
     setViewers(null)
     if (!story) return
+    setReacted(story.reactedByMe)
+    setReactionCount(story.reactionCount)
     const timer = setTimeout(() => {
       if (index < group.stories.length - 1) setIndex((i) => i + 1)
       else onClose()
@@ -948,6 +965,13 @@ function StoryViewerModal({
     await deleteStory(story.id)
     onChanged()
     onClose()
+  }
+
+  async function handleReact() {
+    const wasReacted = reacted
+    setReacted(!wasReacted)
+    setReactionCount((v) => (wasReacted ? v - 1 : v + 1))
+    await toggleStoryReaction(story.id, viewerId, wasReacted)
   }
 
   async function loadViewers() {
@@ -1001,10 +1025,21 @@ function StoryViewerModal({
             className="absolute inset-y-0 right-0 w-1/3"
             aria-label="Próximo"
           />
+
+          {!isMine && (
+            <button
+              onClick={handleReact}
+              aria-label="Reagir"
+              className="absolute bottom-3 right-3 z-10 flex items-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-sm"
+            >
+              <Icon name={reacted ? 'heart-filled' : 'heart'} size={16} className={reacted ? 'text-brand-red' : undefined} />
+              {reactionCount > 0 && reactionCount}
+            </button>
+          )}
         </div>
 
         {isMine && (
-          <div className="z-10 flex items-center justify-between bg-black/70 px-3 py-2">
+          <div className="z-10 flex items-center justify-between gap-2 bg-black/70 px-3 py-2">
             {viewers == null ? (
               <button onClick={loadViewers} className="text-xs font-semibold text-white/90 hover:underline">
                 👁 Ver quem assistiu
@@ -1016,9 +1051,17 @@ function StoryViewerModal({
                   : viewers.map((v) => v.viewer_name).join(', ')}
               </p>
             )}
-            <button onClick={handleDelete} className="ml-3 shrink-0 text-xs font-semibold text-brand-red hover:underline">
-              Excluir
-            </button>
+            <div className="ml-3 flex shrink-0 items-center gap-3">
+              {reactionCount > 0 && (
+                <span className="flex items-center gap-1 text-xs font-semibold text-white/90">
+                  <Icon name="heart-filled" size={13} className="text-brand-red" />
+                  {reactionCount}
+                </span>
+              )}
+              <button onClick={handleDelete} className="shrink-0 text-xs font-semibold text-brand-red hover:underline">
+                Excluir
+              </button>
+            </div>
           </div>
         )}
       </div>

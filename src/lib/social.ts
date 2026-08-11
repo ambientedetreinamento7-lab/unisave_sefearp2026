@@ -10,6 +10,7 @@ import type {
   SocialReport,
   SocialScope,
   SocialStory,
+  SocialStoryReaction,
   SocialStoryView,
 } from '../types/database'
 
@@ -260,11 +261,16 @@ export async function getReports(): Promise<ReportWithPost[]> {
 
 // ---- Fase D: stories (foto/vídeo, expiram em 24h) ----
 
+export interface StoryWithReactions extends SocialStory {
+  reactionCount: number
+  reactedByMe: boolean
+}
+
 export interface StoryGroup {
   authorId: string
   authorName: string
   authorProgramId: string | null
-  stories: SocialStory[]
+  stories: StoryWithReactions[]
   allSeen: boolean
 }
 
@@ -277,12 +283,13 @@ export async function getActiveStoryGroups(viewerId: string): Promise<StoryGroup
   const storyRows = (stories as SocialStory[]) ?? []
   if (storyRows.length === 0) return []
 
-  const { data: views } = await supabase
-    .from('social_story_views')
-    .select('story_id')
-    .eq('viewer_id', viewerId)
-    .in('story_id', storyRows.map((s) => s.id))
+  const storyIds = storyRows.map((s) => s.id)
+  const [{ data: views }, { data: reactions }] = await Promise.all([
+    supabase.from('social_story_views').select('story_id').eq('viewer_id', viewerId).in('story_id', storyIds),
+    supabase.from('social_story_reactions').select('*').in('story_id', storyIds),
+  ])
   const seenIds = new Set(((views as { story_id: string }[]) ?? []).map((v) => v.story_id))
+  const reactionRows = (reactions as SocialStoryReaction[]) ?? []
 
   const groups = new Map<string, StoryGroup>()
   for (const s of storyRows) {
@@ -296,10 +303,23 @@ export async function getActiveStoryGroups(viewerId: string): Promise<StoryGroup
       })
     }
     const group = groups.get(s.author_id)!
-    group.stories.push(s)
+    const storyReactions = reactionRows.filter((r) => r.story_id === s.id)
+    group.stories.push({
+      ...s,
+      reactionCount: storyReactions.length,
+      reactedByMe: storyReactions.some((r) => r.user_id === viewerId),
+    })
     if (!seenIds.has(s.id)) group.allSeen = false
   }
   return Array.from(groups.values())
+}
+
+export async function toggleStoryReaction(storyId: string, userId: string, currentlyReacted: boolean) {
+  if (currentlyReacted) {
+    await supabase.from('social_story_reactions').delete().eq('story_id', storyId).eq('user_id', userId)
+  } else {
+    await supabase.from('social_story_reactions').upsert({ story_id: storyId, user_id: userId }, { onConflict: 'story_id,user_id' })
+  }
 }
 
 export async function createImageStory(input: {
