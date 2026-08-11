@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { colorForName, initials } from '../lib/avatar'
 import { Icon } from './Icon'
+import { NotificationBell } from './NotificationBell'
 
 const TRIAL_DAYS = 14
 
@@ -71,6 +72,8 @@ export function AppHeader() {
           >
             <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={15} />
           </button>
+
+          <NotificationBell />
 
           {canSwitchViews && (
             <div className="relative">
@@ -271,6 +274,7 @@ export function AppHeader() {
               <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={15} />
               {theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
             </button>
+            <NotificationBell mobile />
             <button
               onClick={signOut}
               className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/25 py-2 text-sm font-semibold text-white/90 hover:bg-white/10"

@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { computeTier } from './pdiTier'
+import { notifyCourseCompleted, notifyPdiProgress } from './notifications'
 import type {
   PdiJornadaBucket,
   PdiPlan,
@@ -81,7 +82,15 @@ export async function markPillInProgress(userId: string, pillId: string) {
     .upsert({ user_id: userId, pill_id: pillId, status: 'in_progress' }, { onConflict: 'user_id,pill_id' })
 }
 
-export async function completePill(userId: string, pillId: string, score: number | null) {
+export async function completePill(userId: string, pillId: string, score: number | null, pillTitle: string) {
+  const { data: existing } = await supabase
+    .from('user_progress')
+    .select('status')
+    .eq('user_id', userId)
+    .eq('pill_id', pillId)
+    .maybeSingle()
+  const alreadyCompleted = (existing as { status: string } | null)?.status === 'completed'
+
   await supabase.from('user_progress').upsert(
     {
       user_id: userId,
@@ -92,6 +101,54 @@ export async function completePill(userId: string, pillId: string, score: number
     },
     { onConflict: 'user_id,pill_id' },
   )
+
+  // Só notifica/propaga pro PDI na primeira conclusão — refazer o quiz
+  // depois não deve gerar spam de notificação nem reprocessar o plano.
+  if (alreadyCompleted) return
+  await notifyCourseCompleted(userId, pillTitle)
+  await syncPillCompletionToPdi(userId, pillId, pillTitle)
+}
+
+/**
+ * Propaga a conclusão de um curso pros itens do PDI que apontam pra ele
+ * (item_type='pill', ref_id=pillId), em qualquer plano do próprio aluno —
+ * hoje esse é o único jeito de progress_current/status de um item saírem
+ * do estado inicial, já que não existe outro gatilho de sincronização.
+ */
+async function syncPillCompletionToPdi(userId: string, pillId: string, pillTitle: string) {
+  const { data: plans } = await supabase.from('pdi_plans').select('id, title').eq('user_id', userId)
+  const planRows = (plans as { id: string; title: string }[]) ?? []
+  if (planRows.length === 0) return
+
+  const { data: items } = await supabase
+    .from('pdi_plan_items')
+    .select('*')
+    .in('plan_id', planRows.map((p) => p.id))
+    .eq('item_type', 'pill')
+    .eq('ref_id', pillId)
+  const pendingItems = ((items as PdiPlanItem[]) ?? []).filter((i) => i.status !== 'concluido')
+  if (pendingItems.length === 0) return
+
+  await Promise.all(
+    pendingItems.map((item) =>
+      supabase.from('pdi_plan_items').update({ status: 'concluido', progress_current: item.progress_total }).eq('id', item.id),
+    ),
+  )
+
+  const affectedPlanIds = [...new Set(pendingItems.map((i) => i.plan_id))]
+  for (const planId of affectedPlanIds) {
+    await recomputePlanProgress(planId)
+    const plan = planRows.find((p) => p.id === planId)
+    await notifyPdiProgress(userId, `"${pillTitle}" concluído no plano "${plan?.title ?? ''}"`)
+  }
+}
+
+async function recomputePlanProgress(planId: string) {
+  const items = await getPlanItems(planId)
+  if (items.length === 0) return
+  const sum = items.reduce((acc, i) => acc + i.progress_current / Math.max(1, i.progress_total), 0)
+  const pct = Math.round((sum / items.length) * 100)
+  await supabase.from('pdi_plans').update({ progress_pct: pct }).eq('id', planId)
 }
 
 export function trackProgressPct(pills: Pill[], progress: Record<string, UserProgress>) {

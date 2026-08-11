@@ -11,6 +11,7 @@ export type PdiJornadaBucket = 'pratica' | 'mentoria' | 'formacao'
 export type SocialScope = 'global' | 'curso'
 export type SocialPostType = 'texto' | 'imagem' | 'carrossel' | 'enquete' | 'video'
 export type SocialStoryMediaType = 'imagem' | 'video'
+export type NotificationType = 'reaction' | 'course_completed' | 'pdi_progress'
 
 export interface Profile {
   id: string
@@ -191,6 +192,7 @@ export interface SocialLike {
   id: string
   post_id: string
   user_id: string
+  user_name: string
   created_at: string
 }
 
@@ -235,6 +237,18 @@ export interface SocialStoryReaction {
   id: string
   story_id: string
   user_id: string
+  user_name: string
+  created_at: string
+}
+
+export interface Notification {
+  id: string
+  user_id: string
+  type: NotificationType
+  title: string
+  body: string | null
+  link: string | null
+  read: boolean
   created_at: string
 }
 
@@ -266,6 +280,7 @@ export interface Database {
       social_stories: { Row: SocialStory; Insert: Partial<SocialStory>; Update: Partial<SocialStory> }
       social_story_views: { Row: SocialStoryView; Insert: Partial<SocialStoryView>; Update: Partial<SocialStoryView> }
       social_story_reactions: { Row: SocialStoryReaction; Insert: Partial<SocialStoryReaction>; Update: Partial<SocialStoryReaction> }
+      notifications: { Row: Notification; Insert: Partial<Notification>; Update: Partial<Notification> }
     }
   }
 }

@@ -96,12 +96,12 @@ export function CoursePlayer() {
     async (status: 'in_progress' | 'completed', score: number | null) => {
       if (!profile || !id) return
       if (status === 'completed') {
-        await completePill(profile.id, id, score)
+        await completePill(profile.id, id, score, pill?.title ?? 'Curso')
       } else {
         await markPillInProgress(profile.id, id)
       }
     },
-    [profile, id],
+    [profile, id, pill],
   )
 
   if (loading || !pill) {

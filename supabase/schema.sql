@@ -31,6 +31,9 @@ create type social_post_type as enum ('texto', 'imagem', 'carrossel', 'enquete',
 -- própria já que expiram em 24h e não têm curtida/comentário, só visualização.
 create type social_story_media_type as enum ('imagem', 'video');
 
+-- Central de notificações (sino no header).
+create type notification_type as enum ('reaction', 'course_completed', 'pdi_progress');
+
 -- ============================================================
 -- TABLES
 -- ============================================================
@@ -278,10 +281,14 @@ create table social_poll_votes (
   unique (post_id, user_id)
 );
 
+-- user_name é snapshotado (mesmo motivo de author_name em social_posts):
+-- a RLS de profiles não deixa ler o nome de outro aluno, e "quem curtiu"
+-- precisa mostrar o nome de quem reagiu, não só o id.
 create table social_likes (
   id uuid primary key default gen_random_uuid(),
   post_id uuid not null references social_posts(id) on delete cascade,
   user_id uuid not null references profiles(id) on update cascade on delete cascade,
+  user_name text not null,
   created_at timestamptz not null default now(),
   unique (post_id, user_id)
 );
@@ -320,6 +327,7 @@ create table social_story_reactions (
   id uuid primary key default gen_random_uuid(),
   story_id uuid not null references social_stories(id) on delete cascade,
   user_id uuid not null references profiles(id) on update cascade on delete cascade,
+  user_name text not null,
   created_at timestamptz not null default now(),
   unique (story_id, user_id)
 );
@@ -350,6 +358,21 @@ create table curriculum_grid (
   course_name text not null
 );
 
+-- Central de notificações (sino no header). user_id é o destinatário —
+-- pode ser inserida por outro usuário (ex.: quem reage a um post/story
+-- notifica o autor), diferente das demais tabelas onde o autor sempre
+-- insere em nome próprio (ver policies de insert abaixo).
+create table notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on update cascade on delete cascade,
+  type notification_type not null,
+  title text not null,
+  body text,
+  link text,
+  read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
 -- ============================================================
 -- INDEXES
 -- ============================================================
@@ -375,6 +398,7 @@ create index on social_stories (expires_at);
 create index on social_stories (author_id);
 create index on social_story_views (story_id);
 create index on social_story_reactions (story_id);
+create index on notifications (user_id, created_at desc);
 
 -- ============================================================
 -- AUTH RECONCILIATION
@@ -431,6 +455,7 @@ alter table social_poll_votes enable row level security;
 alter table social_stories enable row level security;
 alter table social_story_views enable row level security;
 alter table social_story_reactions enable row level security;
+alter table notifications enable row level security;
 
 -- SECURITY DEFINER so this bypasses profiles' own RLS instead of re-entering
 -- it — without this, the SELECT below re-triggers policies that call
@@ -648,6 +673,18 @@ create policy "record own view" on social_story_views for insert with check (vie
 create policy "story reactions readable by all" on social_story_reactions for select using (true);
 create policy "react to story as self" on social_story_reactions for insert with check (user_id = auth.uid());
 create policy "unreact to story as self" on social_story_reactions for delete using (user_id = auth.uid());
+
+-- Central de notificações. Duas policies de insert: uma pra notificação
+-- que o próprio usuário gera pra si (conclusão de curso, progresso do
+-- PDI) e outra, mais restrita por type, pra quando quem insere é outra
+-- pessoa (reação em post/story notificando o autor) — mesmo modelo de
+-- confiança client-side já usado pra author_name/viewer_name.
+create policy "read own notifications" on notifications for select using (user_id = auth.uid());
+create policy "insert own notifications" on notifications for insert with check (user_id = auth.uid());
+create policy "insert reaction notifications for others" on notifications for insert
+  with check (type = 'reaction' and user_id <> auth.uid());
+create policy "update own notifications" on notifications for update using (user_id = auth.uid());
+create policy "delete own notifications" on notifications for delete using (user_id = auth.uid());
 
 grant execute on function public.close_poll(uuid) to authenticated;
 

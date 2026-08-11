@@ -17,6 +17,8 @@ import {
   getActiveStoryGroups,
   getComments,
   getFeed,
+  getPostLikers,
+  getStoryReactors,
   getStoryViewers,
   recordStoryView,
   reportPost,
@@ -28,21 +30,11 @@ import {
 } from '../../lib/social'
 import { supabase } from '../../lib/supabase'
 import { colorForName, initials } from '../../lib/avatar'
+import { relativeTime } from '../../lib/format'
 import { MAX_VIDEO_DURATION_SECONDS, readVideoDuration, uploadVideoToVimeo } from '../../lib/vimeo'
 import type { Program, SocialComment, SocialScope, SocialStoryView } from '../../types/database'
 
 const MAX_STORY_VIDEO_SECONDS = 50
-
-function relativeTime(iso: string) {
-  const diffMs = Date.now() - new Date(iso).getTime()
-  const min = Math.floor(diffMs / 60_000)
-  if (min < 1) return 'agora'
-  if (min < 60) return `há ${min}min`
-  const hr = Math.floor(min / 60)
-  if (hr < 24) return `há ${hr}h`
-  const days = Math.floor(hr / 24)
-  return `há ${days}d`
-}
 
 export function Comunidade() {
   const { profile, session } = useAuth()
@@ -135,7 +127,14 @@ export function Comunidade() {
           {loading && <p className="text-ink-soft">Carregando…</p>}
           {!loading &&
             posts.map((post) => (
-              <PostCard key={post.id} post={post} viewerId={profile.id} programs={programs} onChanged={reload} />
+              <PostCard
+                key={post.id}
+                post={post}
+                viewerId={profile.id}
+                viewerName={profile.name}
+                programs={programs}
+                onChanged={reload}
+              />
             ))}
           {!loading && posts.length === 0 && (
             <p className="text-ink-soft">
@@ -439,11 +438,13 @@ function Composer({
 function PostCard({
   post,
   viewerId,
+  viewerName,
   programs,
   onChanged,
 }: {
   post: FeedPost
   viewerId: string
+  viewerName: string
   programs: Program[]
   onChanged: () => void
 }) {
@@ -454,12 +455,22 @@ function PostCard({
   const [showComments, setShowComments] = useState(false)
   const [poll, setPoll] = useState(post.poll)
   const [voting, setVoting] = useState(false)
+  const [likers, setLikers] = useState<string[] | null>(null)
   const courseName = programs.find((p) => p.id === post.author_program_id)?.name
 
   async function handleLike() {
     setLiked((v) => !v)
     setLikeCount((v) => (liked ? v - 1 : v + 1))
-    await toggleLike(post.id, viewerId, liked)
+    await toggleLike(post.id, viewerId, viewerName, liked, post.author_id)
+  }
+
+  async function handleShowLikers() {
+    if (likers != null) {
+      setLikers(null)
+      return
+    }
+    const rows = await getPostLikers(post.id)
+    setLikers(rows.map((r) => r.user_name))
   }
 
   async function handleDelete() {
@@ -611,6 +622,8 @@ function PostCard({
       <div className="mt-3 flex items-center gap-4 border-t border-navy-light/60 pt-3 text-sm font-semibold text-ink-soft">
         <button onClick={handleLike} className={`flex items-center gap-1.5 ${liked ? 'text-brand-red' : ''}`}>
           <Icon name={liked ? 'heart-filled' : 'heart'} size={16} />
+        </button>
+        <button onClick={handleShowLikers} disabled={likeCount === 0} className="hover:underline disabled:no-underline">
           {likeCount}
         </button>
         <button onClick={() => setShowComments((v) => !v)} className="flex items-center gap-1.5">
@@ -619,7 +632,13 @@ function PostCard({
         </button>
       </div>
 
-      {showComments && <Comments postId={post.id} viewerId={viewerId} viewerName={post.author_name} />}
+      {likers && (
+        <p className="mt-2 text-xs text-ink-soft">
+          {likers.length === 0 ? 'Ninguém curtiu ainda.' : `Curtido por ${likers.join(', ')}`}
+        </p>
+      )}
+
+      {showComments && <Comments postId={post.id} viewerId={viewerId} viewerName={viewerName} />}
     </article>
   )
 }
@@ -935,6 +954,7 @@ function StoryViewerModal({
   const confirm = useConfirm()
   const [index, setIndex] = useState(0)
   const [viewers, setViewers] = useState<SocialStoryView[] | null>(null)
+  const [reactors, setReactors] = useState<string[] | null>(null)
   const [reacted, setReacted] = useState(false)
   const [reactionCount, setReactionCount] = useState(0)
   const story = group.stories[index]
@@ -947,6 +967,7 @@ function StoryViewerModal({
 
   useEffect(() => {
     setViewers(null)
+    setReactors(null)
     if (!story) return
     setReacted(story.reactedByMe)
     setReactionCount(story.reactionCount)
@@ -971,11 +992,16 @@ function StoryViewerModal({
     const wasReacted = reacted
     setReacted(!wasReacted)
     setReactionCount((v) => (wasReacted ? v - 1 : v + 1))
-    await toggleStoryReaction(story.id, viewerId, wasReacted)
+    await toggleStoryReaction(story.id, viewerId, viewerName, wasReacted, group.authorId)
   }
 
   async function loadViewers() {
     setViewers(await getStoryViewers(story.id))
+  }
+
+  async function loadReactors() {
+    const rows = await getStoryReactors(story.id)
+    setReactors(rows.map((r) => r.user_name))
   }
 
   return (
@@ -1039,29 +1065,33 @@ function StoryViewerModal({
         </div>
 
         {isMine && (
-          <div className="z-10 flex items-center justify-between gap-2 bg-black/70 px-3 py-2">
-            {viewers == null ? (
-              <button onClick={loadViewers} className="text-xs font-semibold text-white/90 hover:underline">
-                👁 Ver quem assistiu
-              </button>
-            ) : (
-              <p className="max-h-16 overflow-y-auto text-xs text-white/90">
-                {viewers.length === 0
-                  ? 'Ninguém viu ainda.'
-                  : viewers.map((v) => v.viewer_name).join(', ')}
-              </p>
-            )}
-            <div className="ml-3 flex shrink-0 items-center gap-3">
-              {reactionCount > 0 && (
-                <span className="flex items-center gap-1 text-xs font-semibold text-white/90">
-                  <Icon name="heart-filled" size={13} className="text-brand-red" />
-                  {reactionCount}
-                </span>
-              )}
+          <div className="z-10 space-y-1.5 bg-black/70 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <button onClick={loadViewers} className="text-xs font-semibold text-white/90 hover:underline">
+                  👁 {viewers == null ? 'Ver quem assistiu' : 'Ocultar'}
+                </button>
+                {reactionCount > 0 && (
+                  <button onClick={loadReactors} className="flex items-center gap-1 text-xs font-semibold text-white/90 hover:underline">
+                    <Icon name="heart-filled" size={13} className="text-brand-red" />
+                    {reactionCount}
+                  </button>
+                )}
+              </div>
               <button onClick={handleDelete} className="shrink-0 text-xs font-semibold text-brand-red hover:underline">
                 Excluir
               </button>
             </div>
+            {viewers != null && (
+              <p className="max-h-16 overflow-y-auto text-xs text-white/90">
+                {viewers.length === 0 ? 'Ninguém viu ainda.' : viewers.map((v) => v.viewer_name).join(', ')}
+              </p>
+            )}
+            {reactors != null && (
+              <p className="max-h-16 overflow-y-auto text-xs text-white/90">
+                Reagiram: {reactors.length === 0 ? 'ninguém ainda.' : reactors.join(', ')}
+              </p>
+            )}
           </div>
         )}
       </div>

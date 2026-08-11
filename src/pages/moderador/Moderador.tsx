@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AppHeader } from '../../components/AppHeader'
+import { notifyPdiProgress } from '../../lib/notifications'
 import { supabase } from '../../lib/supabase'
 import type { PdiPlan, Profile, SkillCategory, SkillRating } from '../../types/database'
 
@@ -48,9 +49,10 @@ export function Moderador() {
     load()
   }, [])
 
-  async function endorse(planId: string) {
-    await supabase.from('pdi_plans').update({ endorsed: true }).eq('id', planId)
-    setPendingPlans((prev) => prev.filter((p) => p.id !== planId))
+  async function endorse(plan: PdiPlan) {
+    await supabase.from('pdi_plans').update({ endorsed: true }).eq('id', plan.id)
+    setPendingPlans((prev) => prev.filter((p) => p.id !== plan.id))
+    await notifyPdiProgress(plan.user_id, `Seu plano "${plan.title}" foi validado pelo moderador`)
   }
 
   return (
@@ -90,7 +92,7 @@ export function Moderador() {
                       <p className="text-xs text-ink-soft">{plan.profiles?.name}</p>
                     </div>
                     <button
-                      onClick={() => endorse(plan.id)}
+                      onClick={() => endorse(plan)}
                       className="rounded-xl bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy-dark"
                     >
                       Endossar

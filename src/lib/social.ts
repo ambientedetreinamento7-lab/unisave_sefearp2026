@@ -1,3 +1,4 @@
+import { notifyReaction } from './notifications'
 import { supabase } from './supabase'
 import type {
   SocialComment,
@@ -205,12 +206,26 @@ export async function closePoll(postId: string) {
   await supabase.rpc('close_poll', { p_post_id: postId })
 }
 
-export async function toggleLike(postId: string, userId: string, currentlyLiked: boolean) {
+export async function toggleLike(
+  postId: string,
+  userId: string,
+  userName: string,
+  currentlyLiked: boolean,
+  authorId: string,
+) {
   if (currentlyLiked) {
     await supabase.from('social_likes').delete().eq('post_id', postId).eq('user_id', userId)
   } else {
-    await supabase.from('social_likes').upsert({ post_id: postId, user_id: userId }, { onConflict: 'post_id,user_id' })
+    await supabase
+      .from('social_likes')
+      .upsert({ post_id: postId, user_id: userId, user_name: userName }, { onConflict: 'post_id,user_id' })
+    if (authorId !== userId) await notifyReaction(authorId, userName, 'post')
   }
+}
+
+export async function getPostLikers(postId: string): Promise<SocialLike[]> {
+  const { data } = await supabase.from('social_likes').select('*').eq('post_id', postId).order('created_at')
+  return (data as SocialLike[]) ?? []
 }
 
 export async function getComments(postId: string): Promise<SocialComment[]> {
@@ -314,12 +329,26 @@ export async function getActiveStoryGroups(viewerId: string): Promise<StoryGroup
   return Array.from(groups.values())
 }
 
-export async function toggleStoryReaction(storyId: string, userId: string, currentlyReacted: boolean) {
+export async function toggleStoryReaction(
+  storyId: string,
+  userId: string,
+  userName: string,
+  currentlyReacted: boolean,
+  authorId: string,
+) {
   if (currentlyReacted) {
     await supabase.from('social_story_reactions').delete().eq('story_id', storyId).eq('user_id', userId)
   } else {
-    await supabase.from('social_story_reactions').upsert({ story_id: storyId, user_id: userId }, { onConflict: 'story_id,user_id' })
+    await supabase
+      .from('social_story_reactions')
+      .upsert({ story_id: storyId, user_id: userId, user_name: userName }, { onConflict: 'story_id,user_id' })
+    if (authorId !== userId) await notifyReaction(authorId, userName, 'story')
   }
+}
+
+export async function getStoryReactors(storyId: string): Promise<SocialStoryReaction[]> {
+  const { data } = await supabase.from('social_story_reactions').select('*').eq('story_id', storyId).order('created_at')
+  return (data as SocialStoryReaction[]) ?? []
 }
 
 export async function createImageStory(input: {

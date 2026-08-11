@@ -52,7 +52,7 @@ export function CourseQuiz() {
     const passed = score >= quiz.min_pass_score
     setResult({ score, passed })
     if (passed) {
-      await completePill(profile.id, id, score)
+      await completePill(profile.id, id, score, pill?.title ?? 'Curso')
     }
   }
 
