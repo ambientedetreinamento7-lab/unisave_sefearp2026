@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import { colorForName, initials } from '../lib/avatar'
 import { Icon } from './Icon'
 
 const TRIAL_DAYS = 14
@@ -23,6 +24,7 @@ export function AppHeader() {
   const { profile, signOut } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
 
   const canSwitchViews = profile && profile.role !== 'aluno'
@@ -120,13 +122,51 @@ export function AppHeader() {
             </div>
           )}
 
-          <button
-            onClick={signOut}
-            aria-label="Sair"
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/25 text-white/80 hover:bg-white/10"
-          >
-            <Icon name="log-out" size={15} />
-          </button>
+          {profile && (
+            <div className="relative">
+              <button
+                onClick={() => setAvatarMenuOpen((v) => !v)}
+                aria-label="Menu da conta"
+                className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-white/25"
+              >
+                {profile.avatar_url ? (
+                  <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span
+                    className="flex h-full w-full items-center justify-center text-xs font-bold text-white"
+                    style={{ background: colorForName(profile.name) }}
+                  >
+                    {initials(profile.name)}
+                  </span>
+                )}
+              </button>
+
+              {avatarMenuOpen && (
+                <>
+                  <button
+                    className="fixed inset-0 z-10 cursor-default"
+                    onClick={() => setAvatarMenuOpen(false)}
+                    aria-label="Fechar menu"
+                  />
+                  <div className="card absolute right-0 z-20 mt-2 w-44 overflow-hidden p-1.5 text-ink">
+                    <Link
+                      to="/meu-perfil"
+                      onClick={() => setAvatarMenuOpen(false)}
+                      className="block rounded-lg px-3 py-2 text-sm font-medium hover:bg-navy-light"
+                    >
+                      Meu Perfil
+                    </Link>
+                    <button
+                      onClick={signOut}
+                      className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-brand-red hover:bg-navy-light"
+                    >
+                      Sair
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Mobile hamburger */}
@@ -151,10 +191,28 @@ export function AppHeader() {
       {mobileOpen && (
         <div className="border-t border-white/10 px-5 py-4 sm:hidden">
           {profile && (
-            <div className="mb-3 leading-tight">
-              <p className="truncate text-sm font-bold uppercase tracking-wide">{profile.name}</p>
-              <p className="text-xs text-white/60">Degustação: {daysLeft(profile.created_at)}d restantes</p>
-            </div>
+            <Link
+              to="/meu-perfil"
+              onClick={() => setMobileOpen(false)}
+              className="mb-3 flex items-center gap-3 leading-tight"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/25">
+                {profile.avatar_url ? (
+                  <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span
+                    className="flex h-full w-full items-center justify-center text-xs font-bold text-white"
+                    style={{ background: colorForName(profile.name) }}
+                  >
+                    {initials(profile.name)}
+                  </span>
+                )}
+              </span>
+              <span>
+                <p className="truncate text-sm font-bold uppercase tracking-wide">{profile.name}</p>
+                <p className="text-xs text-white/60">Meu Perfil · Degustação: {daysLeft(profile.created_at)}d restantes</p>
+              </span>
+            </Link>
           )}
 
           <nav className="flex flex-col gap-1">

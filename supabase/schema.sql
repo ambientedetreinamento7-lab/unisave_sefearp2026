@@ -150,7 +150,15 @@ create table profiles (
   -- auth.users id. Lets RLS distinguish "still an anonymous /estande lead"
   -- from "claimed account" without querying auth.users directly (anon has
   -- no SELECT grant there, and shouldn't).
-  claimed boolean not null default false
+  claimed boolean not null default false,
+  -- Flips to true once the aluno sets a password (spec: definir senha na
+  -- primeira vez) — RouteGuard sends role='aluno' profiles with this still
+  -- false to /definir-senha before letting them into the rest of the app,
+  -- so magic link only has to be requested once per student.
+  password_set boolean not null default false,
+  -- Foto de perfil (spec: Meu Perfil) — sobe pro bucket 'social' já
+  -- existente, na própria pasta do usuário.
+  avatar_url text
 );
 
 create table user_progress (

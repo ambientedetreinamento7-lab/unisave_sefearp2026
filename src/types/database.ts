@@ -24,6 +24,7 @@ export interface Profile {
   role: UserRole
   created_at: string
   password_set: boolean
+  avatar_url: string | null
 }
 
 export interface Program {

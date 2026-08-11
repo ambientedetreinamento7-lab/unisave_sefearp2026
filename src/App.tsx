@@ -18,6 +18,7 @@ import { CourseQuiz } from './pages/aluno/CourseQuiz'
 import { Dashboard } from './pages/aluno/Dashboard'
 import { DefinirSenha } from './pages/aluno/DefinirSenha'
 import { MeuPdi } from './pages/aluno/MeuPdi'
+import { MeuPerfil } from './pages/aluno/MeuPerfil'
 import { Moderador } from './pages/moderador/Moderador'
 import { Entrar } from './pages/public/Entrar'
 import { Estande } from './pages/public/Estande'
@@ -45,6 +46,14 @@ function App() {
           element={
             <RouteGuard>
               <DefinirSenha />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/meu-perfil"
+          element={
+            <RouteGuard>
+              <MeuPerfil />
             </RouteGuard>
           }
         />

@@ -25,23 +25,11 @@ import {
   type StoryGroup,
 } from '../../lib/social'
 import { supabase } from '../../lib/supabase'
+import { colorForName, initials } from '../../lib/avatar'
 import { MAX_VIDEO_DURATION_SECONDS, readVideoDuration, uploadVideoToVimeo } from '../../lib/vimeo'
 import type { Program, SocialComment, SocialScope, SocialStoryView } from '../../types/database'
 
 const MAX_STORY_VIDEO_SECONDS = 50
-
-const AVATAR_COLORS = ['#2f6f5e', '#a8842a', '#b5541f', '#1a3b6e', '#7c3aed', '#0891b2']
-
-function colorForName(name: string) {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length]
-}
-
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/)
-  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase()
-}
 
 function relativeTime(iso: string) {
   const diffMs = Date.now() - new Date(iso).getTime()
