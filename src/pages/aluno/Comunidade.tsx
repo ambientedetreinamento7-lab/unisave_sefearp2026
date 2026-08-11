@@ -509,11 +509,17 @@ function PostCard({
   return (
     <article className="card p-4">
       <div className="flex items-start gap-2.5">
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-          style={{ background: colorForName(post.author_name) }}
-        >
-          {initials(post.author_name)}
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full text-xs font-bold text-white">
+          {post.author_avatar_url ? (
+            <img src={post.author_avatar_url} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span
+              className="flex h-full w-full items-center justify-center"
+              style={{ background: colorForName(post.author_name) }}
+            >
+              {initials(post.author_name)}
+            </span>
+          )}
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-bold text-ink">
@@ -749,11 +755,17 @@ function StoriesRow({
             className="flex h-14 w-14 items-center justify-center rounded-full p-0.5"
             style={{ background: myGroup.allSeen ? '#d3ccbc' : 'linear-gradient(135deg,#ed1c24,#a8842a)' }}
           >
-            <span
-              className="flex h-full w-full items-center justify-center rounded-full text-sm font-bold text-white"
-              style={{ background: colorForName(myGroup.authorName) }}
-            >
-              {initials(myGroup.authorName)}
+            <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full text-sm font-bold text-white">
+              {myGroup.authorAvatarUrl ? (
+                <img src={myGroup.authorAvatarUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span
+                  className="flex h-full w-full items-center justify-center"
+                  style={{ background: colorForName(myGroup.authorName) }}
+                >
+                  {initials(myGroup.authorName)}
+                </span>
+              )}
             </span>
           </span>
           <span className="max-w-14 truncate text-[11px] font-medium text-ink-soft">Você</span>
@@ -766,11 +778,17 @@ function StoriesRow({
             className="flex h-14 w-14 items-center justify-center rounded-full p-0.5"
             style={{ background: g.allSeen ? '#d3ccbc' : 'linear-gradient(135deg,#ed1c24,#a8842a)' }}
           >
-            <span
-              className="flex h-full w-full items-center justify-center rounded-full text-sm font-bold text-white"
-              style={{ background: colorForName(g.authorName) }}
-            >
-              {initials(g.authorName)}
+            <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full text-sm font-bold text-white">
+              {g.authorAvatarUrl ? (
+                <img src={g.authorAvatarUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span
+                  className="flex h-full w-full items-center justify-center"
+                  style={{ background: colorForName(g.authorName) }}
+                >
+                  {initials(g.authorName)}
+                </span>
+              )}
             </span>
           </span>
           <span className="max-w-14 truncate text-[11px] font-medium text-ink-soft">{g.authorName.split(' ')[0]}</span>
@@ -1016,11 +1034,17 @@ function StoryViewerModal({
         </div>
 
         <div className="absolute inset-x-3 top-6 z-10 flex items-center gap-2">
-          <span
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-            style={{ background: colorForName(group.authorName) }}
-          >
-            {initials(group.authorName)}
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full text-xs font-bold text-white">
+            {group.authorAvatarUrl ? (
+              <img src={group.authorAvatarUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <span
+                className="flex h-full w-full items-center justify-center"
+                style={{ background: colorForName(group.authorName) }}
+              >
+                {initials(group.authorName)}
+              </span>
+            )}
           </span>
           <span className="text-sm font-semibold text-white drop-shadow">{group.authorName}</span>
           <button onClick={onClose} className="ml-auto flex h-8 w-8 items-center justify-center rounded-full bg-black/30 text-white">

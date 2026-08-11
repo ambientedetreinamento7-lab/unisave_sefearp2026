@@ -32,6 +32,18 @@ export interface FeedPost extends SocialPost {
   commentCount: number
   likedByMe: boolean
   poll: PollResult | null
+  author_avatar_url: string | null
+}
+
+async function getAvatarsByAuthor(authorIds: string[]): Promise<Record<string, string | null>> {
+  const uniqueIds = [...new Set(authorIds)]
+  if (uniqueIds.length === 0) return {}
+  const { data } = await supabase.from('public_profiles').select('id, avatar_url').in('id', uniqueIds)
+  const map: Record<string, string | null> = {}
+  for (const row of (data as { id: string; avatar_url: string | null }[]) ?? []) {
+    map[row.id] = row.avatar_url
+  }
+  return map
 }
 
 function groupByPostId<T extends { post_id: string }>(rows: T[]): Record<string, T[]> {
@@ -47,7 +59,7 @@ async function enrichPosts(posts: SocialPost[], viewerId: string): Promise<FeedP
   const ids = posts.map((p) => p.id)
   const pollIds = posts.filter((p) => p.post_type === 'enquete').map((p) => p.id)
 
-  const [{ data: media }, { data: likes }, { data: comments }, pollOptionsRes, pollVotesRes] = await Promise.all([
+  const [{ data: media }, { data: likes }, { data: comments }, pollOptionsRes, pollVotesRes, avatarsByAuthor] = await Promise.all([
     supabase.from('social_post_media').select('*').in('post_id', ids).order('order_index'),
     supabase.from('social_likes').select('*').in('post_id', ids),
     supabase.from('social_comments').select('id, post_id').in('post_id', ids),
@@ -57,6 +69,7 @@ async function enrichPosts(posts: SocialPost[], viewerId: string): Promise<FeedP
     pollIds.length
       ? supabase.from('social_poll_votes').select('*').in('post_id', pollIds)
       : Promise.resolve({ data: [] as SocialPollVote[] }),
+    getAvatarsByAuthor(posts.map((p) => p.author_id)),
   ])
 
   const mediaByPost = groupByPostId((media as SocialPostMedia[]) ?? [])
@@ -86,6 +99,7 @@ async function enrichPosts(posts: SocialPost[], viewerId: string): Promise<FeedP
       likedByMe: (likesByPost[p.id] ?? []).some((l) => l.user_id === viewerId),
       commentCount: (commentsByPost[p.id] ?? []).length,
       poll,
+      author_avatar_url: avatarsByAuthor[p.author_id] ?? null,
     }
   })
 }
@@ -290,6 +304,7 @@ export interface StoryGroup {
   authorId: string
   authorName: string
   authorProgramId: string | null
+  authorAvatarUrl: string | null
   stories: StoryWithReactions[]
   allSeen: boolean
 }
@@ -304,9 +319,10 @@ export async function getActiveStoryGroups(viewerId: string): Promise<StoryGroup
   if (storyRows.length === 0) return []
 
   const storyIds = storyRows.map((s) => s.id)
-  const [{ data: views }, { data: reactions }] = await Promise.all([
+  const [{ data: views }, { data: reactions }, avatarsByAuthor] = await Promise.all([
     supabase.from('social_story_views').select('story_id').eq('viewer_id', viewerId).in('story_id', storyIds),
     supabase.from('social_story_reactions').select('*').in('story_id', storyIds),
+    getAvatarsByAuthor(storyRows.map((s) => s.author_id)),
   ])
   const seenIds = new Set(((views as { story_id: string }[]) ?? []).map((v) => v.story_id))
   const reactionRows = (reactions as SocialStoryReaction[]) ?? []
@@ -318,6 +334,7 @@ export async function getActiveStoryGroups(viewerId: string): Promise<StoryGroup
         authorId: s.author_id,
         authorName: s.author_name,
         authorProgramId: s.author_program_id,
+        authorAvatarUrl: avatarsByAuthor[s.author_id] ?? null,
         stories: [],
         allSeen: true,
       })
