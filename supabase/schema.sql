@@ -31,8 +31,10 @@ create type social_post_type as enum ('texto', 'imagem', 'carrossel', 'enquete',
 -- própria já que expiram em 24h e não têm curtida/comentário, só visualização.
 create type social_story_media_type as enum ('imagem', 'video');
 
--- Central de notificações (sino no header).
-create type notification_type as enum ('reaction', 'course_completed', 'pdi_progress');
+-- Central de notificações (sino no header). 'points' é a notificação de
+-- "+N pontos" da gamificação, sempre separada da notificação específica
+-- do gatilho (ex.: 'course_completed' já avisa a conclusão em si).
+create type notification_type as enum ('reaction', 'course_completed', 'pdi_progress', 'points');
 
 -- ============================================================
 -- TABLES
@@ -129,7 +131,11 @@ create table pills (
   scorm_library_id uuid references scorm_library(id) on delete set null,
   -- Recommended: cover 1326x495px, thumbnail 895x495px (spec: capa/miniatura).
   cover_url text,
-  thumbnail_url text
+  thumbnail_url text,
+  -- Gamificação: quando definido, substitui os pontos padrão da regra
+  -- 'course_completed' (gamification_rules) especificamente pra essa
+  -- pílula (spec: admin define pontos no próprio item).
+  points_override int
 );
 
 -- id starts decoupled from auth.users: the /estande capture step writes a
@@ -161,7 +167,11 @@ create table profiles (
   password_set boolean not null default false,
   -- Foto de perfil (spec: Meu Perfil) — sobe pro bucket 'social' já
   -- existente, na própria pasta do usuário.
-  avatar_url text
+  avatar_url text,
+  -- Gamificação: total acumulado, denormalizado (mesmo padrão de
+  -- progress_pct em pdi_plans) pra ranking barato — sem isso, a tela de
+  -- ranking teria que somar o ledger inteiro de todo mundo toda vez.
+  total_points int not null default 0
 );
 
 create table user_progress (
@@ -374,6 +384,60 @@ create table notifications (
 );
 
 -- ============================================================
+-- GAMIFICAÇÃO
+-- ============================================================
+
+-- Regras de pontuação — uma linha por tipo de ação, com chaves fixas que
+-- o código já sabe disparar (ver src/lib/gamification.ts). Não é um CRUD
+-- de chave livre: o admin só edita label/points/enabled/recurrence_days,
+-- criar uma chave nova sempre exige um gatilho novo no código.
+create table gamification_rules (
+  key text primary key,
+  label text not null,
+  points int not null default 0,
+  enabled boolean not null default true,
+  -- Só usado pela regra 'daily_access': intervalo em dias entre resgates
+  -- do pop-up "Receber pontos" (spec: acesso diário ou recorrência definida).
+  recurrence_days int,
+  updated_at timestamptz not null default now()
+);
+
+-- Níveis — renomeáveis pelo admin, cruzados pelo total_points do aluno
+-- (o nível vigente é o de maior min_points que ainda é <= total_points).
+create table gamification_levels (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  min_points int not null,
+  badge_icon text not null,
+  order_index int not null unique
+);
+
+-- Ledger de pontos concedidos. ref_id desambigua o "primeiro" de cada
+-- tipo (id da pílula, data do dia pro acesso, ou '' pra eventos sem
+-- referência como troca de foto) — a unique constraint garante que
+-- refazer um quiz ou reenviar a foto nunca pontua duas vezes, sem
+-- precisar de lógica de "checar antes de inserir" no client.
+create table user_points_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on update cascade on delete cascade,
+  rule_key text not null references gamification_rules(key),
+  ref_id text not null default '',
+  points int not null,
+  created_at timestamptz not null default now(),
+  unique (user_id, rule_key, ref_id)
+);
+
+-- Perfil público — só os campos necessários pra ranking/visitar perfil de
+-- outro aluno (nome, foto, pontos), sem vazar e-mail/whatsapp. Uma view
+-- roda com as permissões do dono (não de quem consulta), então ela
+-- contorna a RLS restritiva de profiles ("self read profile") — é
+-- justamente por isso que ela existe, em vez de simplesmente abrir mais
+-- uma policy de select em profiles (que exporia e-mail/whatsapp junto).
+create view public_profiles as
+  select id, name, avatar_url, total_points, program_id from profiles;
+grant select on public_profiles to authenticated;
+
+-- ============================================================
 -- INDEXES
 -- ============================================================
 create index on skill_categories (program_id);
@@ -399,6 +463,8 @@ create index on social_stories (author_id);
 create index on social_story_views (story_id);
 create index on social_story_reactions (story_id);
 create index on notifications (user_id, created_at desc);
+create index on user_points_events (user_id);
+create index on profiles (total_points desc);
 
 -- ============================================================
 -- AUTH RECONCILIATION
@@ -456,6 +522,9 @@ alter table social_stories enable row level security;
 alter table social_story_views enable row level security;
 alter table social_story_reactions enable row level security;
 alter table notifications enable row level security;
+alter table gamification_rules enable row level security;
+alter table gamification_levels enable row level security;
+alter table user_points_events enable row level security;
 
 -- SECURITY DEFINER so this bypasses profiles' own RLS instead of re-entering
 -- it — without this, the SELECT below re-triggers policies that call
@@ -686,6 +755,23 @@ create policy "insert reaction notifications for others" on notifications for in
 create policy "update own notifications" on notifications for update using (user_id = auth.uid());
 create policy "delete own notifications" on notifications for delete using (user_id = auth.uid());
 
+-- Gamificação. Regras/níveis: leitura liberada pra todo autenticado (a
+-- Dashboard e o perfil precisam calcular nível/pop-up de acesso pra
+-- qualquer aluno), escrita só admin. Ledger de pontos: leitura só da
+-- própria linha (ou admin, pra auditoria futura); inserção só em nome
+-- próprio — mesmo modelo de confiança client-side já usado em notifications.
+create policy "gamification rules readable by authenticated" on gamification_rules for select using (true);
+create policy "gamification rules writable by admin" on gamification_rules for all
+  using (current_role_is('admin')) with check (current_role_is('admin'));
+
+create policy "gamification levels readable by authenticated" on gamification_levels for select using (true);
+create policy "gamification levels writable by admin" on gamification_levels for all
+  using (current_role_is('admin')) with check (current_role_is('admin'));
+
+create policy "read own points events" on user_points_events for select
+  using (user_id = auth.uid() or current_role_is('admin'));
+create policy "insert own points events" on user_points_events for insert with check (user_id = auth.uid());
+
 grant execute on function public.close_poll(uuid) to authenticated;
 
 -- ============================================================
@@ -871,3 +957,25 @@ insert into track_pills (track_id, pill_id, order_index)
 select track_id, id, row_number() over (partition by track_id order by id) - 1
 from pills
 on conflict (track_id, pill_id) do nothing;
+
+-- Gamificação — regras seedadas (admin ajusta points/enabled/label em
+-- /admin/gamificacao) e níveis de exemplo (renomeáveis).
+insert into gamification_rules (key, label, points, recurrence_days) values
+  ('course_completed', 'Conclusão de curso/pílula', 10, null),
+  ('daily_access', 'Acesso recorrente', 2, 1),
+  ('certificate_earned', 'Certificado obtido', 20, null),
+  ('avatar_changed', 'Alterou a foto de perfil', 5, null),
+  ('first_post_texto', 'Primeira postagem de texto', 5, null),
+  ('first_post_imagem', 'Primeira postagem de imagem', 5, null),
+  ('first_post_carrossel', 'Primeira postagem em carrossel', 5, null),
+  ('first_post_video', 'Primeira postagem de vídeo', 5, null),
+  ('first_post_enquete', 'Primeira enquete criada', 5, null),
+  ('first_story', 'Primeiro story publicado', 5, null)
+on conflict (key) do nothing;
+
+insert into gamification_levels (name, min_points, badge_icon, order_index) values
+  ('Bronze', 0, '🥉', 0),
+  ('Prata', 50, '🥈', 1),
+  ('Ouro', 150, '🥇', 2),
+  ('Platina', 300, '💎', 3)
+on conflict (order_index) do nothing;

@@ -96,7 +96,7 @@ export function CoursePlayer() {
     async (status: 'in_progress' | 'completed', score: number | null) => {
       if (!profile || !id) return
       if (status === 'completed') {
-        await completePill(profile.id, id, score, pill?.title ?? 'Curso')
+        await completePill(profile.id, id, score, pill?.title ?? 'Curso', pill?.points_override)
       } else {
         await markPillInProgress(profile.id, id)
       }

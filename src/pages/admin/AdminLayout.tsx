@@ -10,6 +10,7 @@ const LINKS = [
   { to: '/admin/comunidade', label: 'Comunidade' },
   { to: '/admin/quizzes', label: 'Quizzes' },
   { to: '/admin/grade', label: 'Grade Curricular' },
+  { to: '/admin/gamificacao', label: 'Gamificação' },
   { to: '/admin/usuarios', label: 'Usuários' },
   { to: '/admin/analytics', label: 'Analytics' },
 ]

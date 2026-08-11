@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AppHeader } from '../../components/AppHeader'
 import { useAuth } from '../../context/AuthContext'
 import { applyCertificateVariables } from '../../lib/certificate'
+import { awardPoints } from '../../lib/gamification'
 import { getAllTracks, getTrackWithPills, getUserProgressMap, trackProgressPct } from '../../lib/api'
 import type { Pill, Track } from '../../types/database'
 
@@ -40,6 +41,12 @@ export function Certificados() {
 
       setEntries(list)
       setLoading(false)
+
+      for (const entry of list) {
+        if (entry.pct === 100 && entry.pills.length > 0) {
+          await awardPoints(profile!.id, 'certificate_earned', entry.track.id)
+        }
+      }
     }
     load()
     return () => {

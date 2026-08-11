@@ -1,3 +1,4 @@
+import { awardPoints } from './gamification'
 import { notifyReaction } from './notifications'
 import { supabase } from './supabase'
 import type {
@@ -145,6 +146,8 @@ export async function createPost(input: {
     const { error: mediaError } = await supabase.from('social_post_media').insert(media)
     if (mediaError) throw mediaError
   }
+
+  await awardPoints(input.authorId, `first_post_${postType}`, '')
 }
 
 export async function createVideoPost(input: {
@@ -167,6 +170,7 @@ export async function createVideoPost(input: {
     vimeo_id: input.vimeoId,
   })
   if (error) throw error
+  await awardPoints(input.authorId, 'first_post_video', '')
 }
 
 export async function createPollPost(input: {
@@ -196,6 +200,7 @@ export async function createPollPost(input: {
   const options = input.options.map((label, idx) => ({ post_id: post.id, label, order_index: idx }))
   const { error: optionsError } = await supabase.from('social_poll_options').insert(options)
   if (optionsError) throw optionsError
+  await awardPoints(input.authorId, 'first_post_enquete', '')
 }
 
 export async function voteInPoll(postId: string, optionId: string, userId: string) {
@@ -372,6 +377,7 @@ export async function createImageStory(input: {
     image_url: url,
   })
   if (error) throw error
+  await awardPoints(input.authorId, 'first_story', '')
 }
 
 export async function createVideoStory(input: {
@@ -388,6 +394,7 @@ export async function createVideoStory(input: {
     vimeo_id: input.vimeoId,
   })
   if (error) throw error
+  await awardPoints(input.authorId, 'first_story', '')
 }
 
 export async function recordStoryView(storyId: string, viewerId: string, viewerName: string) {

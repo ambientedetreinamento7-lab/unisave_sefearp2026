@@ -11,7 +11,7 @@ export type PdiJornadaBucket = 'pratica' | 'mentoria' | 'formacao'
 export type SocialScope = 'global' | 'curso'
 export type SocialPostType = 'texto' | 'imagem' | 'carrossel' | 'enquete' | 'video'
 export type SocialStoryMediaType = 'imagem' | 'video'
-export type NotificationType = 'reaction' | 'course_completed' | 'pdi_progress'
+export type NotificationType = 'reaction' | 'course_completed' | 'pdi_progress' | 'points'
 
 export interface Profile {
   id: string
@@ -26,6 +26,15 @@ export interface Profile {
   created_at: string
   password_set: boolean
   avatar_url: string | null
+  total_points: number
+}
+
+export interface PublicProfile {
+  id: string
+  name: string
+  avatar_url: string | null
+  total_points: number
+  program_id: string | null
 }
 
 export interface Program {
@@ -94,6 +103,7 @@ export interface Pill {
   scorm_library_id: string | null
   cover_url: string | null
   thumbnail_url: string | null
+  points_override: number | null
 }
 
 export interface UserProgress {
@@ -252,6 +262,32 @@ export interface Notification {
   created_at: string
 }
 
+export interface GamificationRule {
+  key: string
+  label: string
+  points: number
+  enabled: boolean
+  recurrence_days: number | null
+  updated_at: string
+}
+
+export interface GamificationLevel {
+  id: string
+  name: string
+  min_points: number
+  badge_icon: string
+  order_index: number
+}
+
+export interface UserPointsEvent {
+  id: string
+  user_id: string
+  rule_key: string
+  ref_id: string
+  points: number
+  created_at: string
+}
+
 // Minimal Supabase Database generic — extend with generated types once the
 // project is linked (`supabase gen types typescript`).
 export interface Database {
@@ -281,6 +317,10 @@ export interface Database {
       social_story_views: { Row: SocialStoryView; Insert: Partial<SocialStoryView>; Update: Partial<SocialStoryView> }
       social_story_reactions: { Row: SocialStoryReaction; Insert: Partial<SocialStoryReaction>; Update: Partial<SocialStoryReaction> }
       notifications: { Row: Notification; Insert: Partial<Notification>; Update: Partial<Notification> }
+      gamification_rules: { Row: GamificationRule; Insert: Partial<GamificationRule>; Update: Partial<GamificationRule> }
+      gamification_levels: { Row: GamificationLevel; Insert: Partial<GamificationLevel>; Update: Partial<GamificationLevel> }
+      user_points_events: { Row: UserPointsEvent; Insert: Partial<UserPointsEvent>; Update: Partial<UserPointsEvent> }
+      public_profiles: { Row: PublicProfile; Insert: never; Update: never }
     }
   }
 }

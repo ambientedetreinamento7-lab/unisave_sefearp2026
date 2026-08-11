@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { AppHeader } from '../../components/AppHeader'
 import { Icon } from '../../components/Icon'
+import { NivelCard } from '../../components/NivelCard'
 import { useAuth } from '../../context/AuthContext'
 import { colorForName, initials } from '../../lib/avatar'
+import { awardPoints } from '../../lib/gamification'
 import { supabase } from '../../lib/supabase'
 import type { Program } from '../../types/database'
 
@@ -23,6 +25,8 @@ export function MeuPerfil() {
       <main className="mx-auto max-w-xl px-4 py-8">
         <h1 className="text-2xl font-extrabold text-ink">Meu Perfil</h1>
         <p className="mt-1 text-ink-soft">Seus dados, foto e senha de acesso.</p>
+
+        <NivelCard name={profile.name} avatarUrl={profile.avatar_url} totalPoints={profile.total_points} />
 
         <AvatarCard userId={profile.id} name={profile.name} avatarUrl={profile.avatar_url} onChanged={refreshProfile} />
         <DadosCard
@@ -67,6 +71,7 @@ function AvatarCard({
       const url = supabase.storage.from('social').getPublicUrl(path).data.publicUrl
       const { error: updateError } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', userId)
       if (updateError) throw updateError
+      await awardPoints(userId, 'avatar_changed', '')
       await onChanged()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível trocar a foto.')

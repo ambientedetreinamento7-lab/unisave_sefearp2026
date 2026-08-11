@@ -3,18 +3,24 @@ import { Link } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { Icon } from '../../components/Icon'
 import { ProgressBar } from '../../components/ProgressBar'
+import { RankingWidget } from '../../components/RankingWidget'
 import { useAuth } from '../../context/AuthContext'
 import { getAllPills, getTrackWithPills, getUserProgressMap, trackProgressPct } from '../../lib/api'
-import type { Pill, UserProgress, Track } from '../../types/database'
+import { awardPoints, getLastPointsEvent, getRule } from '../../lib/gamification'
+import type { GamificationRule, Pill, UserProgress, Track } from '../../types/database'
+
+const MS_PER_DAY = 86_400_000
 
 export function Dashboard() {
-  const { profile } = useAuth()
+  const { profile, refreshProfile } = useAuth()
   const [track, setTrack] = useState<Track | null>(null)
   const [trackPills, setTrackPills] = useState<Pill[]>([])
   const [allPills, setAllPills] = useState<Pill[]>([])
   const [progress, setProgress] = useState<Record<string, UserProgress>>({})
   const [tab, setTab] = useState<'trilha' | 'catalogo'>('trilha')
   const [loading, setLoading] = useState(true)
+  const [accessRule, setAccessRule] = useState<GamificationRule | null>(null)
+  const [showAccessModal, setShowAccessModal] = useState(false)
 
   useEffect(() => {
     if (!profile) return
@@ -42,6 +48,36 @@ export function Dashboard() {
       cancelled = true
     }
   }, [profile])
+
+  useEffect(() => {
+    if (!profile) return
+    let cancelled = false
+    async function checkAccessPoints() {
+      const rule = await getRule('daily_access')
+      if (cancelled || !rule || !rule.enabled) return
+      const lastEvent = await getLastPointsEvent(profile!.id, 'daily_access')
+      if (cancelled) return
+      const recurrenceDays = rule.recurrence_days ?? 1
+      const dueForRefresh =
+        !lastEvent || Date.now() - new Date(lastEvent.created_at).getTime() >= recurrenceDays * MS_PER_DAY
+      if (dueForRefresh) {
+        setAccessRule(rule)
+        setShowAccessModal(true)
+      }
+    }
+    checkAccessPoints()
+    return () => {
+      cancelled = true
+    }
+  }, [profile])
+
+  async function handleClaimAccessPoints() {
+    if (!profile) return
+    const today = new Date().toISOString().slice(0, 10)
+    await awardPoints(profile.id, 'daily_access', today)
+    setShowAccessModal(false)
+    await refreshProfile()
+  }
 
   const pct = useMemo(() => trackProgressPct(trackPills, progress), [trackPills, progress])
   const completedCount = trackPills.filter((p) => progress[p.id]?.status === 'completed').length
@@ -76,6 +112,8 @@ export function Dashboard() {
         <p className="mt-1 text-sm text-ink-soft sm:text-base">
           Continue evoluindo o seu Plano de Desenvolvimento Individual.
         </p>
+
+        {profile && <RankingWidget currentUserId={profile.id} />}
 
         {track && (
           <section className="card card-highlight mt-6 p-5 sm:p-6">
@@ -171,6 +209,22 @@ export function Dashboard() {
           </section>
         )}
       </main>
+
+      {showAccessModal && accessRule && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="card w-full max-w-sm p-6 text-center">
+            <p className="text-3xl">🎉</p>
+            <h3 className="mt-2 text-lg font-bold text-ink">Você acessou a plataforma!</h3>
+            <p className="mt-1 text-sm text-ink-soft">Resgate seus {accessRule.points} pontos por manter a recorrência.</p>
+            <button
+              onClick={handleClaimAccessPoints}
+              className="mt-5 w-full rounded-xl bg-brand-red py-2.5 font-bold text-white hover:bg-brand-red-dark"
+            >
+              Receber pontos
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
