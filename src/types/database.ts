@@ -162,7 +162,6 @@ export interface SocialPost {
   published: boolean
   poll_closed: boolean
   vimeo_id: string | null
-  vimeo_hash: string | null
   created_at: string
 }
 
@@ -220,7 +219,6 @@ export interface SocialStory {
   media_type: SocialStoryMediaType
   image_url: string | null
   vimeo_id: string | null
-  vimeo_hash: string | null
   created_at: string
   expires_at: string
 }

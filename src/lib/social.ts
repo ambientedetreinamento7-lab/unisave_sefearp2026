@@ -153,7 +153,6 @@ export async function createVideoPost(input: {
   programId: string | null
   body: string
   vimeoId: string
-  vimeoHash: string | null
 }): Promise<void> {
   const { error } = await supabase.from('social_posts').insert({
     author_id: input.authorId,
@@ -164,7 +163,6 @@ export async function createVideoPost(input: {
     post_type: 'video' as SocialPostType,
     body: input.body || null,
     vimeo_id: input.vimeoId,
-    vimeo_hash: input.vimeoHash,
   })
   if (error) throw error
 }
@@ -332,7 +330,6 @@ export async function createVideoStory(input: {
   authorName: string
   authorProgramId: string | null
   vimeoId: string
-  vimeoHash: string | null
 }): Promise<void> {
   const { error } = await supabase.from('social_stories').insert({
     author_id: input.authorId,
@@ -340,7 +337,6 @@ export async function createVideoStory(input: {
     author_program_id: input.authorProgramId,
     media_type: 'video',
     vimeo_id: input.vimeoId,
-    vimeo_hash: input.vimeoHash,
   })
   if (error) throw error
 }

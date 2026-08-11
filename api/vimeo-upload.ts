@@ -92,12 +92,11 @@ export default async function handler(req: VercelLikeRequest, res: VercelLikeRes
     body: JSON.stringify({
       upload: { approach: 'tus', size: String(size) },
       name: body.name || 'Post da Comunidade',
-      // Unlisted: not searchable/discoverable on Vimeo, playable only via
-      // direct link/embed. embed: 'public' lets the player load on any
-      // domain (including ours) instead of depending on a per-account
-      // domain whitelist that isn't guaranteed to apply to new uploads —
-      // that mismatch was causing the player's generic error screen.
-      privacy: { view: 'unlisted', embed: 'public' },
+      // Public ('anybody'): unlisted videos require an extra ?h=<hash>
+      // param on the embed URL or the Vimeo player refuses to play them,
+      // and that hash isn't reliably available right after upload —
+      // public sidesteps the whole problem.
+      privacy: { view: 'anybody', embed: 'public' },
     }),
   })
 
@@ -109,10 +108,24 @@ export default async function handler(req: VercelLikeRequest, res: VercelLikeRes
   }
 
   const data = (await vimeoRes.json()) as { upload: { upload_link: string }; uri: string }
-  // The unlisted hash (needed later to embed the video — see
-  // api/vimeo-status.ts) isn't reliably populated on this initial create
-  // call, before the file itself has been uploaded — it has to be fetched
-  // afterwards once the video resource is fully settled.
+
+  // Best-effort: organize uploads into a dedicated Vimeo folder instead of
+  // leaving them mixed into "Minha Biblioteca". Doesn't affect playback —
+  // the video's own privacy (set above) is what controls the embed, not
+  // the folder — so a failure here doesn't fail the upload.
+  const folderId = process.env.VIMEO_FOLDER_ID
+  if (folderId) {
+    const videoId = data.uri.split('/').pop()
+    try {
+      await fetch(`https://api.vimeo.com/me/projects/${folderId}/videos/${videoId}`, {
+        method: 'PUT',
+        headers: { Authorization: `bearer ${vimeoToken}` },
+      })
+    } catch {
+      // ignore — video still plays fine, it just stays in Minha Biblioteca
+    }
+  }
+
   res.statusCode = 200
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify({ uploadLink: data.upload.upload_link, videoUri: data.uri }))

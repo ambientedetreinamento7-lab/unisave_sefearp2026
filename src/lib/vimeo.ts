@@ -18,7 +18,6 @@ export function readVideoDuration(file: File): Promise<number> {
 
 export interface VimeoUploadResult {
   vimeoId: string
-  vimeoHash: string | null
 }
 
 /**
@@ -55,22 +54,5 @@ export async function uploadVideoToVimeo(
     upload.start()
   })
 
-  // The unlisted hash is only reliably available once the video resource
-  // has settled after the upload — fetch it now, best-effort (a missing
-  // hash just means the embed won't have ?h=, which is fine for public
-  // videos and only breaks unlisted ones).
-  let hash: string | null = null
-  try {
-    const statusRes = await fetch(`/api/vimeo-status?uri=${encodeURIComponent(videoUri)}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-    if (statusRes.ok) {
-      const statusData = (await statusRes.json()) as { hash: string | null }
-      hash = statusData.hash
-    }
-  } catch {
-    // best-effort — post/story is still created even if this lookup fails
-  }
-
-  return { vimeoId: videoUri.split('/').pop() ?? '', vimeoHash: hash }
+  return { vimeoId: videoUri.split('/').pop() ?? '' }
 }
