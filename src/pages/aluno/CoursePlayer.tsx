@@ -105,15 +105,19 @@ export function CoursePlayer() {
       // Lista de módulos do curso "dono" desta pílula, pra mostrar o
       // painel lateral com thumbs de tudo que compõe o curso (vídeos,
       // SCORMs e avaliações de reação), igual uma trilha de conteúdo.
+      // A "Biblioteca de Cursos" (is_catalog) é uma prateleira
+      // compartilhada de pílulas standalone, não um curso com módulos —
+      // sem essa checagem, abrir qualquer pílula da biblioteca listaria
+      // as outras ~50 pílulas de cursos completamente diferentes.
       if (pillRow.track_id) {
         const [{ track: homeTrack, pills: trackModules }, progressMap] = await Promise.all([
           getTrackWithPills(pillRow.track_id),
           getUserProgressMap(profile!.id),
         ])
-        if (!cancelled) {
+        if (!cancelled && homeTrack && !homeTrack.is_catalog) {
           setModules(trackModules)
           setModuleProgress(progressMap)
-          setSequential(homeTrack?.sequential ?? false)
+          setSequential(homeTrack.sequential)
         }
       }
 
@@ -201,9 +205,13 @@ export function CoursePlayer() {
     <div className="min-h-screen w-full overflow-x-hidden bg-bg pb-16">
       <AppHeader />
 
-      <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-8 lg:grid-cols-[260px_1fr_260px]">
+      <main
+        className={`mx-auto w-full max-w-6xl gap-6 px-4 py-8 ${
+          modules.length > 1 ? 'lg:grid lg:grid-cols-[280px_1fr] lg:items-start' : 'max-w-4xl'
+        }`}
+      >
         {modules.length > 1 && (
-          <aside className="card order-2 h-fit max-h-[75vh] overflow-y-auto p-4 lg:order-1">
+          <aside className="card mb-6 h-fit max-h-[75vh] overflow-y-auto p-4 lg:sticky lg:top-6 lg:mb-0">
             <p className="text-xs font-bold uppercase tracking-wide text-navy">Módulos do curso</p>
             <div className="mt-3 space-y-1.5">
               {moduleStates.map(({ pill: m, completed, locked }) => {
@@ -244,12 +252,30 @@ export function CoursePlayer() {
           </aside>
         )}
 
-        <div className={modules.length > 1 ? 'order-1 lg:order-2' : 'lg:col-span-2'}>
+        <div className="min-w-0">
           <Link to="/dashboard" className="text-sm font-medium text-ink-soft hover:text-navy">
             ← Voltar ao painel
           </Link>
           <h1 className="mt-2 text-2xl font-extrabold text-ink">{pill.title}</h1>
           {pill.description && <p className="mt-1 text-ink-soft">{pill.description}</p>}
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {pill.axis && (
+              <span className="rounded-full bg-surface px-3 py-1 text-xs font-semibold text-ink-soft">
+                {pill.axis}
+              </span>
+            )}
+            <span className="rounded-full bg-surface px-3 py-1 text-xs font-semibold text-ink-soft">
+              {pill.duration ?? '—'}
+            </span>
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-bold ${
+                isCompleted ? 'bg-green-50 text-success' : 'bg-navy-light text-navy'
+              }`}
+            >
+              {isCompleted ? 'Concluído' : 'Em andamento'}
+            </span>
+          </div>
 
           {pill.content_type === 'reaction' ? (
             <div className="card mt-5 flex flex-col items-center gap-3 p-10 text-center">
@@ -334,17 +360,6 @@ export function CoursePlayer() {
             </>
           )}
         </div>
-
-        <aside className="card order-3 h-fit p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-navy">Ementa</p>
-          <p className="mt-1 text-sm text-ink-soft">{pill.axis}</p>
-          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-navy">Duração</p>
-          <p className="mt-1 text-sm text-ink-soft">{pill.duration ?? '—'}</p>
-          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-navy">Status</p>
-          <p className="mt-1 text-sm font-semibold text-ink">
-            {isCompleted ? 'Concluído' : 'Em andamento'}
-          </p>
-        </aside>
       </main>
     </div>
   )

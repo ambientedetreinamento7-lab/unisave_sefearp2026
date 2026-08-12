@@ -398,8 +398,15 @@ export async function submitReactionResponse(
  * null se o módulo já pode ser acessado. */
 export async function getBlockingPill(pill: Pill, userId: string): Promise<{ title: string } | null> {
   if (!pill.track_id) return null
-  const { data: track } = await supabase.from('tracks').select('sequential').eq('id', pill.track_id).maybeSingle()
-  if (!track?.sequential) return null
+  const { data: track } = await supabase
+    .from('tracks')
+    .select('sequential, is_catalog')
+    .eq('id', pill.track_id)
+    .maybeSingle()
+  // A "Biblioteca de Cursos" (is_catalog) é uma prateleira compartilhada
+  // de pílulas standalone, não um curso com módulos — nunca deve travar
+  // ordem sequencial entre pílulas que só coincidem de estar lá.
+  if (!track?.sequential || track.is_catalog) return null
 
   const { data: links } = await supabase
     .from('track_pills')
