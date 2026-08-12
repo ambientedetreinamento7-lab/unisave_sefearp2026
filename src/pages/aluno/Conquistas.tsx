@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppHeader } from '../../components/AppHeader'
 import { useAuth } from '../../context/AuthContext'
-import { getReactionStatus, getTrackWithPills, getUserProgressMap, trackProgressPct } from '../../lib/api'
+import { getTrackWithPills, getUserProgressMap, trackProgressPct } from '../../lib/api'
 import type { Pill, Track, UserProgress } from '../../types/database'
 
 export function Conquistas() {
@@ -9,7 +9,6 @@ export function Conquistas() {
   const [track, setTrack] = useState<Track | null>(null)
   const [pills, setPills] = useState<Pill[]>([])
   const [progress, setProgress] = useState<Record<string, UserProgress>>({})
-  const [reactionStatus, setReactionStatus] = useState<{ enabledPillIds: Set<string>; submittedPillIds: Set<string> }>()
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -21,11 +20,10 @@ export function Conquistas() {
       setProgress(progressMap)
       if (profile!.selected_track_id) {
         const { track: t, pills: p } = await getTrackWithPills(profile!.selected_track_id)
-        if (cancelled) return
-        setTrack(t)
-        setPills(p)
-        const status = await getReactionStatus(p.map((pill) => pill.id), profile!.id)
-        if (!cancelled) setReactionStatus(status)
+        if (!cancelled) {
+          setTrack(t)
+          setPills(p)
+        }
       }
       setLoading(false)
     }
@@ -35,7 +33,7 @@ export function Conquistas() {
     }
   }, [profile])
 
-  const pct = useMemo(() => trackProgressPct(pills, progress, reactionStatus), [pills, progress, reactionStatus])
+  const pct = useMemo(() => trackProgressPct(pills, progress), [pills, progress])
   const trackComplete = pct === 100 && pills.length > 0
 
   if (loading) {

@@ -13,7 +13,6 @@ import {
   getFavoritePills,
   getInProgressPills,
   getMostAccessedPills,
-  getReactionStatus,
   getRecentlyAddedPills,
   getRecommendedPills,
   getRequiredPills,
@@ -44,7 +43,6 @@ export function Dashboard() {
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
   const [sections, setSections] = useState<DashboardSection[]>([])
   const [sectionPills, setSectionPills] = useState<Record<string, Pill[]>>({})
-  const [reactionStatus, setReactionStatus] = useState<{ enabledPillIds: Set<string>; submittedPillIds: Set<string> }>()
 
   useEffect(() => {
     if (!profile) return
@@ -67,11 +65,10 @@ export function Dashboard() {
       let recommendedPills: Pill[] = []
       if (profile!.selected_track_id) {
         const { track: t, pills: tp } = await getTrackWithPills(profile!.selected_track_id)
-        if (cancelled) return
-        setTrack(t)
-        setTrackPills(tp)
-        const status = await getReactionStatus(tp.map((p) => p.id), profile!.id)
-        if (!cancelled) setReactionStatus(status)
+        if (!cancelled) {
+          setTrack(t)
+          setTrackPills(tp)
+        }
       }
       recommendedPills = await getRecommendedPills(profile!.program_id, profile!.diagnostic_profile, progressMap)
 
@@ -140,10 +137,7 @@ export function Dashboard() {
     await toggleFavorite(profile.id, pillId, currentlyFavorited)
   }
 
-  const pct = useMemo(
-    () => trackProgressPct(trackPills, progress, reactionStatus),
-    [trackPills, progress, reactionStatus],
-  )
+  const pct = useMemo(() => trackProgressPct(trackPills, progress), [trackPills, progress])
   const completedCount = trackPills.filter((p) => progress[p.id]?.status === 'completed').length
 
   const filteredCatalog = useMemo(() => {

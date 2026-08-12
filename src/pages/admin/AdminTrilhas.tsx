@@ -672,7 +672,7 @@ function PillFormModal({
         axis,
         duration,
         content_type: contentType,
-        content_url: contentType !== 'scorm' ? contentUrl : null,
+        content_url: contentType !== 'scorm' && contentType !== 'reaction' ? contentUrl : null,
         scorm_library_id: contentType === 'scorm' ? scormLibraryId || null : null,
         // Picking a library entry replaces any older direct-upload SCORM
         // fields; leaving no library selected keeps them untouched so
@@ -717,9 +717,17 @@ function PillFormModal({
           <option value="video">Vídeo</option>
           <option value="iframe">Iframe / embed</option>
           <option value="scorm">SCORM</option>
+          <option value="reaction">Avaliação de Reação</option>
         </select>
 
-        {contentType !== 'scorm' && (
+        {contentType === 'reaction' && (
+          <p className="rounded-xl border border-navy-light bg-bg px-4 py-3 text-xs text-ink-soft">
+            Esta pílula não tem vídeo/arquivo — ela é a própria avaliação de reação. Depois de salvar, cadastre as
+            perguntas dela em <strong>Quizzes → {title || 'esta pílula'}</strong>.
+          </p>
+        )}
+
+        {contentType !== 'scorm' && contentType !== 'reaction' && (
           <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="URL do conteúdo" value={contentUrl} onChange={(e) => setContentUrl(e.target.value)} />
         )}
 

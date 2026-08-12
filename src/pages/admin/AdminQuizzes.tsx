@@ -68,13 +68,15 @@ export function AdminQuizzes() {
 
         <div className="space-y-6">
           {selectedPill ? (
-            <>
-              <QuizEditor pill={selectedPill} />
+            selectedPill.content_type === 'reaction' ? (
               <ReactionEditor pill={selectedPill} />
-            </>
+            ) : (
+              <QuizEditor pill={selectedPill} />
+            )
           ) : (
             <div className="card p-8 text-center text-ink-soft">
-              Selecione uma pílula à esquerda para editar o quiz de fixação e a avaliação de reação dela.
+              Selecione uma pílula à esquerda para editar o quiz de fixação (ou, se ela for do tipo "Avaliação de
+              Reação", as perguntas de reação dela).
             </div>
           )}
         </div>
@@ -93,6 +95,7 @@ function QuizEditor({ pill }: { pill: Pill }) {
   const [minPassScore, setMinPassScore] = useState(70)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   async function reload() {
     setLoading(true)
@@ -126,8 +129,14 @@ function QuizEditor({ pill }: { pill: Pill }) {
 
   async function saveMinPassScore() {
     setSaving(true)
-    const q = await ensureQuiz()
-    await supabase.from('quizzes').update({ min_pass_score: minPassScore }).eq('id', q.id)
+    setError('')
+    try {
+      const q = await ensureQuiz()
+      const { error: updateError } = await supabase.from('quizzes').update({ min_pass_score: minPassScore }).eq('id', q.id)
+      if (updateError) throw updateError
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao salvar a nota mínima.')
+    }
     setSaving(false)
   }
 
@@ -141,23 +150,35 @@ function QuizEditor({ pill }: { pill: Pill }) {
     }[],
   ) {
     if (rows.length === 0) return
-    const q = await ensureQuiz()
-    await supabase.from('questions').insert(
-      rows.map((r, i) => ({
-        quiz_id: q.id,
-        question_text: r.text,
-        question_type: r.type,
-        options: r.options,
-        correct_option_index: r.correctIndex,
-        correct_option_indexes: r.correctIndexes,
-        order_index: questions.length + i,
-      })),
-    )
+    setError('')
+    try {
+      const q = await ensureQuiz()
+      const { error: insertError } = await supabase.from('questions').insert(
+        rows.map((r, i) => ({
+          quiz_id: q.id,
+          question_text: r.text,
+          question_type: r.type,
+          options: r.options,
+          correct_option_index: r.correctIndex,
+          correct_option_indexes: r.correctIndexes,
+          order_index: questions.length + i,
+        })),
+      )
+      if (insertError) throw insertError
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao salvar a(s) pergunta(s).')
+      throw err
+    }
     await reload()
   }
 
   async function deleteQuestion(id: string) {
-    await supabase.from('questions').delete().eq('id', id)
+    setError('')
+    const { error: deleteError } = await supabase.from('questions').delete().eq('id', id)
+    if (deleteError) {
+      setError(deleteError.message)
+      return
+    }
     setQuestions((prev) => prev.filter((q) => q.id !== id))
   }
 
@@ -165,6 +186,7 @@ function QuizEditor({ pill }: { pill: Pill }) {
 
   return (
     <div className="space-y-4">
+      {error && <p className="rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-brand-red">{error}</p>}
       <div className="card p-5">
         <h3 className="font-bold text-ink">Avaliação de conhecimento — {pill.title}</h3>
         <div className="mt-3 flex items-center gap-2">
@@ -270,17 +292,21 @@ function NewQuizQuestionForm({
     if (!text.trim()) return
     if (type !== 'open_text' && effectiveOptions.length < 2) return
     setSaving(true)
-    await onAdd({
-      text: text.trim(),
-      type,
-      options: type === 'open_text' ? [] : effectiveOptions,
-      correctIndex: type === 'multiple_choice' || type === 'open_text' ? null : correctIndex,
-      correctIndexes: type === 'multiple_choice' ? correctIndexes : null,
-    })
-    setText('')
-    setOptions(['', ''])
-    setCorrectIndex(0)
-    setCorrectIndexes([])
+    try {
+      await onAdd({
+        text: text.trim(),
+        type,
+        options: type === 'open_text' ? [] : effectiveOptions,
+        correctIndex: type === 'multiple_choice' || type === 'open_text' ? null : correctIndex,
+        correctIndexes: type === 'multiple_choice' ? correctIndexes : null,
+      })
+      setText('')
+      setOptions(['', ''])
+      setCorrectIndex(0)
+      setCorrectIndexes([])
+    } catch {
+      // erro já exibido pelo QuizEditor — mantém o formulário preenchido pro admin tentar de novo
+    }
     setSaving(false)
   }
 
@@ -448,8 +474,12 @@ function QuizCsvImport({ onImport }: { onImport: (rows: ParsedQuizRow[]) => Prom
 
   async function doImport() {
     setImporting(true)
-    await onImport(validRows)
-    setRows([])
+    try {
+      await onImport(validRows)
+      setRows([])
+    } catch {
+      // erro já exibido pelo QuizEditor
+    }
     setImporting(false)
   }
 
@@ -513,6 +543,7 @@ function ReactionEditor({ pill }: { pill: Pill }) {
   const [survey, setSurvey] = useState<ReactionSurvey | null>(null)
   const [questions, setQuestions] = useState<ReactionQuestion[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   async function reload() {
     setLoading(true)
@@ -545,26 +576,43 @@ function ReactionEditor({ pill }: { pill: Pill }) {
 
   async function addQuestions(rows: { text: string; type: ReactionQuestionType }[]) {
     if (rows.length === 0) return
-    const s = await ensureSurvey()
-    await supabase.from('reaction_questions').insert(
-      rows.map((r, i) => ({
-        survey_id: s.id,
-        question_text: r.text,
-        question_type: r.type,
-        order_index: questions.length + i,
-      })),
-    )
+    setError('')
+    try {
+      const s = await ensureSurvey()
+      const { error: insertError } = await supabase.from('reaction_questions').insert(
+        rows.map((r, i) => ({
+          survey_id: s.id,
+          question_text: r.text,
+          question_type: r.type,
+          order_index: questions.length + i,
+        })),
+      )
+      if (insertError) throw insertError
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao salvar a(s) pergunta(s).')
+      throw err
+    }
     await reload()
   }
 
   async function deleteQuestion(id: string) {
-    await supabase.from('reaction_questions').delete().eq('id', id)
+    setError('')
+    const { error: deleteError } = await supabase.from('reaction_questions').delete().eq('id', id)
+    if (deleteError) {
+      setError(deleteError.message)
+      return
+    }
     setQuestions((prev) => prev.filter((q) => q.id !== id))
   }
 
   async function disableSurvey() {
     if (!survey) return
-    await supabase.from('reaction_surveys').delete().eq('id', survey.id)
+    setError('')
+    const { error: deleteError } = await supabase.from('reaction_surveys').delete().eq('id', survey.id)
+    if (deleteError) {
+      setError(deleteError.message)
+      return
+    }
     setSurvey(null)
     setQuestions([])
   }
@@ -573,6 +621,7 @@ function ReactionEditor({ pill }: { pill: Pill }) {
 
   return (
     <div className="space-y-4">
+      {error && <p className="rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-brand-red">{error}</p>}
       <div className="card p-5">
         <div className="flex items-center justify-between">
           <h3 className="font-bold text-ink">Avaliação de reação — {pill.title}</h3>
@@ -622,8 +671,12 @@ function NewReactionQuestionForm({ onAdd }: { onAdd: (row: { text: string; type:
   async function submit() {
     if (!text.trim()) return
     setSaving(true)
-    await onAdd({ text: text.trim(), type })
-    setText('')
+    try {
+      await onAdd({ text: text.trim(), type })
+      setText('')
+    } catch {
+      // erro já exibido pelo ReactionEditor — mantém o formulário preenchido pro admin tentar de novo
+    }
     setSaving(false)
   }
 
@@ -705,8 +758,12 @@ function ReactionCsvImport({ onImport }: { onImport: (rows: { text: string; type
 
   async function doImport() {
     setImporting(true)
-    await onImport(validRows.map((r) => ({ text: r.text, type: r.type })))
-    setRows([])
+    try {
+      await onImport(validRows.map((r) => ({ text: r.text, type: r.type })))
+      setRows([])
+    } catch {
+      // erro já exibido pelo ReactionEditor
+    }
     setImporting(false)
   }
 

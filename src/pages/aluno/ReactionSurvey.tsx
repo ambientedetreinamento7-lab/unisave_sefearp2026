@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { useAuth } from '../../context/AuthContext'
-import { getReactionSurveyForPill, hasSubmittedReaction, submitReactionResponse } from '../../lib/api'
+import { completePill, getReactionSurveyForPill, hasSubmittedReaction, submitReactionResponse } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import type { Pill, ReactionQuestion, ReactionSurvey as ReactionSurveyRow } from '../../types/database'
 
@@ -52,7 +52,7 @@ export function ReactionSurvey() {
   }
 
   async function submit() {
-    if (!profile || !survey) return
+    if (!profile || !survey || !id) return
     setSubmitting(true)
     await submitReactionResponse(
       survey.id,
@@ -64,6 +64,10 @@ export function ReactionSurvey() {
           : { questionId: q.id, valueNumber: typeof value === 'number' ? value : null }
       }),
     )
+    // A pílula é a própria avaliação (content_type='reaction') — responder
+    // é o que a conclui, do mesmo jeito que passar no quiz conclui uma
+    // pílula de vídeo.
+    await completePill(profile.id, id, null, pill?.title ?? 'Avaliação de reação', pill?.points_override)
     setSubmitting(false)
     setSubmitted(true)
   }

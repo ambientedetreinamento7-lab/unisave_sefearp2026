@@ -4,14 +4,7 @@ import { AppHeader } from '../../components/AppHeader'
 import { useAuth } from '../../context/AuthContext'
 import { applyCertificateVariables } from '../../lib/certificate'
 import { awardPoints } from '../../lib/gamification'
-import {
-  getAllTracks,
-  getOrCreateCertificate,
-  getReactionStatus,
-  getTrackWithPills,
-  getUserProgressMap,
-  trackProgressPct,
-} from '../../lib/api'
+import { getAllTracks, getOrCreateCertificate, getTrackWithPills, getUserProgressMap, trackProgressPct } from '../../lib/api'
 import type { Pill, Track } from '../../types/database'
 
 interface CertificateEntry {
@@ -37,10 +30,6 @@ export function Certificados() {
       const withPills = await Promise.all(eligible.map((t) => getTrackWithPills(t.id)))
       if (cancelled) return
 
-      const allPillIds = withPills.flatMap(({ pills }) => pills.map((p) => p.id))
-      const reactionStatus = await getReactionStatus(allPillIds, profile!.id)
-      if (cancelled) return
-
       const list: CertificateEntry[] = withPills.map(({ track, pills }, i) => {
         const completedDates = pills
           .map((p) => progressMap[p.id]?.completed_at)
@@ -51,7 +40,7 @@ export function Certificados() {
         return {
           track: track ?? eligible[i],
           pills,
-          pct: trackProgressPct(pills, progressMap, reactionStatus),
+          pct: trackProgressPct(pills, progressMap),
           completedAt,
           code: null,
         }

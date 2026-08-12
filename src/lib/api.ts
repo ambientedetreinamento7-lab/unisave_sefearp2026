@@ -337,43 +337,16 @@ async function recomputePlanProgress(planId: string) {
 /** A pílula com pesquisa de reação habilitada conta como mais um item na
  * conclusão da trilha (spec: reação "além da pílula", soma no %) — por
  * isso o total considera pills.length + quantas têm reactionStatus. */
-export function trackProgressPct(
-  pills: Pill[],
-  progress: Record<string, UserProgress>,
-  reactionStatus?: { enabledPillIds: Set<string>; submittedPillIds: Set<string> },
-) {
-  const reactionItems = reactionStatus ? pills.filter((p) => reactionStatus.enabledPillIds.has(p.id)) : []
-  const total = pills.length + reactionItems.length
-  if (total === 0) return 0
-  const donePills = pills.filter((p) => progress[p.id]?.status === 'completed').length
-  const doneReactions = reactionItems.filter((p) => reactionStatus!.submittedPillIds.has(p.id)).length
-  return Math.round(((donePills + doneReactions) / total) * 100)
+// Pílulas de avaliação de reação (content_type='reaction') são pílulas
+// como outra qualquer aqui — por isso essa conta simples já soma o item
+// de reação sem precisar de nenhum caso especial.
+export function trackProgressPct(pills: Pill[], progress: Record<string, UserProgress>) {
+  if (pills.length === 0) return 0
+  const done = pills.filter((p) => progress[p.id]?.status === 'completed').length
+  return Math.round((done / pills.length) * 100)
 }
 
 // ---- Avaliação de Reação (Kirkpatrick nível 1) ----
-
-export async function getReactionStatus(
-  pillIds: string[],
-  userId: string,
-): Promise<{ enabledPillIds: Set<string>; submittedPillIds: Set<string> }> {
-  if (pillIds.length === 0) return { enabledPillIds: new Set(), submittedPillIds: new Set() }
-  const { data } = await supabase.from('reaction_surveys').select('id, pill_id').in('pill_id', pillIds)
-  const surveys = (data as { id: string; pill_id: string }[]) ?? []
-  const enabledPillIds = new Set(surveys.map((s) => s.pill_id))
-  if (surveys.length === 0) return { enabledPillIds, submittedPillIds: new Set() }
-
-  const { data: responses } = await supabase
-    .from('reaction_responses')
-    .select('survey_id')
-    .eq('user_id', userId)
-    .in(
-      'survey_id',
-      surveys.map((s) => s.id),
-    )
-  const respondedSurveyIds = new Set(((responses as { survey_id: string }[]) ?? []).map((r) => r.survey_id))
-  const submittedPillIds = new Set(surveys.filter((s) => respondedSurveyIds.has(s.id)).map((s) => s.pill_id))
-  return { enabledPillIds, submittedPillIds }
-}
 
 export async function getReactionSurveyForPill(
   pillId: string,

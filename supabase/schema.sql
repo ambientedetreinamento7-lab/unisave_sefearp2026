@@ -11,7 +11,7 @@ create type diagnostic_profile as enum ('autogestao', 'tech_ia', 'lideranca');
 create type user_role as enum ('aluno', 'moderador', 'admin');
 create type pill_status as enum ('not_started', 'in_progress', 'completed');
 create type skill_type as enum ('tecnica', 'comportamental', 'etica');
-create type content_type as enum ('video', 'iframe', 'scorm');
+create type content_type as enum ('video', 'iframe', 'scorm', 'reaction');
 create type pdi_plan_type as enum ('trilha_evento', 'plano_pessoal', 'plano_institucional');
 create type pdi_item_type as enum ('skill_category', 'pill', 'trilha');
 create type pdi_item_status as enum ('nao_iniciado', 'em_andamento', 'concluido');
