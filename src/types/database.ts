@@ -132,6 +132,36 @@ export interface DashboardSection {
   enabled: boolean
 }
 
+export interface AppSetting {
+  key: string
+  value: unknown
+}
+
+export interface TrialSettings {
+  enabled: boolean
+  days: number
+}
+
+export interface IssuedCertificate {
+  id: string
+  code: string
+  user_id: string
+  track_id: string
+  student_name: string
+  track_title: string
+  completed_at: string | null
+  issued_at: string
+}
+
+export interface PublicCertificate {
+  id: string
+  code: string
+  student_name: string
+  track_title: string
+  completed_at: string | null
+  issued_at: string
+}
+
 export interface UserProgress {
   id: string
   user_id: string
@@ -327,6 +357,9 @@ export interface Database {
       categories: { Row: Category; Insert: Partial<Category>; Update: Partial<Category> }
       pill_favorites: { Row: PillFavorite; Insert: Partial<PillFavorite>; Update: Partial<PillFavorite> }
       dashboard_sections: { Row: DashboardSection; Insert: Partial<DashboardSection>; Update: Partial<DashboardSection> }
+      app_settings: { Row: AppSetting; Insert: Partial<AppSetting>; Update: Partial<AppSetting> }
+      issued_certificates: { Row: IssuedCertificate; Insert: Partial<IssuedCertificate>; Update: Partial<IssuedCertificate> }
+      public_certificates: { Row: PublicCertificate; Insert: never; Update: never }
       user_progress: { Row: UserProgress; Insert: Partial<UserProgress>; Update: Partial<UserProgress> }
       quizzes: { Row: Quiz; Insert: Partial<Quiz>; Update: Partial<Quiz> }
       questions: { Row: QuizQuestion; Insert: Partial<QuizQuestion>; Update: Partial<QuizQuestion> }

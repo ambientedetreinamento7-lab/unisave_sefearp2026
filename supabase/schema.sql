@@ -426,6 +426,33 @@ create table dashboard_sections (
   enabled boolean not null default true
 );
 
+-- Configurações gerais da plataforma (chave/valor livre em jsonb) —
+-- hoje só guarda o período de degustação (habilitado + dias), mas serve
+-- pra qualquer config futura sem precisar de nova tabela/migration.
+create table app_settings (
+  key text primary key,
+  value jsonb not null
+);
+
+-- Um registro por certificado emitido (aluno + curso), com um código
+-- curto e único gerado na primeira emissão — é o que sustenta a página
+-- pública de validação (/validar-certificado). Nome do aluno e título do
+-- curso ficam congelados (snapshot) no momento da emissão, iguais ao
+-- padrão já usado em social_posts.author_name: a validação pública não
+-- pode depender de RLS de profiles/tracks, e o registro deve continuar
+-- correto mesmo que o aluno mude de nome ou o curso seja renomeado depois.
+create table issued_certificates (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique,
+  user_id uuid not null references profiles(id) on update cascade on delete cascade,
+  track_id uuid not null references tracks(id) on delete cascade,
+  student_name text not null,
+  track_title text not null,
+  completed_at timestamptz,
+  issued_at timestamptz not null default now(),
+  unique (user_id, track_id)
+);
+
 -- ============================================================
 -- GAMIFICAÇÃO
 -- ============================================================
@@ -483,6 +510,18 @@ create view public_profiles as
   select id, name, avatar_url, total_points, program_id from profiles;
 grant select on public_profiles to authenticated;
 
+-- Validação pública de certificado (sem login): expõe só o necessário
+-- pra conferir autenticidade por código, na mesma linha de raciocínio de
+-- public_profiles — roda com as permissões do dono e contorna a RLS de
+-- issued_certificates, que por padrão só deixa cada aluno ver os seus.
+create view public_certificates as
+  select id, code, student_name, track_title, completed_at, issued_at from issued_certificates;
+grant select on public_certificates to anon, authenticated;
+
+-- Config da plataforma (ex.: período de degustação) precisa ser lida
+-- antes/sem sessão (aparece no header assim que o app carrega).
+grant select on app_settings to anon, authenticated;
+
 -- ============================================================
 -- INDEXES
 -- ============================================================
@@ -491,6 +530,8 @@ create index on tracks (program_id, diagnostic_profile);
 create index on pills (track_id);
 create index on pills (category_id);
 create index on pill_favorites (user_id);
+create index on issued_certificates (user_id);
+create index on issued_certificates (code);
 create index on track_pills (track_id);
 create index on track_pills (pill_id);
 create index on user_progress (user_id);
@@ -552,6 +593,8 @@ alter table pills enable row level security;
 alter table categories enable row level security;
 alter table pill_favorites enable row level security;
 alter table dashboard_sections enable row level security;
+alter table app_settings enable row level security;
+alter table issued_certificates enable row level security;
 alter table profiles enable row level security;
 alter table user_progress enable row level security;
 alter table quizzes enable row level security;
@@ -618,6 +661,17 @@ create policy "admin manages pills" on pills for all
 create policy "admin manages categories" on categories for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
 create policy "admin manages dashboard sections" on dashboard_sections for all
+  using (current_role_is('admin')) with check (current_role_is('admin'));
+
+create policy "app settings readable by all" on app_settings for select using (true);
+create policy "admin manages app settings" on app_settings for all
+  using (current_role_is('admin')) with check (current_role_is('admin'));
+
+create policy "read own certificates" on issued_certificates for select
+  using (user_id = auth.uid() or current_role_is('admin'));
+create policy "issue own certificate" on issued_certificates for insert
+  with check (user_id = auth.uid());
+create policy "admin manages certificates" on issued_certificates for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
 
 create policy "read own favorites" on pill_favorites for select using (user_id = auth.uid());
@@ -1158,4 +1212,10 @@ insert into dashboard_sections (key, label, order_index, enabled) values
   ('favoritos', 'Meus favoritos', 3, true),
   ('mais_acessados', 'Mais acessados', 4, true),
   ('obrigatorios', 'Cursos obrigatórios', 5, true)
+on conflict (key) do nothing;
+
+-- Período de degustação — 14 dias, habilitado, editável em
+-- /admin/configuracoes.
+insert into app_settings (key, value) values
+  ('trial', '{"enabled": true, "days": 14}'::jsonb)
 on conflict (key) do nothing;

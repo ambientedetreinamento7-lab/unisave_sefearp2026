@@ -4,7 +4,7 @@ import { AppHeader } from '../../components/AppHeader'
 import { useAuth } from '../../context/AuthContext'
 import { applyCertificateVariables } from '../../lib/certificate'
 import { awardPoints } from '../../lib/gamification'
-import { getAllTracks, getTrackWithPills, getUserProgressMap, trackProgressPct } from '../../lib/api'
+import { getAllTracks, getOrCreateCertificate, getTrackWithPills, getUserProgressMap, trackProgressPct } from '../../lib/api'
 import type { Pill, Track } from '../../types/database'
 
 interface CertificateEntry {
@@ -12,6 +12,7 @@ interface CertificateEntry {
   pills: Pill[]
   pct: number
   completedAt: string | null
+  code: string | null
 }
 
 export function Certificados() {
@@ -36,7 +37,7 @@ export function Certificados() {
         const completedAt = completedDates.length
           ? completedDates.sort().at(-1)!
           : null
-        return { track: track ?? eligible[i], pills, pct: trackProgressPct(pills, progressMap), completedAt }
+        return { track: track ?? eligible[i], pills, pct: trackProgressPct(pills, progressMap), completedAt, code: null }
       })
 
       setEntries(list)
@@ -45,6 +46,15 @@ export function Certificados() {
       for (const entry of list) {
         if (entry.pct === 100 && entry.pills.length > 0) {
           await awardPoints(profile!.id, 'certificate_earned', entry.track.id)
+          const cert = await getOrCreateCertificate(
+            profile!.id,
+            entry.track.id,
+            profile!.name,
+            entry.track.title,
+            entry.completedAt,
+          )
+          if (cancelled || !cert) continue
+          setEntries((prev) => prev.map((e) => (e.track.id === entry.track.id ? { ...e, code: cert.code } : e)))
         }
       }
     }
@@ -140,6 +150,7 @@ function CertificateModal({
   studentName: string
   onClose: () => void
 }) {
+  const verifyUrl = entry.code ? `${window.location.origin}/validar-certificado?codigo=${entry.code}` : null
   const certRef = useRef<HTMLDivElement>(null)
   const [downloading, setDownloading] = useState(false)
   const [shareError, setShareError] = useState('')
@@ -215,7 +226,7 @@ function CertificateModal({
 
         <div
           ref={certRef}
-          className="mt-4 flex aspect-[1400/895] w-full items-center justify-center overflow-hidden rounded-xl border border-navy-light bg-cover bg-center p-8 text-center"
+          className="relative mt-4 flex aspect-[1400/895] w-full items-center justify-center overflow-hidden rounded-xl border border-navy-light bg-cover bg-center p-8 text-center"
           style={
             entry.track.certificate_background_url
               ? { backgroundImage: `url(${entry.track.certificate_background_url})`, backgroundColor: '#fff' }
@@ -223,7 +234,21 @@ function CertificateModal({
           }
         >
           <div className="max-w-lg text-sm font-medium" dangerouslySetInnerHTML={{ __html: html }} />
+          {entry.code && (
+            <p className="absolute bottom-3 right-4 text-[10px] font-semibold uppercase tracking-wide opacity-70">
+              Código de verificação: {entry.code}
+            </p>
+          )}
         </div>
+
+        {entry.code && (
+          <p className="mt-3 text-xs text-ink-soft">
+            Autenticidade verificável em{' '}
+            <a href={verifyUrl!} target="_blank" rel="noreferrer" className="font-semibold text-navy hover:underline">
+              {verifyUrl}
+            </a>
+          </p>
+        )}
 
         {shareError && <p className="mt-3 text-sm text-brand-red">{shareError}</p>}
 

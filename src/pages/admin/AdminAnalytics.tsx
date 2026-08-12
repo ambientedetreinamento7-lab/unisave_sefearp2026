@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { AdminLayout } from './AdminLayout'
+import { getLevels, levelForPoints } from '../../lib/gamification'
 import { TIER_LABEL } from '../../lib/pdiTier'
 import { supabase } from '../../lib/supabase'
 import type {
+  GamificationLevel,
   PdiPlan,
   PdiTier,
   Profile,
@@ -53,7 +55,26 @@ export function AdminAnalytics() {
   const [skillGap, setSkillGap] = useState<
     { skill: string; autoavaliacao: number; moderador: number | null; gap: number | null }[]
   >([])
-  const [summary, setSummary] = useState({ alunos: 0, comPlano: 0, notaMediaQuiz: 0, taxaConclusaoGeral: 0 })
+  const [summary, setSummary] = useState({
+    alunos: 0,
+    comPlano: 0,
+    notaMediaQuiz: 0,
+    taxaConclusaoGeral: 0,
+    certificadosEmitidos: 0,
+    pontosMedios: 0,
+  })
+  const [students, setStudents] = useState<
+    {
+      id: string
+      nome: string
+      programa: string
+      pontos: number
+      nivel: string
+      cursosConcluidos: number
+      streak: number
+      ultimoAcesso: string
+    }[]
+  >([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -67,6 +88,8 @@ export function AdminAnalytics() {
         { data: trackPills },
         { data: skillCategories },
         { data: skillRatings },
+        { count: certificadosEmitidos },
+        levels,
       ] = await Promise.all([
         supabase.from('profiles').select('*').eq('role', 'aluno'),
         supabase.from('pdi_plans').select('*'),
@@ -76,6 +99,8 @@ export function AdminAnalytics() {
         supabase.from('track_pills').select('*'),
         supabase.from('skill_categories').select('*'),
         supabase.from('skill_ratings').select('*'),
+        supabase.from('issued_certificates').select('*', { count: 'exact', head: true }),
+        getLevels(),
       ])
 
       const profilesArr = (profiles as Profile[]) ?? []
@@ -164,8 +189,39 @@ export function AdminAnalytics() {
       const totalProgress = progressArr.length
       const totalCompleted = progressArr.filter((p) => p.status === 'completed').length
       const taxaConclusaoGeral = totalProgress ? Math.round((totalCompleted / totalProgress) * 100) : 0
+      const pontosMedios = cadastros
+        ? Math.round(profilesArr.reduce((sum, p) => sum + p.total_points, 0) / cadastros)
+        : 0
 
-      setSummary({ alunos: cadastros, comPlano, notaMediaQuiz, taxaConclusaoGeral })
+      const levelsArr = levels as GamificationLevel[]
+      const completedByUser = new Map<string, number>()
+      for (const row of progressArr) {
+        if (row.status !== 'completed') continue
+        completedByUser.set(row.user_id, (completedByUser.get(row.user_id) ?? 0) + 1)
+      }
+      setStudents(
+        profilesArr
+          .map((p) => ({
+            id: p.id,
+            nome: p.name,
+            programa: programMap.get(p.program_id ?? '') ?? '—',
+            pontos: p.total_points,
+            nivel: levelForPoints(p.total_points, levelsArr)?.name ?? '—',
+            cursosConcluidos: completedByUser.get(p.id) ?? 0,
+            streak: p.access_streak,
+            ultimoAcesso: p.last_access_date ? new Date(p.last_access_date).toLocaleDateString('pt-BR') : '—',
+          }))
+          .sort((a, b) => b.pontos - a.pontos),
+      )
+
+      setSummary({
+        alunos: cadastros,
+        comPlano,
+        notaMediaQuiz,
+        taxaConclusaoGeral,
+        certificadosEmitidos: certificadosEmitidos ?? 0,
+        pontosMedios,
+      })
       setLoading(false)
     }
     load()
@@ -175,11 +231,13 @@ export function AdminAnalytics() {
 
   return (
     <AdminLayout>
-      <div className="mb-6 grid gap-4 sm:grid-cols-4">
+      <div className="mb-6 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard label="Alunos cadastrados" value={summary.alunos} />
         <StatCard label="Com plano de PDI" value={summary.comPlano} />
         <StatCard label="Nota média de quiz" value={`${summary.notaMediaQuiz}%`} />
         <StatCard label="Taxa de conclusão geral" value={`${summary.taxaConclusaoGeral}%`} />
+        <StatCard label="Pontos médios" value={summary.pontosMedios} />
+        <StatCard label="Certificados emitidos" value={summary.certificadosEmitidos} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -301,6 +359,48 @@ export function AdminAnalytics() {
                 ))}
                 {skillGap.length === 0 && (
                   <tr><td colSpan={4} className="py-3 text-ink-soft">Sem dados ainda.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card p-5 lg:col-span-2">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-ink">Alunos — pontuação, nível e progresso</h2>
+            <CsvButton
+              filename="alunos.csv"
+              headers={['Nome', 'Programa', 'Pontos', 'Nível', 'Cursos concluídos', 'Streak de acesso', 'Último acesso']}
+              rows={students.map((s) => [s.nome, s.programa, s.pontos, s.nivel, s.cursosConcluidos, s.streak, s.ultimoAcesso])}
+            />
+          </div>
+          <div className="mt-4 max-h-96 overflow-y-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-xs uppercase text-ink-soft">
+                  <th className="pb-2">Aluno</th>
+                  <th className="pb-2">Programa</th>
+                  <th className="pb-2 text-right">Pontos</th>
+                  <th className="pb-2">Nível</th>
+                  <th className="pb-2 text-right">Cursos concluídos</th>
+                  <th className="pb-2 text-right">Streak</th>
+                  <th className="pb-2">Último acesso</th>
+                </tr>
+              </thead>
+              <tbody>
+                {students.map((s) => (
+                  <tr key={s.id} className="border-t border-navy-light/60">
+                    <td className="py-2 font-medium text-ink">{s.nome}</td>
+                    <td className="py-2 text-ink-soft">{s.programa}</td>
+                    <td className="py-2 text-right font-semibold text-navy">{s.pontos}</td>
+                    <td className="py-2 text-ink-soft">{s.nivel}</td>
+                    <td className="py-2 text-right text-ink-soft">{s.cursosConcluidos}</td>
+                    <td className="py-2 text-right text-ink-soft">{s.streak}</td>
+                    <td className="py-2 text-ink-soft">{s.ultimoAcesso}</td>
+                  </tr>
+                ))}
+                {students.length === 0 && (
+                  <tr><td colSpan={7} className="py-3 text-ink-soft">Sem dados ainda.</td></tr>
                 )}
               </tbody>
             </table>

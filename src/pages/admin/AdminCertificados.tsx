@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AdminLayout } from './AdminLayout'
+import { applyCertificateVariables } from '../../lib/certificate'
+import { getIssuedCertificates } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
-import type { Track } from '../../types/database'
+import type { IssuedCertificate, Track } from '../../types/database'
 
 const VARIABLES = [
   { token: '{NOME_COMPLETO}', label: 'Nome completo' },
@@ -18,12 +20,13 @@ const FONT_SIZES = [
   { value: '7', label: 'Título' },
 ]
 
-function applyVariables(html: string, track: Track) {
-  return html
-    .replaceAll('{NOME_COMPLETO}', 'Nome do Aluno')
-    .replaceAll('{NOME_DO_CURSO}', track.title)
-    .replaceAll('{CARGA_HORARIA_CURSO}', String(track.carga_horaria_total ?? '—'))
-    .replaceAll('{DATA_CONCLUSAO}', new Date().toLocaleDateString('pt-BR'))
+function previewVariables(html: string, track: Track) {
+  return applyCertificateVariables(html, {
+    nomeCompleto: 'Nome do Aluno',
+    nomeDoCurso: track.title,
+    cargaHorariaCurso: String(track.carga_horaria_total ?? '—'),
+    dataConclusao: new Date().toLocaleDateString('pt-BR'),
+  })
 }
 
 function RichTextEditor({ value, onChange }: { value: string; onChange: (html: string) => void }) {
@@ -131,12 +134,17 @@ function Divider() {
 
 export function AdminCertificados() {
   const [tracks, setTracks] = useState<Track[]>([])
+  const [issued, setIssued] = useState<IssuedCertificate[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   async function reload() {
-    const { data } = await supabase.from('tracks').select('*').order('title')
+    const [{ data }, issuedList] = await Promise.all([
+      supabase.from('tracks').select('*').order('title'),
+      getIssuedCertificates(),
+    ])
     setTracks((data as Track[]) ?? [])
+    setIssued(issuedList)
     setLoading(false)
   }
 
@@ -150,6 +158,52 @@ export function AdminCertificados() {
 
   return (
     <AdminLayout>
+      <details className="card mb-4 p-4">
+        <summary className="cursor-pointer font-bold text-ink">
+          Certificados emitidos <span className="font-normal text-ink-soft">({issued.length})</span>
+        </summary>
+        <p className="mt-1 text-sm text-ink-soft">
+          Cada certificado tem um código único; o aluno ou terceiros podem conferir a autenticidade em{' '}
+          <code>/validar-certificado</code>, sem precisar de login.
+        </p>
+        <div className="mt-3 max-h-80 overflow-y-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="text-xs uppercase text-ink-soft">
+                <th className="pb-2">Aluno</th>
+                <th className="pb-2">Curso</th>
+                <th className="pb-2">Código</th>
+                <th className="pb-2">Emitido em</th>
+                <th className="pb-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {issued.map((c) => (
+                <tr key={c.id} className="border-t border-navy-light/60">
+                  <td className="py-2 font-medium text-ink">{c.student_name}</td>
+                  <td className="py-2 text-ink-soft">{c.track_title}</td>
+                  <td className="py-2 font-mono text-xs text-ink-soft">{c.code}</td>
+                  <td className="py-2 text-ink-soft">{new Date(c.issued_at).toLocaleDateString('pt-BR')}</td>
+                  <td className="py-2 text-right">
+                    <a
+                      href={`/validar-certificado?codigo=${c.code}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-semibold text-navy hover:underline"
+                    >
+                      Ver validação
+                    </a>
+                  </td>
+                </tr>
+              ))}
+              {issued.length === 0 && (
+                <tr><td colSpan={5} className="py-3 text-ink-soft">Nenhum certificado emitido ainda.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </details>
+
       <div className="grid gap-4 md:grid-cols-[280px_1fr]">
         <div className="card max-h-[70vh] overflow-y-auto p-3">
           {tracks.map((t) => (
@@ -276,7 +330,7 @@ function CertificateEditor({ track, onSaved }: { track: Track; onSaved: () => vo
           <div
             className="max-w-lg text-sm font-medium text-ink"
             dangerouslySetInnerHTML={{
-              __html: applyVariables(message || 'Certificamos que {NOME_COMPLETO} concluiu o curso {NOME_DO_CURSO}.', track),
+              __html: previewVariables(message || 'Certificamos que {NOME_COMPLETO} concluiu o curso {NOME_DO_CURSO}.', track),
             }}
           />
         </div>

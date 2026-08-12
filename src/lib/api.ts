@@ -1,15 +1,18 @@
 import { supabase } from './supabase'
 import { computeTier } from './pdiTier'
 import { awardPoints } from './gamification'
+import { generateCertificateCode } from './certificate'
 import { notifyCourseCompleted, notifyPdiProgress } from './notifications'
 import type {
   Category,
   DashboardSection,
   DiagnosticProfile,
+  IssuedCertificate,
   PdiJornadaBucket,
   PdiPlan,
   PdiPlanItem,
   Pill,
+  PublicCertificate,
   SkillCategory,
   SkillRating,
   Track,
@@ -176,6 +179,67 @@ export async function getRecommendedPills(
   if (!track) return []
   const { pills } = await getTrackWithPills(track.id)
   return pills.filter((p) => progress[p.id]?.status !== 'completed')
+}
+
+// ---- Certificados emitidos (código único + validação pública) ----
+
+/** Busca o certificado já emitido pro par aluno/curso, ou emite um novo
+ * com um código único na primeira vez. O código nasce nessa emissão e
+ * nunca muda depois — é ele que sustenta a página pública de validação. */
+export async function getOrCreateCertificate(
+  userId: string,
+  trackId: string,
+  studentName: string,
+  trackTitle: string,
+  completedAt: string | null,
+): Promise<IssuedCertificate | null> {
+  const { data: existing } = await supabase
+    .from('issued_certificates')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('track_id', trackId)
+    .maybeSingle()
+  if (existing) return existing as IssuedCertificate
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data, error } = await supabase
+      .from('issued_certificates')
+      .insert({
+        code: generateCertificateCode(),
+        user_id: userId,
+        track_id: trackId,
+        student_name: studentName,
+        track_title: trackTitle,
+        completed_at: completedAt,
+      })
+      .select('*')
+      .single()
+    if (!error) return data as IssuedCertificate
+    // code colidiu (extremamente raro) — tenta de novo com outro; qualquer
+    // outro erro (ex.: alguém emitiu em paralelo) recupera pela busca.
+    if (error.code !== '23505') break
+  }
+  const { data: fallback } = await supabase
+    .from('issued_certificates')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('track_id', trackId)
+    .maybeSingle()
+  return (fallback as IssuedCertificate) ?? null
+}
+
+export async function getIssuedCertificates(): Promise<IssuedCertificate[]> {
+  const { data } = await supabase.from('issued_certificates').select('*').order('issued_at', { ascending: false })
+  return (data as IssuedCertificate[]) ?? []
+}
+
+export async function verifyCertificateByCode(code: string): Promise<PublicCertificate | null> {
+  const { data } = await supabase
+    .from('public_certificates')
+    .select('*')
+    .eq('code', code.trim().toUpperCase())
+    .maybeSingle()
+  return (data as PublicCertificate) ?? null
 }
 
 export async function completePill(

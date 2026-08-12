@@ -13,6 +13,7 @@ const LINKS = [
   { to: '/admin/gamificacao', label: 'Gamificação' },
   { to: '/admin/usuarios', label: 'Usuários' },
   { to: '/admin/analytics', label: 'Analytics' },
+  { to: '/admin/configuracoes', label: 'Configurações' },
 ]
 
 export function AdminLayout({ children }: { children: ReactNode }) {

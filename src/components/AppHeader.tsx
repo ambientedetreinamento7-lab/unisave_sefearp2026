@@ -1,12 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { colorForName, initials } from '../lib/avatar'
+import { getTrialSettings } from '../lib/settings'
 import { Icon } from './Icon'
 import { NotificationBell } from './NotificationBell'
-
-const TRIAL_DAYS = 14
 
 const NAV_LINKS = [
   { to: '/dashboard', label: 'Trilha' },
@@ -17,9 +16,9 @@ const NAV_LINKS = [
   { to: '/ranking', label: 'Ranking' },
 ]
 
-function daysLeft(createdAt: string) {
+function daysLeft(createdAt: string, trialDays: number) {
   const elapsed = Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000)
-  return Math.max(0, TRIAL_DAYS - elapsed)
+  return Math.max(0, trialDays - elapsed)
 }
 
 export function AppHeader() {
@@ -28,6 +27,14 @@ export function AppHeader() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [trial, setTrial] = useState<{ enabled: boolean; days: number } | null>(null)
+
+  useEffect(() => {
+    getTrialSettings().then(setTrial)
+  }, [])
+
+  const trialLabel =
+    trial?.enabled && profile ? `Degustação: ${daysLeft(profile.created_at, trial.days)}d restantes` : null
 
   const canSwitchViews = profile && profile.role !== 'aluno'
 
@@ -43,7 +50,7 @@ export function AppHeader() {
         {profile && (
           <div className="hidden leading-tight sm:block">
             <p className="max-w-[14rem] truncate text-sm font-bold uppercase tracking-wide">{profile.name}</p>
-            <p className="text-xs text-white/60">Degustação: {daysLeft(profile.created_at)}d restantes</p>
+            {trialLabel && <p className="text-xs text-white/60">{trialLabel}</p>}
           </div>
         )}
 
@@ -214,7 +221,7 @@ export function AppHeader() {
               </span>
               <span>
                 <p className="truncate text-sm font-bold uppercase tracking-wide">{profile.name}</p>
-                <p className="text-xs text-white/60">Meu Perfil · Degustação: {daysLeft(profile.created_at)}d restantes</p>
+                <p className="text-xs text-white/60">Meu Perfil{trialLabel ? ` · ${trialLabel}` : ''}</p>
               </span>
             </Link>
           )}

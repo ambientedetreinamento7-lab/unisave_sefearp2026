@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext'
 import { AdminAnalytics } from './pages/admin/AdminAnalytics'
 import { AdminCertificados } from './pages/admin/AdminCertificados'
 import { AdminComunidade } from './pages/admin/AdminComunidade'
+import { AdminConfiguracoes } from './pages/admin/AdminConfiguracoes'
 import { AdminGamificacao } from './pages/admin/AdminGamificacao'
 import { AdminGrade } from './pages/admin/AdminGrade'
 import { AdminProgramas } from './pages/admin/AdminProgramas'
@@ -27,6 +28,7 @@ import { Moderador } from './pages/moderador/Moderador'
 import { Entrar } from './pages/public/Entrar'
 import { Estande } from './pages/public/Estande'
 import { Resultado } from './pages/public/Resultado'
+import { ValidarCertificado } from './pages/public/ValidarCertificado'
 
 function App() {
   return (
@@ -37,6 +39,7 @@ function App() {
         <Route path="/estande" element={<Estande />} />
         <Route path="/resultado" element={<Resultado />} />
         <Route path="/entrar" element={<Entrar />} />
+        <Route path="/validar-certificado" element={<ValidarCertificado />} />
 
         <Route
           path="/dashboard"
@@ -213,6 +216,14 @@ function App() {
           element={
             <RouteGuard allow={['admin']}>
               <AdminAnalytics />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/admin/configuracoes"
+          element={
+            <RouteGuard allow={['admin']}>
+              <AdminConfiguracoes />
             </RouteGuard>
           }
         />
