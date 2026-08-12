@@ -49,6 +49,49 @@ export async function getTrackWithPills(trackId: string) {
   return { track: track as Track | null, pills }
 }
 
+/** For a batch of pill.track_id values, resolves which ones are real "Curso
+ * com Módulos" (non-catalog, sequential, 2+ pills) — as opposed to a
+ * catalog shelf pill or a curated trilha (many independent, freely browsed
+ * pills, not meant to collapse into a single card). Used to group a pill
+ * list into one card per course instead of one card per module. */
+export async function getMultiModuleTracks(
+  trackIds: (string | null | undefined)[],
+): Promise<Map<string, { track: Track; pills: Pill[] }>> {
+  const uniqueIds = [...new Set(trackIds.filter((id): id is string => !!id))]
+  const result = new Map<string, { track: Track; pills: Pill[] }>()
+  if (uniqueIds.length === 0) return result
+
+  const { data: tracks } = await supabase
+    .from('tracks')
+    .select('*')
+    .in('id', uniqueIds)
+    .eq('is_catalog', false)
+    .eq('sequential', true)
+  const sequentialTracks = (tracks as Track[] | null) ?? []
+  if (sequentialTracks.length === 0) return result
+
+  const { data: links } = await supabase
+    .from('track_pills')
+    .select('track_id, order_index, pills(*)')
+    .in(
+      'track_id',
+      sequentialTracks.map((t) => t.id),
+    )
+    .order('order_index')
+  const pillsByTrack = new Map<string, Pill[]>()
+  for (const row of (links as { track_id: string; pills: Pill }[] | null) ?? []) {
+    if (!row.pills) continue
+    const arr = pillsByTrack.get(row.track_id) ?? []
+    arr.push(row.pills)
+    pillsByTrack.set(row.track_id, arr)
+  }
+  for (const track of sequentialTracks) {
+    const pills = pillsByTrack.get(track.id) ?? []
+    if (pills.length > 1) result.set(track.id, { track, pills })
+  }
+  return result
+}
+
 export async function getUserProgressMap(userId: string): Promise<Record<string, UserProgress>> {
   const { data } = await supabase.from('user_progress').select('*').eq('user_id', userId)
   const map: Record<string, UserProgress> = {}

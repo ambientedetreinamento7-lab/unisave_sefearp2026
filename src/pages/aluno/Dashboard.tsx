@@ -13,6 +13,7 @@ import {
   getFavoritePills,
   getInProgressPills,
   getMostAccessedPills,
+  getMultiModuleTracks,
   getRecentlyAddedPills,
   getRecommendedPills,
   getRequiredPills,
@@ -43,6 +44,7 @@ export function Dashboard() {
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
   const [sections, setSections] = useState<DashboardSection[]>([])
   const [sectionPills, setSectionPills] = useState<Record<string, Pill[]>>({})
+  const [multiModuleTracks, setMultiModuleTracks] = useState<Map<string, { track: Track; pills: Pill[] }>>(new Map())
 
   useEffect(() => {
     if (!profile) return
@@ -80,14 +82,24 @@ export function Dashboard() {
         getRequiredPills(),
       ])
       if (cancelled) return
-      setSectionPills({
+      const sectionPillsResult = {
         em_andamento: inProgress,
         recomendados: recommendedPills,
         recentes: recent,
         favoritos: favorites,
         mais_acessados: mostAccessed,
         obrigatorios: required,
-      })
+      }
+      setSectionPills(sectionPillsResult)
+
+      // "Curso com Módulos" (trilha sequencial com 2+ pílulas) deve aparecer
+      // como 1 card por curso em vez de 1 card por módulo — diferente de
+      // uma trilha curada comum, cujas pílulas continuam sendo browsáveis
+      // individualmente (não é sequencial).
+      const allTrackIds = [...pills, ...Object.values(sectionPillsResult).flat()].map((p) => p.track_id)
+      const tracksMap = await getMultiModuleTracks(allTrackIds)
+      if (!cancelled) setMultiModuleTracks(tracksMap)
+
       setLoading(false)
     }
     load()
@@ -148,6 +160,11 @@ export function Dashboard() {
       return true
     })
   }, [allPills, selectedCategoryId, catalogSearch])
+
+  const catalogCards = useMemo(
+    () => collapseToCourseCards(filteredCatalog, multiModuleTracks),
+    [filteredCatalog, multiModuleTracks],
+  )
 
   if (loading) {
     return (
@@ -220,6 +237,7 @@ export function Dashboard() {
                       progress={progress}
                       favoriteIds={favoriteIds}
                       onToggleFavorite={handleToggleFavorite}
+                      multiModuleTracks={multiModuleTracks}
                     />
                   ))}
                 {sections.filter((s) => s.enabled && (sectionPills[s.key]?.length ?? 0) > 0).length === 0 && (
@@ -261,16 +279,16 @@ export function Dashboard() {
                 </div>
 
                 <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {filteredCatalog.map((pill) => (
+                  {catalogCards.map((item) => (
                     <CourseCard
-                      key={pill.id}
-                      pill={pill}
-                      status={progress[pill.id]?.status ?? 'not_started'}
-                      favorited={favoriteIds.has(pill.id)}
-                      onToggleFavorite={() => handleToggleFavorite(pill.id)}
+                      key={item.kind === 'pill' ? item.pill.id : item.track.id}
+                      item={item}
+                      progress={progress}
+                      favorited={item.kind === 'pill' ? favoriteIds.has(item.pill.id) : undefined}
+                      onToggleFavorite={item.kind === 'pill' ? () => handleToggleFavorite(item.pill.id) : undefined}
                     />
                   ))}
-                  {filteredCatalog.length === 0 && <p className="col-span-full text-ink-soft">Nenhum curso encontrado.</p>}
+                  {catalogCards.length === 0 && <p className="col-span-full text-ink-soft">Nenhum curso encontrado.</p>}
                 </div>
               </div>
             )}
@@ -353,30 +371,58 @@ const ACTION_LABEL: Record<UserProgress['status'], string> = {
   not_started: 'Iniciar',
 }
 
+type DisplayCard = { kind: 'pill'; pill: Pill } | { kind: 'course'; track: Track; modules: Pill[] }
+
+/** Colapsa uma lista de pílulas em cards de exibição: pílulas de um "Curso
+ * com Módulos" (trilha sequencial, 2+ pílulas) viram 1 card de curso só
+ * (dedupado), enquanto pílulas avulsas ou de trilhas curadas comuns
+ * continuam 1 card por pílula, como sempre. */
+function collapseToCourseCards(
+  pills: Pill[],
+  multiModuleTracks: Map<string, { track: Track; pills: Pill[] }>,
+): DisplayCard[] {
+  const seenTracks = new Set<string>()
+  const cards: DisplayCard[] = []
+  for (const pill of pills) {
+    const group = multiModuleTracks.get(pill.track_id)
+    if (group) {
+      if (seenTracks.has(group.track.id)) continue
+      seenTracks.add(group.track.id)
+      cards.push({ kind: 'course', track: group.track, modules: group.pills })
+    } else {
+      cards.push({ kind: 'pill', pill })
+    }
+  }
+  return cards
+}
+
 function CourseRow({
   title,
   pills,
   progress,
   favoriteIds,
   onToggleFavorite,
+  multiModuleTracks,
 }: {
   title: string
   pills: Pill[]
   progress: Record<string, UserProgress>
   favoriteIds: Set<string>
   onToggleFavorite: (pillId: string) => void
+  multiModuleTracks: Map<string, { track: Track; pills: Pill[] }>
 }) {
+  const cards = collapseToCourseCards(pills, multiModuleTracks)
   return (
     <section>
       <h2 className="text-lg font-bold text-ink">{title}</h2>
       <div className="mt-3 flex gap-4 overflow-x-auto pb-1">
-        {pills.map((pill) => (
-          <div key={pill.id} className="w-64 shrink-0">
+        {cards.map((item) => (
+          <div key={item.kind === 'pill' ? item.pill.id : item.track.id} className="w-64 shrink-0">
             <CourseCard
-              pill={pill}
-              status={progress[pill.id]?.status ?? 'not_started'}
-              favorited={favoriteIds.has(pill.id)}
-              onToggleFavorite={() => onToggleFavorite(pill.id)}
+              item={item}
+              progress={progress}
+              favorited={item.kind === 'pill' ? favoriteIds.has(item.pill.id) : undefined}
+              onToggleFavorite={item.kind === 'pill' ? () => onToggleFavorite(item.pill.id) : undefined}
             />
           </div>
         ))}
@@ -386,16 +432,37 @@ function CourseRow({
 }
 
 function CourseCard({
-  pill,
-  status,
+  item,
+  progress,
   favorited,
   onToggleFavorite,
 }: {
-  pill: Pill
-  status: UserProgress['status']
+  item: DisplayCard
+  progress: Record<string, UserProgress>
   favorited?: boolean
   onToggleFavorite?: () => void
 }) {
+  const isCourse = item.kind === 'course'
+  const title = isCourse ? item.track.title : item.pill.title
+  const description = isCourse ? item.track.description : item.pill.description
+  const thumbnailUrl = isCourse ? item.track.thumbnail_url ?? item.track.cover_url : item.pill.thumbnail_url
+  const axis = isCourse ? null : item.pill.axis
+  const metaLine = isCourse
+    ? `${item.modules.length} módulos${item.track.carga_horaria_total ? ` · ${item.track.carga_horaria_total}h` : ''}`
+    : `${item.pill.axis} · ${item.pill.duration}`
+
+  let status: UserProgress['status'] = 'not_started'
+  let linkTargetId: string
+  if (isCourse) {
+    const completed = item.modules.filter((m) => progress[m.id]?.status === 'completed')
+    const started = item.modules.some((m) => progress[m.id]?.status !== undefined)
+    status = completed.length === item.modules.length ? 'completed' : started ? 'in_progress' : 'not_started'
+    linkTargetId = (item.modules.find((m) => progress[m.id]?.status !== 'completed') ?? item.modules[0]).id
+  } else {
+    status = progress[item.pill.id]?.status ?? 'not_started'
+    linkTargetId = item.pill.id
+  }
+
   return (
     <div className="card relative flex h-full flex-col gap-3 p-4 transition hover:card-highlight">
       {onToggleFavorite && (
@@ -411,21 +478,19 @@ function CourseCard({
           <Icon name={favorited ? 'heart-filled' : 'heart'} size={14} className={favorited ? 'text-brand-red' : undefined} />
         </button>
       )}
-      <Link to={`/curso/${pill.id}`} className="flex flex-1 flex-col gap-3">
-        {pill.thumbnail_url ? (
-          <img src={pill.thumbnail_url} alt="" className="-mx-4 -mt-4 h-28 w-[calc(100%+2rem)] rounded-t-2xl object-cover" />
+      <Link to={`/curso/${linkTargetId}`} className="flex flex-1 flex-col gap-3">
+        {thumbnailUrl ? (
+          <img src={thumbnailUrl} alt="" className="-mx-4 -mt-4 h-28 w-[calc(100%+2rem)] rounded-t-2xl object-cover" />
         ) : (
-          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${colorForAxis(pill.axis)}`}>
+          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${colorForAxis(axis)}`}>
             <Icon name="book" size={18} />
           </span>
         )}
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">
-            {pill.axis} · {pill.duration}
-          </p>
-          <h3 className="mt-0.5 font-bold text-ink">{pill.title}</h3>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{metaLine}</p>
+          <h3 className="mt-0.5 font-bold text-ink">{title}</h3>
         </div>
-        {pill.description && <p className="line-clamp-2 text-sm text-ink-soft">{pill.description}</p>}
+        {description && <p className="line-clamp-2 text-sm text-ink-soft">{description}</p>}
         <div className="mt-auto flex items-center justify-end pt-2">
           <span className="flex items-center gap-1.5 rounded-full bg-brand-red px-3.5 py-1.5 text-xs font-bold text-white">
             {ACTION_LABEL[status]}
