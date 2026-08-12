@@ -93,12 +93,16 @@ export function CoursePlayer() {
   }, [id, profile])
 
   const handleScormProgress = useCallback(
-    async (status: 'in_progress' | 'completed', score: number | null) => {
+    async (
+      status: 'in_progress' | 'completed',
+      score: number | null,
+      bookmark: { location: string; suspendData: string },
+    ) => {
       if (!profile || !id) return
       if (status === 'completed') {
-        await completePill(profile.id, id, score, pill?.title ?? 'Curso', pill?.points_override)
+        await completePill(profile.id, id, score, pill?.title ?? 'Curso', pill?.points_override, bookmark)
       } else {
-        await markPillInProgress(profile.id, id)
+        await markPillInProgress(profile.id, id, bookmark)
       }
     },
     [profile, id, pill],
@@ -171,6 +175,8 @@ export function CoursePlayer() {
               <ScormPlayer
                 packageUrl={scormSource.packageUrl}
                 manifestPath={scormSource.manifestPath}
+                initialLocation={progress?.scorm_location}
+                initialSuspendData={progress?.scorm_suspend_data}
                 onProgress={handleScormProgress}
               />
             )}

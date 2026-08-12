@@ -204,6 +204,11 @@ create table user_progress (
   status pill_status not null default 'not_started',
   quiz_score numeric,
   completed_at timestamptz,
+  -- Bookmark do player SCORM (cmi.core.lesson_location / cmi.suspend_data),
+  -- gravado a cada LMSCommit — é o que permite retomar exatamente de onde
+  -- parou em vez de reiniciar o pacote do zero a cada entrada no curso.
+  scorm_location text,
+  scorm_suspend_data text,
   unique (user_id, pill_id)
 );
 

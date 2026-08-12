@@ -169,6 +169,8 @@ export interface UserProgress {
   status: PillStatus
   quiz_score: number | null
   completed_at: string | null
+  scorm_location: string | null
+  scorm_suspend_data: string | null
 }
 
 export interface Quiz {

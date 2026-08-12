@@ -7,17 +7,28 @@ import type { Scorm12API as Scorm12APIType } from 'scorm-again'
  * imsmanifest entry point, so the package's internal
  * LMSSetValue/LMSCommit calls resolve.
  *
- * Wire `onProgress` to persist cmi.core.lesson_status / score.raw into
- * `user_progress` (see spec section 10.4).
+ * Preloads cmi.core.lesson_location / cmi.suspend_data from the last
+ * saved bookmark before the package boots, so it resumes where the
+ * student left off instead of restarting from the first slide — and
+ * reports the current location/suspend_data back on every commit so
+ * `onProgress` can persist it.
  */
 export function ScormPlayer({
   packageUrl,
   manifestPath,
+  initialLocation,
+  initialSuspendData,
   onProgress,
 }: {
   packageUrl: string
   manifestPath: string
-  onProgress: (status: 'in_progress' | 'completed', score: number | null) => void
+  initialLocation?: string | null
+  initialSuspendData?: string | null
+  onProgress: (
+    status: 'in_progress' | 'completed',
+    score: number | null,
+    bookmark: { location: string; suspendData: string },
+  ) => void
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
@@ -28,12 +39,18 @@ export function ScormPlayer({
     async function init() {
       const { Scorm12API } = await import('scorm-again')
       api = new Scorm12API({ autocommit: true, logLevel: 1 })
+      if (initialLocation) api.cmi.core.lesson_location = initialLocation
+      if (initialSuspendData) api.cmi.suspend_data = initialSuspendData
+      api.cmi.core.entry = initialLocation ? 'resume' : 'ab-initio'
       api.on('LMSCommit', () => {
         if (!api || cancelled) return
         const status = api.cmi.core.lesson_status
         const raw = api.cmi.core.score.raw
         const score = raw !== '' ? Number(raw) : null
-        onProgress(status === 'completed' || status === 'passed' ? 'completed' : 'in_progress', score)
+        onProgress(status === 'completed' || status === 'passed' ? 'completed' : 'in_progress', score, {
+          location: api.cmi.core.lesson_location,
+          suspendData: api.cmi.suspend_data,
+        })
       })
       ;(window as unknown as { API: Scorm12APIType }).API = api
     }
@@ -41,9 +58,13 @@ export function ScormPlayer({
     init()
     return () => {
       cancelled = true
+      // Flush o estado mais recente antes do iframe ser desmontado (troca
+      // de curso, saída da página) — sem isso, o autocommit de 10s pode
+      // perder os últimos segundos de progresso do aluno.
+      api?.LMSCommit('')
       if (api) delete (window as { API?: Scorm12APIType }).API
     }
-  }, [onProgress])
+  }, [initialLocation, initialSuspendData, onProgress])
 
   const entryUrl = `${packageUrl.replace(/\/$/, '')}/${manifestPath.replace(/^\//, '')}`
 
@@ -53,7 +74,13 @@ export function ScormPlayer({
       src={entryUrl}
       title="Conteúdo SCORM"
       className="h-full w-full rounded-xl border-0"
-      sandbox="allow-scripts allow-same-origin allow-forms"
+      // Some SCORM packages (e.g. cloud-hosted players like Lizza/SmartLMS)
+      // nest a second iframe to stream remote content and use fullscreen /
+      // external links — sandbox flags propagate to that nested frame, so
+      // these need to be allowed here too, not just at the top level.
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-fullscreen"
+      allow="fullscreen"
+      allowFullScreen
     />
   )
 }

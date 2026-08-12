@@ -83,7 +83,11 @@ export async function getCatalogPills(): Promise<Pill[]> {
   return ((data as { pills: Pill }[] | null) ?? []).map((r) => r.pills).filter(Boolean)
 }
 
-export async function markPillInProgress(userId: string, pillId: string) {
+export async function markPillInProgress(
+  userId: string,
+  pillId: string,
+  bookmark?: { location: string; suspendData: string },
+) {
   const { data: existing } = await supabase
     .from('user_progress')
     .select('id')
@@ -91,9 +95,15 @@ export async function markPillInProgress(userId: string, pillId: string) {
     .eq('pill_id', pillId)
     .maybeSingle()
 
-  await supabase
-    .from('user_progress')
-    .upsert({ user_id: userId, pill_id: pillId, status: 'in_progress' }, { onConflict: 'user_id,pill_id' })
+  await supabase.from('user_progress').upsert(
+    {
+      user_id: userId,
+      pill_id: pillId,
+      status: 'in_progress',
+      ...(bookmark ? { scorm_location: bookmark.location, scorm_suspend_data: bookmark.suspendData } : {}),
+    },
+    { onConflict: 'user_id,pill_id' },
+  )
   await awardPoints(userId, 'pill_started', pillId)
 
   // Só conta pra "Mais acessados" na primeira vez desse aluno nessa
@@ -248,6 +258,7 @@ export async function completePill(
   score: number | null,
   pillTitle: string,
   pointsOverride?: number | null,
+  bookmark?: { location: string; suspendData: string },
 ) {
   const { data: existing } = await supabase
     .from('user_progress')
@@ -264,6 +275,7 @@ export async function completePill(
       status: 'completed',
       quiz_score: score,
       completed_at: new Date().toISOString(),
+      ...(bookmark ? { scorm_location: bookmark.location, scorm_suspend_data: bookmark.suspendData } : {}),
     },
     { onConflict: 'user_id,pill_id' },
   )
