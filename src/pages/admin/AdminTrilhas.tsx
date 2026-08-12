@@ -502,6 +502,7 @@ function TrackFormModal({
   const [preRequisitos, setPreRequisitos] = useState(track?.pre_requisitos ?? '')
   const [cargaHoraria, setCargaHoraria] = useState(track?.carga_horaria_total?.toString() ?? '')
   const [certificateEnabled, setCertificateEnabled] = useState(track?.certificate_enabled ?? false)
+  const [sequential, setSequential] = useState(track?.sequential ?? false)
   const [published, setPublished] = useState(track?.published ?? true)
   const [programId, setProgramId] = useState(track?.program_id ?? programs[0]?.id ?? '')
   const [profile, setProfile] = useState<DiagnosticProfile>(track?.diagnostic_profile ?? 'autogestao')
@@ -525,6 +526,7 @@ function TrackFormModal({
         pre_requisitos: preRequisitos || null,
         carga_horaria_total: cargaHoraria ? Number(cargaHoraria) : null,
         certificate_enabled: certificateEnabled,
+        sequential,
         published,
         program_id: programId,
         diagnostic_profile: profile,
@@ -597,6 +599,11 @@ function TrackFormModal({
         <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
           <input type="checkbox" checked={certificateEnabled} onChange={(e) => setCertificateEnabled(e.target.checked)} />
           Emite certificado ao concluir 100% das pílulas do curso
+        </label>
+
+        <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
+          <input type="checkbox" checked={sequential} onChange={(e) => setSequential(e.target.checked)} />
+          Módulos sequenciais (só libera o próximo após concluir o anterior)
         </label>
 
         <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">

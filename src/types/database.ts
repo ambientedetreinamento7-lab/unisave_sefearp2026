@@ -12,6 +12,8 @@ export type SocialScope = 'global' | 'curso'
 export type SocialPostType = 'texto' | 'imagem' | 'carrossel' | 'enquete' | 'video'
 export type SocialStoryMediaType = 'imagem' | 'video'
 export type NotificationType = 'reaction' | 'course_completed' | 'pdi_progress' | 'points'
+export type QuestionType = 'single_choice' | 'multiple_choice' | 'true_false' | 'open_text'
+export type ReactionQuestionType = 'likert5' | 'nps' | 'open_text'
 
 export interface Profile {
   id: string
@@ -73,6 +75,7 @@ export interface Track {
   certificate_message: string | null
   published: boolean
   is_catalog: boolean
+  sequential: boolean
 }
 
 export interface TrackPill {
@@ -183,8 +186,39 @@ export interface QuizQuestion {
   id: string
   quiz_id: string
   question_text: string
+  question_type: QuestionType
   options: string[]
-  correct_option_index: number
+  correct_option_index: number | null
+  correct_option_indexes: number[] | null
+  order_index: number
+}
+
+export interface ReactionSurvey {
+  id: string
+  pill_id: string
+}
+
+export interface ReactionQuestion {
+  id: string
+  survey_id: string
+  question_text: string
+  question_type: ReactionQuestionType
+  order_index: number
+}
+
+export interface ReactionResponse {
+  id: string
+  survey_id: string
+  user_id: string
+  submitted_at: string
+}
+
+export interface ReactionAnswer {
+  id: string
+  response_id: string
+  question_id: string
+  value_number: number | null
+  value_text: string | null
 }
 
 export interface SkillRating {
@@ -365,6 +399,10 @@ export interface Database {
       user_progress: { Row: UserProgress; Insert: Partial<UserProgress>; Update: Partial<UserProgress> }
       quizzes: { Row: Quiz; Insert: Partial<Quiz>; Update: Partial<Quiz> }
       questions: { Row: QuizQuestion; Insert: Partial<QuizQuestion>; Update: Partial<QuizQuestion> }
+      reaction_surveys: { Row: ReactionSurvey; Insert: Partial<ReactionSurvey>; Update: Partial<ReactionSurvey> }
+      reaction_questions: { Row: ReactionQuestion; Insert: Partial<ReactionQuestion>; Update: Partial<ReactionQuestion> }
+      reaction_responses: { Row: ReactionResponse; Insert: Partial<ReactionResponse>; Update: Partial<ReactionResponse> }
+      reaction_answers: { Row: ReactionAnswer; Insert: Partial<ReactionAnswer>; Update: Partial<ReactionAnswer> }
       skill_ratings: { Row: SkillRating; Insert: Partial<SkillRating>; Update: Partial<SkillRating> }
       pdi_plans: { Row: PdiPlan; Insert: Partial<PdiPlan>; Update: Partial<PdiPlan> }
       pdi_plan_items: { Row: PdiPlanItem; Insert: Partial<PdiPlanItem>; Update: Partial<PdiPlanItem> }

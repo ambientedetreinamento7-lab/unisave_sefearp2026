@@ -4,7 +4,7 @@ import { AppHeader } from '../../components/AppHeader'
 import { Icon } from '../../components/Icon'
 import { ScormPlayer } from '../../components/ScormPlayer'
 import { useAuth } from '../../context/AuthContext'
-import { completePill, markPillInProgress } from '../../lib/api'
+import { completePill, getBlockingPill, getReactionSurveyForPill, hasSubmittedReaction, markPillInProgress } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import type { Pill, ScormLibraryItem, UserProgress } from '../../types/database'
 
@@ -17,7 +17,10 @@ export function CoursePlayer() {
   const [progress, setProgress] = useState<UserProgress | null>(null)
   const [loading, setLoading] = useState(true)
   const [unavailable, setUnavailable] = useState(false)
+  const [blockedBy, setBlockedBy] = useState<string | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [reactionSurveyId, setReactionSurveyId] = useState<string | null>(null)
+  const [reactionSubmitted, setReactionSubmitted] = useState(false)
   const playerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -66,6 +69,14 @@ export function CoursePlayer() {
         return
       }
 
+      const blocking = await getBlockingPill(pillRow, profile!.id)
+      if (cancelled) return
+      setBlockedBy(blocking?.title ?? null)
+      if (blocking) {
+        setLoading(false)
+        return
+      }
+
       // Prefer the SCORM Library entry when the pill references one — that
       // way updating the library package automatically reaches every pill
       // pointing to it, instead of each pill carrying its own stale copy.
@@ -81,6 +92,12 @@ export function CoursePlayer() {
         } else if (pillRow.scorm_package_url && pillRow.scorm_manifest_path) {
           setScormSource({ packageUrl: pillRow.scorm_package_url, manifestPath: pillRow.scorm_manifest_path })
         }
+      }
+
+      const reactionSurvey = await getReactionSurveyForPill(pillRow.id)
+      if (!cancelled && reactionSurvey) {
+        setReactionSurveyId(reactionSurvey.survey.id)
+        setReactionSubmitted(await hasSubmittedReaction(reactionSurvey.survey.id, profile!.id))
       }
 
       setLoading(false)
@@ -124,6 +141,24 @@ export function CoursePlayer() {
         <div className="mx-auto max-w-lg px-4 py-16 text-center">
           <h1 className="text-xl font-bold text-ink">Este curso não está disponível no momento</h1>
           <p className="mt-2 text-ink-soft">A trilha que continha este curso foi despublicada pelo admin.</p>
+          <Link to="/dashboard" className="mt-6 inline-block rounded-xl bg-navy px-5 py-2.5 font-semibold text-white">
+            Voltar ao painel
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  if (blockedBy) {
+    return (
+      <div className="min-h-screen bg-bg">
+        <AppHeader />
+        <div className="mx-auto max-w-lg px-4 py-16 text-center">
+          <span className="text-3xl">🔒</span>
+          <h1 className="mt-3 text-xl font-bold text-ink">Este curso segue uma ordem sequencial</h1>
+          <p className="mt-2 text-ink-soft">
+            Conclua o módulo "{blockedBy}" antes de acessar "{pill.title}".
+          </p>
           <Link to="/dashboard" className="mt-6 inline-block rounded-xl bg-navy px-5 py-2.5 font-semibold text-white">
             Voltar ao painel
           </Link>
@@ -204,6 +239,27 @@ export function CoursePlayer() {
                 ? 'Módulo SCORM concluído ✓'
                 : 'O progresso deste módulo SCORM é registrado automaticamente pelo pacote.'}
             </p>
+          )}
+
+          {isCompleted && reactionSurveyId && (
+            <div className="card mt-4 flex flex-wrap items-center justify-between gap-3 p-4">
+              <div>
+                <p className="font-semibold text-ink">
+                  {reactionSubmitted ? 'Avaliação de reação enviada ✓' : 'Como foi sua experiência com este módulo?'}
+                </p>
+                {!reactionSubmitted && (
+                  <p className="text-sm text-ink-soft">Leva menos de um minuto e ajuda a melhorar o conteúdo.</p>
+                )}
+              </div>
+              {!reactionSubmitted && (
+                <button
+                  onClick={() => navigate(`/curso/${id}/reacao`)}
+                  className="shrink-0 rounded-xl bg-navy px-4 py-2.5 text-sm font-bold text-white hover:bg-navy-dark"
+                >
+                  Avaliar módulo
+                </button>
+              )}
+            </div>
           )}
         </div>
 

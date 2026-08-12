@@ -13,6 +13,8 @@ import type {
   PdiPlanItem,
   Pill,
   PublicCertificate,
+  ReactionQuestion,
+  ReactionSurvey,
   SkillCategory,
   SkillRating,
   Track,
@@ -332,10 +334,124 @@ async function recomputePlanProgress(planId: string) {
   await supabase.from('pdi_plans').update({ progress_pct: pct }).eq('id', planId)
 }
 
-export function trackProgressPct(pills: Pill[], progress: Record<string, UserProgress>) {
-  if (pills.length === 0) return 0
-  const done = pills.filter((p) => progress[p.id]?.status === 'completed').length
-  return Math.round((done / pills.length) * 100)
+/** A pílula com pesquisa de reação habilitada conta como mais um item na
+ * conclusão da trilha (spec: reação "além da pílula", soma no %) — por
+ * isso o total considera pills.length + quantas têm reactionStatus. */
+export function trackProgressPct(
+  pills: Pill[],
+  progress: Record<string, UserProgress>,
+  reactionStatus?: { enabledPillIds: Set<string>; submittedPillIds: Set<string> },
+) {
+  const reactionItems = reactionStatus ? pills.filter((p) => reactionStatus.enabledPillIds.has(p.id)) : []
+  const total = pills.length + reactionItems.length
+  if (total === 0) return 0
+  const donePills = pills.filter((p) => progress[p.id]?.status === 'completed').length
+  const doneReactions = reactionItems.filter((p) => reactionStatus!.submittedPillIds.has(p.id)).length
+  return Math.round(((donePills + doneReactions) / total) * 100)
+}
+
+// ---- Avaliação de Reação (Kirkpatrick nível 1) ----
+
+export async function getReactionStatus(
+  pillIds: string[],
+  userId: string,
+): Promise<{ enabledPillIds: Set<string>; submittedPillIds: Set<string> }> {
+  if (pillIds.length === 0) return { enabledPillIds: new Set(), submittedPillIds: new Set() }
+  const { data } = await supabase.from('reaction_surveys').select('id, pill_id').in('pill_id', pillIds)
+  const surveys = (data as { id: string; pill_id: string }[]) ?? []
+  const enabledPillIds = new Set(surveys.map((s) => s.pill_id))
+  if (surveys.length === 0) return { enabledPillIds, submittedPillIds: new Set() }
+
+  const { data: responses } = await supabase
+    .from('reaction_responses')
+    .select('survey_id')
+    .eq('user_id', userId)
+    .in(
+      'survey_id',
+      surveys.map((s) => s.id),
+    )
+  const respondedSurveyIds = new Set(((responses as { survey_id: string }[]) ?? []).map((r) => r.survey_id))
+  const submittedPillIds = new Set(surveys.filter((s) => respondedSurveyIds.has(s.id)).map((s) => s.pill_id))
+  return { enabledPillIds, submittedPillIds }
+}
+
+export async function getReactionSurveyForPill(
+  pillId: string,
+): Promise<{ survey: ReactionSurvey; questions: ReactionQuestion[] } | null> {
+  const { data: survey } = await supabase.from('reaction_surveys').select('*').eq('pill_id', pillId).maybeSingle()
+  if (!survey) return null
+  const { data: questions } = await supabase
+    .from('reaction_questions')
+    .select('*')
+    .eq('survey_id', survey.id)
+    .order('order_index')
+  return { survey: survey as ReactionSurvey, questions: (questions as ReactionQuestion[]) ?? [] }
+}
+
+export async function hasSubmittedReaction(surveyId: string, userId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('reaction_responses')
+    .select('id')
+    .eq('survey_id', surveyId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  return !!data
+}
+
+export async function submitReactionResponse(
+  surveyId: string,
+  userId: string,
+  answers: { questionId: string; valueNumber?: number | null; valueText?: string | null }[],
+) {
+  const { data: response, error } = await supabase
+    .from('reaction_responses')
+    .insert({ survey_id: surveyId, user_id: userId })
+    .select('id')
+    .single()
+  if (error) throw error
+  if (answers.length === 0) return
+  await supabase.from('reaction_answers').insert(
+    answers.map((a) => ({
+      response_id: response.id,
+      question_id: a.questionId,
+      value_number: a.valueNumber ?? null,
+      value_text: a.valueText ?? null,
+    })),
+  )
+}
+
+/** Se a trilha "dona" da pílula (pills.track_id) exige ordem sequencial,
+ * retorna o título da primeira pílula anterior ainda não concluída — ou
+ * null se o módulo já pode ser acessado. */
+export async function getBlockingPill(pill: Pill, userId: string): Promise<{ title: string } | null> {
+  if (!pill.track_id) return null
+  const { data: track } = await supabase.from('tracks').select('sequential').eq('id', pill.track_id).maybeSingle()
+  if (!track?.sequential) return null
+
+  const { data: links } = await supabase
+    .from('track_pills')
+    .select('order_index, pills(id, title)')
+    .eq('track_id', pill.track_id)
+    .order('order_index')
+  const ordered = (
+    (links as unknown as { order_index: number; pills: { id: string; title: string } | null }[]) ?? []
+  ).filter((l): l is { order_index: number; pills: { id: string; title: string } } => !!l.pills)
+  const currentIndex = ordered.findIndex((l) => l.pills.id === pill.id)
+  if (currentIndex <= 0) return null
+
+  const priorIds = ordered.slice(0, currentIndex).map((l) => l.pills.id)
+  const { data: progressRows } = await supabase
+    .from('user_progress')
+    .select('pill_id, status')
+    .eq('user_id', userId)
+    .in('pill_id', priorIds)
+  const completedIds = new Set(
+    ((progressRows as { pill_id: string; status: string }[]) ?? [])
+      .filter((r) => r.status === 'completed')
+      .map((r) => r.pill_id),
+  )
+  const blocking = ordered.slice(0, currentIndex).find((l) => !completedIds.has(l.pills.id))
+  return blocking ? { title: blocking.pills.title } : null
 }
 
 // ---- PDI plans ----

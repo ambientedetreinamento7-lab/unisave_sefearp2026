@@ -88,7 +88,13 @@ create table tracks (
   -- never picked up by the /estande recommendation match on
   -- (program_id, diagnostic_profile) — it only reaches a student's PDI if
   -- they add a course from it themselves (spec: biblioteca de cursos).
-  is_catalog boolean not null default false
+  is_catalog boolean not null default false,
+  -- When true, a pill only unlocks once every earlier pill (by
+  -- track_pills.order_index, within this pill's home track — pills.track_id)
+  -- is completed (spec: módulos sequenciais ou não). Gating lives in
+  -- CoursePlayer, not RLS — enforcing it in Postgres would need the
+  -- whole ordered progress chain re-derived on every read.
+  sequential boolean not null default false
 );
 
 -- Many-to-many: which pills (cursos) belong to which trilhas. A pill keeps
@@ -227,12 +233,62 @@ create table quizzes (
   min_pass_score numeric not null default 70
 );
 
+-- Tipos de pergunta da "avaliação de conhecimento" (Kirkpatrick nível 2 —
+-- aprendizagem): reconhecimento (única/múltipla escolha, verdadeiro ou
+-- falso) e reflexão aberta (não pontuada, só registrada pro
+-- moderador/admin ler — não entra no cálculo de score do quiz).
+-- correct_option_index segue existindo pra single_choice/true_false
+-- (compatibilidade com o que já estava salvo); correct_option_indexes
+-- (plural, array) é só pra multiple_choice, onde mais de uma opção pode
+-- estar certa.
 create table questions (
   id uuid primary key default gen_random_uuid(),
   quiz_id uuid not null references quizzes(id) on delete cascade,
   question_text text not null,
+  question_type text not null default 'single_choice',
   options jsonb not null,
-  correct_option_index int not null
+  correct_option_index int,
+  correct_option_indexes int[],
+  order_index int not null default 0
+);
+
+-- ---- Avaliação de Reação (Kirkpatrick nível 1) ----
+-- Uma pesquisa de satisfação opcional por pílula — o admin decide quais
+-- cursos pedem reação do aluno. Fica de fora da tabela `quizzes` de
+-- propósito: não tem nota de corte, não bloqueia o módulo, e conta como
+-- um item a mais no cálculo de "% concluído" da trilha (trackProgressPct),
+-- não como parte da avaliação de conhecimento.
+create table reaction_surveys (
+  id uuid primary key default gen_random_uuid(),
+  pill_id uuid not null unique references pills(id) on delete cascade
+);
+
+-- likert5 (escala de concordância 1–5, o clássico "smile sheet" de
+-- reação), nps (0–10, "recomendaria este curso?") e open_text (comentário
+-- livre) — os três formatos mais usados em pesquisas de reação de
+-- treinamento corporativo.
+create table reaction_questions (
+  id uuid primary key default gen_random_uuid(),
+  survey_id uuid not null references reaction_surveys(id) on delete cascade,
+  question_text text not null,
+  question_type text not null default 'likert5',
+  order_index int not null default 0
+);
+
+create table reaction_responses (
+  id uuid primary key default gen_random_uuid(),
+  survey_id uuid not null references reaction_surveys(id) on delete cascade,
+  user_id uuid not null references profiles(id) on update cascade on delete cascade,
+  submitted_at timestamptz not null default now(),
+  unique (survey_id, user_id)
+);
+
+create table reaction_answers (
+  id uuid primary key default gen_random_uuid(),
+  response_id uuid not null references reaction_responses(id) on delete cascade,
+  question_id uuid not null references reaction_questions(id) on delete cascade,
+  value_number int,
+  value_text text
 );
 
 create table skill_ratings (
@@ -541,6 +597,10 @@ create index on track_pills (track_id);
 create index on track_pills (pill_id);
 create index on user_progress (user_id);
 create index on questions (quiz_id);
+create index on reaction_questions (survey_id);
+create index on reaction_responses (survey_id);
+create index on reaction_responses (user_id);
+create index on reaction_answers (response_id);
 create index on skill_ratings (user_id);
 create index on pdi_plans (user_id);
 create index on pdi_plan_items (plan_id);
@@ -604,6 +664,10 @@ alter table profiles enable row level security;
 alter table user_progress enable row level security;
 alter table quizzes enable row level security;
 alter table questions enable row level security;
+alter table reaction_surveys enable row level security;
+alter table reaction_questions enable row level security;
+alter table reaction_responses enable row level security;
+alter table reaction_answers enable row level security;
 alter table skill_ratings enable row level security;
 alter table pdi_plans enable row level security;
 alter table pdi_plan_items enable row level security;
@@ -649,6 +713,8 @@ create policy "catalog readable by all" on categories for select using (true);
 create policy "catalog readable by all" on dashboard_sections for select using (true);
 create policy "catalog readable by all" on quizzes for select using (true);
 create policy "catalog readable by all" on questions for select using (true);
+create policy "catalog readable by all" on reaction_surveys for select using (true);
+create policy "catalog readable by all" on reaction_questions for select using (true);
 create policy "catalog readable by all" on curriculum_grid for select using (true);
 create policy "catalog readable by all" on scorm_library for select using (true);
 create policy "catalog readable by all" on track_pills for select using (true);
@@ -699,6 +765,10 @@ create policy "admin manages track_pills" on track_pills for all
 create policy "admin manages quizzes" on quizzes for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
 create policy "admin manages questions" on questions for all
+  using (current_role_is('admin')) with check (current_role_is('admin'));
+create policy "admin manages reaction surveys" on reaction_surveys for all
+  using (current_role_is('admin')) with check (current_role_is('admin'));
+create policy "admin manages reaction questions" on reaction_questions for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
 create policy "admin manages grid" on curriculum_grid for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
@@ -770,6 +840,22 @@ grant execute on function public.capture_estande_lead(
 create policy "self manage progress" on user_progress for all
   using (auth.uid() = user_id or current_role_is('moderador') or current_role_is('admin'))
   with check (auth.uid() = user_id);
+
+create policy "self manage reaction responses" on reaction_responses for all
+  using (auth.uid() = user_id or current_role_is('moderador') or current_role_is('admin'))
+  with check (auth.uid() = user_id);
+
+create policy "self manage reaction answers" on reaction_answers for all
+  using (
+    exists (
+      select 1 from reaction_responses r
+      where r.id = reaction_answers.response_id
+        and (r.user_id = auth.uid() or current_role_is('moderador') or current_role_is('admin'))
+    )
+  )
+  with check (
+    exists (select 1 from reaction_responses r where r.id = reaction_answers.response_id and r.user_id = auth.uid())
+  );
 
 create policy "self manage ratings" on skill_ratings for all
   using (auth.uid() = user_id or current_role_is('moderador') or current_role_is('admin'))

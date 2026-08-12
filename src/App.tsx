@@ -18,6 +18,7 @@ import { Comunidade } from './pages/aluno/Comunidade'
 import { Conquistas } from './pages/aluno/Conquistas'
 import { CoursePlayer } from './pages/aluno/CoursePlayer'
 import { CourseQuiz } from './pages/aluno/CourseQuiz'
+import { ReactionSurvey } from './pages/aluno/ReactionSurvey'
 import { Dashboard } from './pages/aluno/Dashboard'
 import { DefinirSenha } from './pages/aluno/DefinirSenha'
 import { MeuPdi } from './pages/aluno/MeuPdi'
@@ -94,6 +95,14 @@ function App() {
           element={
             <RouteGuard>
               <CourseQuiz />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/curso/:id/reacao"
+          element={
+            <RouteGuard>
+              <ReactionSurvey />
             </RouteGuard>
           }
         />
