@@ -538,7 +538,11 @@ function TrackFormModal({
         : await supabase.from('tracks').insert(payload)
       if (saveError) throw saveError
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao salvar o curso.')
+      // Erros do Supabase (PostgrestError) não são `instanceof Error`, então
+      // `err instanceof Error` sempre falhava aqui e escondia o motivo real
+      // (ex: coluna inexistente no banco) atrás de uma mensagem genérica.
+      const message = (err as { message?: string } | null)?.message
+      setError(message || 'Falha ao salvar o curso.')
       setSaving(false)
       return
     }
