@@ -5,9 +5,24 @@ import { Icon } from '../../components/Icon'
 import { ProgressBar } from '../../components/ProgressBar'
 import { RankingWidget } from '../../components/RankingWidget'
 import { useAuth } from '../../context/AuthContext'
-import { getAllPills, getTrackWithPills, getUserProgressMap, trackProgressPct } from '../../lib/api'
+import {
+  getAllPills,
+  getCategories,
+  getDashboardSections,
+  getFavoritePillIds,
+  getFavoritePills,
+  getInProgressPills,
+  getMostAccessedPills,
+  getRecentlyAddedPills,
+  getRecommendedPills,
+  getRequiredPills,
+  getTrackWithPills,
+  getUserProgressMap,
+  toggleFavorite,
+  trackProgressPct,
+} from '../../lib/api'
 import { claimDailyAccess, getLastPointsEvent, getRule } from '../../lib/gamification'
-import type { GamificationRule, Pill, UserProgress, Track } from '../../types/database'
+import type { Category, DashboardSection, GamificationRule, Pill, UserProgress, Track } from '../../types/database'
 
 const MS_PER_DAY = 86_400_000
 
@@ -22,18 +37,32 @@ export function Dashboard() {
   const [accessRule, setAccessRule] = useState<GamificationRule | null>(null)
   const [showAccessModal, setShowAccessModal] = useState(false)
 
+  const [categories, setCategories] = useState<Category[]>([])
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
+  const [catalogSearch, setCatalogSearch] = useState('')
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
+  const [sections, setSections] = useState<DashboardSection[]>([])
+  const [sectionPills, setSectionPills] = useState<Record<string, Pill[]>>({})
+
   useEffect(() => {
     if (!profile) return
     let cancelled = false
     async function load() {
-      const [progressMap, pills] = await Promise.all([
+      const [progressMap, pills, cats, favIds, sects] = await Promise.all([
         getUserProgressMap(profile!.id),
         getAllPills(),
+        getCategories(),
+        getFavoritePillIds(profile!.id),
+        getDashboardSections(),
       ])
       if (cancelled) return
       setProgress(progressMap)
       setAllPills(pills)
+      setCategories(cats)
+      setFavoriteIds(favIds)
+      setSections(sects)
 
+      let recommendedPills: Pill[] = []
       if (profile!.selected_track_id) {
         const { track: t, pills: tp } = await getTrackWithPills(profile!.selected_track_id)
         if (!cancelled) {
@@ -41,6 +70,24 @@ export function Dashboard() {
           setTrackPills(tp)
         }
       }
+      recommendedPills = await getRecommendedPills(profile!.program_id, profile!.diagnostic_profile, progressMap)
+
+      const [inProgress, recent, favorites, mostAccessed, required] = await Promise.all([
+        getInProgressPills(profile!.id),
+        getRecentlyAddedPills(10),
+        getFavoritePills(profile!.id),
+        getMostAccessedPills(10),
+        getRequiredPills(),
+      ])
+      if (cancelled) return
+      setSectionPills({
+        em_andamento: inProgress,
+        recomendados: recommendedPills,
+        recentes: recent,
+        favoritos: favorites,
+        mais_acessados: mostAccessed,
+        obrigatorios: required,
+      })
       setLoading(false)
     }
     load()
@@ -78,18 +125,29 @@ export function Dashboard() {
     await refreshProfile()
   }
 
+  async function handleToggleFavorite(pillId: string) {
+    if (!profile) return
+    const currentlyFavorited = favoriteIds.has(pillId)
+    setFavoriteIds((prev) => {
+      const next = new Set(prev)
+      if (currentlyFavorited) next.delete(pillId)
+      else next.add(pillId)
+      return next
+    })
+    await toggleFavorite(profile.id, pillId, currentlyFavorited)
+  }
+
   const pct = useMemo(() => trackProgressPct(trackPills, progress), [trackPills, progress])
   const completedCount = trackPills.filter((p) => progress[p.id]?.status === 'completed').length
 
-  const catalogByAxis = useMemo(() => {
-    const groups: Record<string, Pill[]> = {}
-    for (const p of allPills) {
-      const axis = p.axis ?? 'Outros'
-      groups[axis] = groups[axis] ?? []
-      groups[axis].push(p)
-    }
-    return groups
-  }, [allPills])
+  const filteredCatalog = useMemo(() => {
+    const q = catalogSearch.trim().toLowerCase()
+    return allPills.filter((p) => {
+      if (selectedCategoryId && p.category_id !== selectedCategoryId) return false
+      if (q && !p.title.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [allPills, selectedCategoryId, catalogSearch])
 
   if (loading) {
     return (
@@ -151,30 +209,69 @@ export function Dashboard() {
             </div>
 
             {tab === 'trilha' && (
-              <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {trackPills.map((pill) => (
-                  <CourseCard key={pill.id} pill={pill} status={progress[pill.id]?.status ?? 'not_started'} />
-                ))}
-                {trackPills.length === 0 && (
-                  <p className="col-span-full text-ink-soft">Nenhuma pílula cadastrada para sua trilha ainda.</p>
+              <div className="mt-5 space-y-8">
+                {sections
+                  .filter((s) => s.enabled && (sectionPills[s.key]?.length ?? 0) > 0)
+                  .map((s) => (
+                    <CourseRow
+                      key={s.key}
+                      title={s.label}
+                      pills={sectionPills[s.key] ?? []}
+                      progress={progress}
+                      favoriteIds={favoriteIds}
+                      onToggleFavorite={handleToggleFavorite}
+                    />
+                  ))}
+                {sections.filter((s) => s.enabled && (sectionPills[s.key]?.length ?? 0) > 0).length === 0 && (
+                  <p className="text-ink-soft">
+                    Nada por aqui ainda — explore o catálogo completo pra começar a montar sua trilha.
+                  </p>
                 )}
               </div>
             )}
 
             {tab === 'catalogo' && (
-              <div className="mt-5 space-y-3">
-                {Object.entries(catalogByAxis).map(([axis, pills]) => (
-                  <details key={axis} className="card overflow-hidden" open>
-                    <summary className="flex cursor-pointer items-center gap-2 px-5 py-4 font-semibold text-ink">
-                      <LayersIcon /> {axis}
-                    </summary>
-                    <div className="grid gap-4 px-5 pb-5 sm:grid-cols-2 xl:grid-cols-3">
-                      {pills.map((pill) => (
-                        <CourseCard key={pill.id} pill={pill} status={progress[pill.id]?.status ?? 'not_started'} />
-                      ))}
-                    </div>
-                  </details>
-                ))}
+              <div className="mt-5">
+                <input
+                  className="w-full rounded-xl border border-navy-light px-4 py-2.5 text-sm"
+                  placeholder="Buscar curso pelo nome…"
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                />
+                <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                  <button
+                    onClick={() => setSelectedCategoryId(null)}
+                    className={`shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
+                      selectedCategoryId === null ? 'border-navy bg-navy text-white' : 'border-navy-light text-ink-soft'
+                    }`}
+                  >
+                    Todas
+                  </button>
+                  {categories.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => setSelectedCategoryId(c.id)}
+                      className={`shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
+                        selectedCategoryId === c.id ? 'border-navy bg-navy text-white' : 'border-navy-light text-ink-soft'
+                      }`}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {filteredCatalog.map((pill) => (
+                    <CourseCard
+                      key={pill.id}
+                      pill={pill}
+                      status={progress[pill.id]?.status ?? 'not_started'}
+                      favorited={favoriteIds.has(pill.id)}
+                      onToggleFavorite={() => handleToggleFavorite(pill.id)}
+                    />
+                  ))}
+                  {filteredCatalog.length === 0 && <p className="col-span-full text-ink-soft">Nenhum curso encontrado.</p>}
+                </div>
               </div>
             )}
 
@@ -256,38 +353,86 @@ const ACTION_LABEL: Record<UserProgress['status'], string> = {
   not_started: 'Iniciar',
 }
 
-function CourseCard({ pill, status }: { pill: Pill; status: UserProgress['status'] }) {
+function CourseRow({
+  title,
+  pills,
+  progress,
+  favoriteIds,
+  onToggleFavorite,
+}: {
+  title: string
+  pills: Pill[]
+  progress: Record<string, UserProgress>
+  favoriteIds: Set<string>
+  onToggleFavorite: (pillId: string) => void
+}) {
   return (
-    <Link to={`/curso/${pill.id}`} className="card flex flex-col gap-3 p-4 transition hover:card-highlight">
-      {pill.thumbnail_url ? (
-        <img src={pill.thumbnail_url} alt="" className="-mx-4 -mt-4 h-28 w-[calc(100%+2rem)] rounded-t-2xl object-cover" />
-      ) : (
-        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${colorForAxis(pill.axis)}`}>
-          <Icon name="book" size={18} />
-        </span>
-      )}
-      <div>
-        <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">
-          {pill.axis} · {pill.duration}
-        </p>
-        <h3 className="mt-0.5 font-bold text-ink">{pill.title}</h3>
+    <section>
+      <h2 className="text-lg font-bold text-ink">{title}</h2>
+      <div className="mt-3 flex gap-4 overflow-x-auto pb-1">
+        {pills.map((pill) => (
+          <div key={pill.id} className="w-64 shrink-0">
+            <CourseCard
+              pill={pill}
+              status={progress[pill.id]?.status ?? 'not_started'}
+              favorited={favoriteIds.has(pill.id)}
+              onToggleFavorite={() => onToggleFavorite(pill.id)}
+            />
+          </div>
+        ))}
       </div>
-      {pill.description && <p className="line-clamp-2 text-sm text-ink-soft">{pill.description}</p>}
-      <div className="mt-auto flex items-center justify-end pt-2">
-        <span className="flex items-center gap-1.5 rounded-full bg-brand-red px-3.5 py-1.5 text-xs font-bold text-white">
-          {ACTION_LABEL[status]}
-          <Icon name="arrow-right" size={12} />
-        </span>
-      </div>
-    </Link>
+    </section>
   )
 }
 
-function LayersIcon() {
+function CourseCard({
+  pill,
+  status,
+  favorited,
+  onToggleFavorite,
+}: {
+  pill: Pill
+  status: UserProgress['status']
+  favorited?: boolean
+  onToggleFavorite?: () => void
+}) {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-navy">
-      <path d="M12 3l9 5-9 5-9-5 9-5z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      <path d="M3 13l9 5 9-5" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-    </svg>
+    <div className="card relative flex h-full flex-col gap-3 p-4 transition hover:card-highlight">
+      {onToggleFavorite && (
+        <button
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onToggleFavorite()
+          }}
+          aria-label={favorited ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+          className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-ink-soft shadow"
+        >
+          <Icon name={favorited ? 'heart-filled' : 'heart'} size={14} className={favorited ? 'text-brand-red' : undefined} />
+        </button>
+      )}
+      <Link to={`/curso/${pill.id}`} className="flex flex-1 flex-col gap-3">
+        {pill.thumbnail_url ? (
+          <img src={pill.thumbnail_url} alt="" className="-mx-4 -mt-4 h-28 w-[calc(100%+2rem)] rounded-t-2xl object-cover" />
+        ) : (
+          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${colorForAxis(pill.axis)}`}>
+            <Icon name="book" size={18} />
+          </span>
+        )}
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">
+            {pill.axis} · {pill.duration}
+          </p>
+          <h3 className="mt-0.5 font-bold text-ink">{pill.title}</h3>
+        </div>
+        {pill.description && <p className="line-clamp-2 text-sm text-ink-soft">{pill.description}</p>}
+        <div className="mt-auto flex items-center justify-end pt-2">
+          <span className="flex items-center gap-1.5 rounded-full bg-brand-red px-3.5 py-1.5 text-xs font-bold text-white">
+            {ACTION_LABEL[status]}
+            <Icon name="arrow-right" size={12} />
+          </span>
+        </div>
+      </Link>
+    </div>
   )
 }

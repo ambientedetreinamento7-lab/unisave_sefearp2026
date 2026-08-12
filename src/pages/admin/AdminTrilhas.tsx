@@ -4,7 +4,17 @@ import { AdminLayout } from './AdminLayout'
 import { useConfirm } from '../../components/ConfirmDialog'
 import { linkPillToTrack, unlinkPillFromTrack } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
-import type { ContentType, DiagnosticProfile, Pill, Program, ScormLibraryItem, Track, TrackPill } from '../../types/database'
+import type {
+  Category,
+  ContentType,
+  DashboardSection,
+  DiagnosticProfile,
+  Pill,
+  Program,
+  ScormLibraryItem,
+  Track,
+  TrackPill,
+} from '../../types/database'
 
 async function uploadCover(file: File, folder: string): Promise<string> {
   const path = `${folder}/${crypto.randomUUID()}-${file.name}`
@@ -22,10 +32,13 @@ export function AdminTrilhas() {
   const [pills, setPills] = useState<Pill[]>([])
   const [trackPills, setTrackPills] = useState<TrackPill[]>([])
   const [programs, setPrograms] = useState<Program[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [sections, setSections] = useState<DashboardSection[]>([])
   const [loading, setLoading] = useState(true)
   const [trackForm, setTrackForm] = useState<Track | 'new' | null>(null)
   const [pillForm, setPillForm] = useState<{ trackId: string; pill: Pill | null } | null>(null)
   const [linkTrackId, setLinkTrackId] = useState<string | null>(null)
+  const [categoryForm, setCategoryForm] = useState<Category | 'new' | null>(null)
   const [search, setSearch] = useState('')
   const [trackFilter, setTrackFilter] = useState<string>('all')
 
@@ -64,17 +77,45 @@ export function AdminTrilhas() {
   }
 
   async function reload() {
-    const [{ data: t }, { data: p }, { data: tp }, { data: prog }] = await Promise.all([
+    const [{ data: t }, { data: p }, { data: tp }, { data: prog }, { data: cat }, { data: sec }] = await Promise.all([
       supabase.from('tracks').select('*'),
       supabase.from('pills').select('*'),
       supabase.from('track_pills').select('*'),
       supabase.from('programs').select('*'),
+      supabase.from('categories').select('*').order('order_index'),
+      supabase.from('dashboard_sections').select('*').order('order_index'),
     ])
     setTracks((t as Track[]) ?? [])
     setPills((p as Pill[]) ?? [])
     setTrackPills((tp as TrackPill[]) ?? [])
     setPrograms((prog as Program[]) ?? [])
+    setCategories((cat as Category[]) ?? [])
+    setSections((sec as DashboardSection[]) ?? [])
     setLoading(false)
+  }
+
+  async function deleteCategory(id: string) {
+    if (!(await confirm('Excluir esta categoria? Cursos com ela ficam sem categoria.', { danger: true, confirmLabel: 'Excluir' })))
+      return
+    await supabase.from('categories').delete().eq('id', id)
+    reload()
+  }
+
+  async function moveSection(section: DashboardSection, direction: -1 | 1) {
+    const ordered = [...sections].sort((a, b) => a.order_index - b.order_index)
+    const idx = ordered.findIndex((s) => s.key === section.key)
+    const swapWith = ordered[idx + direction]
+    if (!swapWith) return
+    await Promise.all([
+      supabase.from('dashboard_sections').update({ order_index: swapWith.order_index }).eq('key', section.key),
+      supabase.from('dashboard_sections').update({ order_index: section.order_index }).eq('key', swapWith.key),
+    ])
+    reload()
+  }
+
+  async function toggleSectionEnabled(section: DashboardSection) {
+    await supabase.from('dashboard_sections').update({ enabled: !section.enabled }).eq('key', section.key)
+    reload()
   }
 
   useEffect(() => {
@@ -109,6 +150,62 @@ export function AdminTrilhas() {
 
   return (
     <AdminLayout>
+      <details className="card mb-4 p-4">
+        <summary className="cursor-pointer font-bold text-ink">Categorias do catálogo</summary>
+        <p className="mt-1 text-sm text-ink-soft">
+          Chips de filtro exibidos acima do catálogo pro aluno. Cada curso escolhe uma no formulário de edição.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {categories.map((c) => (
+            <span key={c.id} className="flex items-center gap-1.5 rounded-full border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy">
+              {c.name}
+              <button onClick={() => setCategoryForm(c)} className="hover:underline">Editar</button>
+              <button onClick={() => deleteCategory(c.id)} className="text-brand-red hover:underline">×</button>
+            </span>
+          ))}
+          <button
+            onClick={() => setCategoryForm('new')}
+            className="rounded-full border border-dashed border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
+          >
+            + Categoria
+          </button>
+        </div>
+      </details>
+
+      <details className="card mb-4 p-4">
+        <summary className="cursor-pointer font-bold text-ink">Seções da Minha Trilha</summary>
+        <p className="mt-1 text-sm text-ink-soft">Ordem em que as seções aparecem pro aluno; desative as que não quer mostrar.</p>
+        <div className="mt-3 space-y-1.5">
+          {sections.map((s, i) => (
+            <div key={s.key} className="flex items-center justify-between gap-3 rounded-lg border border-navy-light px-3 py-2">
+              <span className={`text-sm font-medium ${s.enabled ? 'text-ink' : 'text-ink-soft line-through'}`}>{s.label}</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => moveSection(s, -1)}
+                  disabled={i === 0}
+                  className="rounded-lg border border-navy-light px-2 py-1 text-xs font-semibold text-navy disabled:opacity-30"
+                >
+                  ↑
+                </button>
+                <button
+                  onClick={() => moveSection(s, 1)}
+                  disabled={i === sections.length - 1}
+                  className="rounded-lg border border-navy-light px-2 py-1 text-xs font-semibold text-navy disabled:opacity-30"
+                >
+                  ↓
+                </button>
+                <button
+                  onClick={() => toggleSectionEnabled(s)}
+                  className="rounded-lg border border-navy-light px-2.5 py-1 text-xs font-semibold text-navy"
+                >
+                  {s.enabled ? 'Desativar' : 'Ativar'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </details>
+
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <input
           className="min-w-[200px] flex-1 rounded-xl border border-navy-light px-4 py-2.5 text-sm"
@@ -255,11 +352,72 @@ export function AdminTrilhas() {
         <PillFormModal
           trackId={pillForm.trackId}
           pill={pillForm.pill}
+          categories={categories}
           onClose={() => setPillForm(null)}
           onSaved={() => { setPillForm(null); reload() }}
         />
       )}
+      {categoryForm && (
+        <CategoryFormModal
+          category={categoryForm === 'new' ? null : categoryForm}
+          nextOrderIndex={categories.length}
+          onClose={() => setCategoryForm(null)}
+          onSaved={() => { setCategoryForm(null); reload() }}
+        />
+      )}
     </AdminLayout>
+  )
+}
+
+function CategoryFormModal({
+  category,
+  nextOrderIndex,
+  onClose,
+  onSaved,
+}: {
+  category: Category | null
+  nextOrderIndex: number
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [name, setName] = useState(category?.name ?? '')
+  const [saving, setSaving] = useState(false)
+
+  async function submit() {
+    setSaving(true)
+    if (category) {
+      await supabase.from('categories').update({ name: name.trim() }).eq('id', category.id)
+    } else {
+      await supabase.from('categories').insert({ name: name.trim(), order_index: nextOrderIndex })
+    }
+    setSaving(false)
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="card w-full max-w-sm p-5">
+        <h3 className="text-lg font-bold text-ink">{category ? 'Editar categoria' : 'Nova categoria'}</h3>
+        <label className="mt-4 block text-xs font-semibold text-ink-soft">Nome</label>
+        <input
+          className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <div className="mt-5 flex gap-2">
+          <button onClick={onClose} className="flex-1 rounded-xl border border-navy-light py-2.5 font-semibold text-ink-soft">
+            Cancelar
+          </button>
+          <button
+            onClick={submit}
+            disabled={saving || !name.trim()}
+            className="flex-1 rounded-xl bg-brand-red py-2.5 font-bold text-white disabled:opacity-50"
+          >
+            {saving ? 'Salvando…' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -462,11 +620,13 @@ function TrackFormModal({
 function PillFormModal({
   trackId,
   pill,
+  categories,
   onClose,
   onSaved,
 }: {
   trackId: string
   pill: Pill | null
+  categories: Category[]
   onClose: () => void
   onSaved: () => void
 }) {
@@ -480,6 +640,8 @@ function PillFormModal({
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [pointsOverride, setPointsOverride] = useState(pill?.points_override != null ? String(pill.points_override) : '')
+  const [categoryId, setCategoryId] = useState(pill?.category_id ?? '')
+  const [required, setRequired] = useState(pill?.required ?? false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -514,6 +676,8 @@ function PillFormModal({
         cover_url: coverUrl,
         thumbnail_url: thumbnailUrl,
         points_override: pointsOverride === '' ? null : Number(pointsOverride),
+        category_id: categoryId || null,
+        required,
       }
       if (pill) {
         const { error: saveError } = await supabase.from('pills').update(payload).eq('id', pill.id)
@@ -593,6 +757,25 @@ function PillFormModal({
             onChange={(e) => setPointsOverride(e.target.value)}
           />
         </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-ink-soft">Categoria (filtro do catálogo)</label>
+          <select
+            className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3"
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+          >
+            <option value="">Sem categoria</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <label className="flex items-center gap-2 text-sm font-medium text-ink">
+          <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
+          Curso obrigatório
+        </label>
 
         {error && <p className="text-sm text-brand-red">{error}</p>}
 

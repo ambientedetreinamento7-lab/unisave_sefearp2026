@@ -116,6 +116,14 @@ create table scorm_library (
   created_at timestamptz not null default now()
 );
 
+-- Categorias de filtro do catálogo (spec: chips "Categorias" acima do
+-- catálogo, editáveis pelo admin — ver /admin/trilhas).
+create table categories (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  order_index int not null default 0
+);
+
 create table pills (
   id uuid primary key default gen_random_uuid(),
   track_id uuid not null references tracks(id) on delete cascade,
@@ -135,7 +143,18 @@ create table pills (
   -- Gamificação: quando definido, substitui os pontos padrão da regra
   -- 'course_completed' (gamification_rules) especificamente pra essa
   -- pílula (spec: admin define pontos no próprio item).
-  points_override int
+  points_override int,
+  -- Categoria de filtro do catálogo (spec: chips "Categorias" acima do
+  -- catálogo) — separada de `axis` (que segue sendo o rótulo de
+  -- "módulo" exibido no card e o agrupamento em Explorar Catálogo).
+  category_id uuid references categories(id) on delete set null,
+  -- Aparece na seção "Cursos obrigatórios" da Minha Trilha.
+  required boolean not null default false,
+  -- Quantos alunos distintos já iniciaram essa pílula — incrementado em
+  -- markPillInProgress só na primeira vez de cada aluno, alimenta a
+  -- seção "Mais acessados".
+  access_count int not null default 0,
+  created_at timestamptz not null default now()
 );
 
 -- id starts decoupled from auth.users: the /estande capture step writes a
@@ -185,6 +204,15 @@ create table user_progress (
   status pill_status not null default 'not_started',
   quiz_score numeric,
   completed_at timestamptz,
+  unique (user_id, pill_id)
+);
+
+-- Favoritos do aluno (spec: "Meus favoritos" na Minha Trilha).
+create table pill_favorites (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on update cascade on delete cascade,
+  pill_id uuid not null references pills(id) on delete cascade,
+  created_at timestamptz not null default now(),
   unique (user_id, pill_id)
 );
 
@@ -387,6 +415,17 @@ create table notifications (
   created_at timestamptz not null default now()
 );
 
+-- Seções da aba "Minha Trilha" do Dashboard (Em andamento, Recentes,
+-- Favoritos, Mais acessados, Obrigatórios, Recomendados) — chaves
+-- fixas que o código já sabe montar, o admin só reordena/ativa-desativa
+-- (mesmo padrão de gamification_rules abaixo).
+create table dashboard_sections (
+  key text primary key,
+  label text not null,
+  order_index int not null,
+  enabled boolean not null default true
+);
+
 -- ============================================================
 -- GAMIFICAÇÃO
 -- ============================================================
@@ -450,6 +489,8 @@ grant select on public_profiles to authenticated;
 create index on skill_categories (program_id);
 create index on tracks (program_id, diagnostic_profile);
 create index on pills (track_id);
+create index on pills (category_id);
+create index on pill_favorites (user_id);
 create index on track_pills (track_id);
 create index on track_pills (pill_id);
 create index on user_progress (user_id);
@@ -508,6 +549,9 @@ alter table programs enable row level security;
 alter table skill_categories enable row level security;
 alter table tracks enable row level security;
 alter table pills enable row level security;
+alter table categories enable row level security;
+alter table pill_favorites enable row level security;
+alter table dashboard_sections enable row level security;
 alter table profiles enable row level security;
 alter table user_progress enable row level security;
 alter table quizzes enable row level security;
@@ -553,6 +597,8 @@ create policy "catalog readable by all" on programs for select using (true);
 create policy "catalog readable by all" on skill_categories for select using (true);
 create policy "catalog readable by all" on tracks for select using (true);
 create policy "catalog readable by all" on pills for select using (true);
+create policy "catalog readable by all" on categories for select using (true);
+create policy "catalog readable by all" on dashboard_sections for select using (true);
 create policy "catalog readable by all" on quizzes for select using (true);
 create policy "catalog readable by all" on questions for select using (true);
 create policy "catalog readable by all" on curriculum_grid for select using (true);
@@ -569,6 +615,26 @@ create policy "admin manages scorm library" on scorm_library for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
 create policy "admin manages pills" on pills for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
+create policy "admin manages categories" on categories for all
+  using (current_role_is('admin')) with check (current_role_is('admin'));
+create policy "admin manages dashboard sections" on dashboard_sections for all
+  using (current_role_is('admin')) with check (current_role_is('admin'));
+
+create policy "read own favorites" on pill_favorites for select using (user_id = auth.uid());
+create policy "add own favorites" on pill_favorites for insert with check (user_id = auth.uid());
+create policy "remove own favorites" on pill_favorites for delete using (user_id = auth.uid());
+
+-- Alunos não têm permissão de UPDATE em pills (só admin, ver "admin
+-- manages pills" acima) — precisa de uma função elevada e estreita só
+-- pra esse contador, mesmo padrão de close_poll() abaixo.
+create or replace function public.increment_pill_access_count(p_pill_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  update pills set access_count = access_count + 1 where id = p_pill_id;
+end;
+$$;
+
+grant execute on function public.increment_pill_access_count(uuid) to authenticated;
 create policy "admin manages track_pills" on track_pills for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
 create policy "admin manages quizzes" on quizzes for all
@@ -1043,3 +1109,53 @@ insert into gamification_levels (name, min_points, badge_icon) values
   ('Ouro', 150, '🥇'),
   ('Platina', 300, '💎')
 on conflict (min_points) do nothing;
+
+-- Categorias de filtro do catálogo, consolidando os eixos dos 52 cursos
+-- da Biblioteca num conjunto menor de chips (spec: catálogo de cursos).
+insert into categories (name, order_index) values
+  ('Finanças', 0),
+  ('Liderança', 1),
+  ('Performance e Produtividade', 2),
+  ('Saúde e Bem-estar', 3),
+  ('Comunicação', 4),
+  ('Segurança da Informação', 5),
+  ('Tecnologia', 6),
+  ('Diversidade, Equidade e Inclusão', 7);
+
+update pills p
+set category_id = m.category_id
+from (
+  select axis_map.axis, c.id as category_id
+  from (values
+    ('Vida Financeira', 'Finanças'),
+    ('Liderança', 'Liderança'),
+    ('Produtividade', 'Performance e Produtividade'),
+    ('Mente & Emoções', 'Saúde e Bem-estar'),
+    ('Bem-estar', 'Saúde e Bem-estar'),
+    ('Inteligência Emocional', 'Saúde e Bem-estar'),
+    ('Autoconhecimento', 'Saúde e Bem-estar'),
+    ('Vida & Trabalho', 'Saúde e Bem-estar'),
+    ('Comunicação', 'Comunicação'),
+    ('Segurança Digital', 'Segurança da Informação'),
+    ('Tecnologia', 'Tecnologia'),
+    ('IA Generativa', 'Tecnologia'),
+    ('Dados & Análise', 'Tecnologia'),
+    ('Diversidade & Inclusão', 'Diversidade, Equidade e Inclusão'),
+    ('Cultura & Times', 'Diversidade, Equidade e Inclusão'),
+    ('Mercado & Carreira', 'Diversidade, Equidade e Inclusão'),
+    ('Futuro do Trabalho', 'Diversidade, Equidade e Inclusão')
+  ) as axis_map(axis, category_name)
+  join categories c on c.name = axis_map.category_name
+) m
+where p.axis = m.axis;
+
+-- Seções da Minha Trilha — ordem inicial sugerida, o admin reordena/
+-- ativa-desativa em /admin/trilhas.
+insert into dashboard_sections (key, label, order_index, enabled) values
+  ('em_andamento', 'Cursos em andamento', 0, true),
+  ('recomendados', 'Cursos recomendados', 1, true),
+  ('recentes', 'Adicionados recentemente', 2, true),
+  ('favoritos', 'Meus favoritos', 3, true),
+  ('mais_acessados', 'Mais acessados', 4, true),
+  ('obrigatorios', 'Cursos obrigatórios', 5, true)
+on conflict (key) do nothing;

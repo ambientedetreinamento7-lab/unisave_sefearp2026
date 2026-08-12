@@ -3,6 +3,9 @@ import { computeTier } from './pdiTier'
 import { awardPoints } from './gamification'
 import { notifyCourseCompleted, notifyPdiProgress } from './notifications'
 import type {
+  Category,
+  DashboardSection,
+  DiagnosticProfile,
   PdiJornadaBucket,
   PdiPlan,
   PdiPlanItem,
@@ -78,10 +81,101 @@ export async function getCatalogPills(): Promise<Pill[]> {
 }
 
 export async function markPillInProgress(userId: string, pillId: string) {
+  const { data: existing } = await supabase
+    .from('user_progress')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('pill_id', pillId)
+    .maybeSingle()
+
   await supabase
     .from('user_progress')
     .upsert({ user_id: userId, pill_id: pillId, status: 'in_progress' }, { onConflict: 'user_id,pill_id' })
   await awardPoints(userId, 'pill_started', pillId)
+
+  // Só conta pra "Mais acessados" na primeira vez desse aluno nessa
+  // pílula — refazer/continuar não deve inflar o contador.
+  if (!existing) await supabase.rpc('increment_pill_access_count', { p_pill_id: pillId })
+}
+
+// ---- Catálogo: categorias, favoritos, seções da Minha Trilha ----
+
+export async function getCategories(): Promise<Category[]> {
+  const { data } = await supabase.from('categories').select('*').order('order_index')
+  return (data as Category[]) ?? []
+}
+
+export async function getFavoritePillIds(userId: string): Promise<Set<string>> {
+  const { data } = await supabase.from('pill_favorites').select('pill_id').eq('user_id', userId)
+  return new Set(((data as { pill_id: string }[]) ?? []).map((r) => r.pill_id))
+}
+
+export async function toggleFavorite(userId: string, pillId: string, currentlyFavorited: boolean) {
+  if (currentlyFavorited) {
+    await supabase.from('pill_favorites').delete().eq('user_id', userId).eq('pill_id', pillId)
+  } else {
+    await supabase.from('pill_favorites').upsert({ user_id: userId, pill_id: pillId }, { onConflict: 'user_id,pill_id' })
+  }
+}
+
+export async function getFavoritePills(userId: string): Promise<Pill[]> {
+  const { data } = await supabase.from('pill_favorites').select('pills(*)').eq('user_id', userId)
+  return ((data as { pills: Pill }[] | null) ?? []).map((r) => r.pills).filter(Boolean)
+}
+
+export async function getDashboardSections(): Promise<DashboardSection[]> {
+  const { data } = await supabase.from('dashboard_sections').select('*').order('order_index')
+  return (data as DashboardSection[]) ?? []
+}
+
+export async function getInProgressPills(userId: string): Promise<Pill[]> {
+  const { data } = await supabase
+    .from('user_progress')
+    .select('pills(*)')
+    .eq('user_id', userId)
+    .eq('status', 'in_progress')
+  return ((data as { pills: Pill }[] | null) ?? []).map((r) => r.pills).filter(Boolean)
+}
+
+export async function getRecentlyAddedPills(limit = 10): Promise<Pill[]> {
+  const { data } = await supabase.from('pills').select('*').order('created_at', { ascending: false }).limit(limit)
+  return (data as Pill[]) ?? []
+}
+
+export async function getMostAccessedPills(limit = 10): Promise<Pill[]> {
+  const { data } = await supabase
+    .from('pills')
+    .select('*')
+    .gt('access_count', 0)
+    .order('access_count', { ascending: false })
+    .limit(limit)
+  return (data as Pill[]) ?? []
+}
+
+export async function getRequiredPills(): Promise<Pill[]> {
+  const { data } = await supabase.from('pills').select('*').eq('required', true)
+  return (data as Pill[]) ?? []
+}
+
+/** Cursos da trilha curada que bate com o programa + perfil do quiz do
+ * aluno (mesma trilha recomendada no /estande), ainda não concluídos. */
+export async function getRecommendedPills(
+  programId: string | null,
+  diagnosticProfile: DiagnosticProfile | null,
+  progress: Record<string, UserProgress>,
+): Promise<Pill[]> {
+  if (!programId || !diagnosticProfile) return []
+  const { data: track } = await supabase
+    .from('tracks')
+    .select('id')
+    .eq('program_id', programId)
+    .eq('diagnostic_profile', diagnosticProfile)
+    .eq('published', true)
+    .eq('is_catalog', false)
+    .maybeSingle()
+  if (!track) return []
+  const { pills } = await getTrackWithPills(track.id)
+  return pills.filter((p) => progress[p.id]?.status !== 'completed')
 }
 
 export async function completePill(

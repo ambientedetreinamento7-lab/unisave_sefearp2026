@@ -106,6 +106,30 @@ export interface Pill {
   cover_url: string | null
   thumbnail_url: string | null
   points_override: number | null
+  category_id: string | null
+  required: boolean
+  access_count: number
+  created_at: string
+}
+
+export interface Category {
+  id: string
+  name: string
+  order_index: number
+}
+
+export interface PillFavorite {
+  id: string
+  user_id: string
+  pill_id: string
+  created_at: string
+}
+
+export interface DashboardSection {
+  key: string
+  label: string
+  order_index: number
+  enabled: boolean
 }
 
 export interface UserProgress {
@@ -300,6 +324,9 @@ export interface Database {
       skill_categories: { Row: SkillCategory; Insert: Partial<SkillCategory>; Update: Partial<SkillCategory> }
       tracks: { Row: Track; Insert: Partial<Track>; Update: Partial<Track> }
       pills: { Row: Pill; Insert: Partial<Pill>; Update: Partial<Pill> }
+      categories: { Row: Category; Insert: Partial<Category>; Update: Partial<Category> }
+      pill_favorites: { Row: PillFavorite; Insert: Partial<PillFavorite>; Update: Partial<PillFavorite> }
+      dashboard_sections: { Row: DashboardSection; Insert: Partial<DashboardSection>; Update: Partial<DashboardSection> }
       user_progress: { Row: UserProgress; Insert: Partial<UserProgress>; Update: Partial<UserProgress> }
       quizzes: { Row: Quiz; Insert: Partial<Quiz>; Update: Partial<Quiz> }
       questions: { Row: QuizQuestion; Insert: Partial<QuizQuestion>; Update: Partial<QuizQuestion> }
