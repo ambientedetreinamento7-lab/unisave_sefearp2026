@@ -166,7 +166,10 @@ function QuizEditor({ pill }: { pill: Pill }) {
       )
       if (insertError) throw insertError
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao salvar a(s) pergunta(s).')
+      // PostgrestError não é instanceof Error, então `err instanceof Error`
+      // sempre caía na mensagem genérica e escondia o motivo real do erro.
+      const message = (err as { message?: string } | null)?.message
+      setError(message || 'Falha ao salvar a(s) pergunta(s).')
       throw err
     }
     await reload()
@@ -589,7 +592,10 @@ function ReactionEditor({ pill }: { pill: Pill }) {
       )
       if (insertError) throw insertError
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao salvar a(s) pergunta(s).')
+      // PostgrestError não é instanceof Error, então `err instanceof Error`
+      // sempre caía na mensagem genérica e escondia o motivo real do erro.
+      const message = (err as { message?: string } | null)?.message
+      setError(message || 'Falha ao salvar a(s) pergunta(s).')
       throw err
     }
     await reload()
