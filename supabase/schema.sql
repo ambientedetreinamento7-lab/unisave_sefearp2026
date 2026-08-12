@@ -868,18 +868,6 @@ select
 from programs p
 cross join (values ('autogestao'), ('tech_ia'), ('lideranca')) as profiles_seed(dp);
 
--- One sample pill per seeded track (Admin cadastra o restante em /admin/trilhas).
-insert into pills (track_id, title, axis, description, duration, content_type, content_url)
-select
-  t.id,
-  'Boas-vindas à trilha',
-  'Introdução',
-  'Vídeo de boas-vindas e visão geral da trilha.',
-  '5 min',
-  'video',
-  null
-from tracks t;
-
 -- ============================================================
 -- SEED DATA — Biblioteca de cursos oficiais (spec item 1)
 -- ============================================================
@@ -963,6 +951,73 @@ cross join (values
 insert into track_pills (track_id, pill_id, order_index)
 select track_id, id, row_number() over (partition by track_id order by id) - 1
 from pills
+on conflict (track_id, pill_id) do nothing;
+
+-- Relaciona os 52 cursos da Biblioteca com as trilhas curadas (uma por
+-- programa × perfil de diagnóstico), pelo perfil que o quiz calcula a
+-- partir das respostas do aluno sobre o que espera desenvolver — o
+-- conteúdo é de desenvolvimento pessoal/profissional genérico, não
+-- específico de cada programa, então a mesma classificação por perfil
+-- vale pros 4 programas (spec: catálogo de cursos compõe o PDI).
+insert into track_pills (track_id, pill_id, order_index)
+select t.id, p.id, row_number() over (partition by t.id order by p.title) - 1
+from (values
+  ('A arte de comunicar com assertividade', 'lideranca'),
+  ('Economia Compartilhada', 'lideranca'),
+  ('Competências do Futuro', 'lideranca'),
+  ('A mente mente', 'autogestao'),
+  ('Dieta emocional: O funcionamento da mente', 'autogestao'),
+  ('Diálogos consultivos', 'lideranca'),
+  ('Gestão de senhas seguras', 'tech_ia'),
+  ('Líder Real - Como fazer diferente', 'lideranca'),
+  ('Líder Real - A virada de chave', 'lideranca'),
+  ('Liderando a Si mesmo 1 - Práticas de Autoconhecimento', 'autogestao'),
+  ('Liderando a Si mesmo 2 - Arquétipos e Inteligência Emocional', 'autogestao'),
+  ('Propósito de Vida: Encontre o seu porquê', 'autogestao'),
+  ('A mente mente: O futuro infecta o presente', 'autogestao'),
+  ('A mente mente: Transtornos que aprisionam', 'autogestao'),
+  ('Ansiedade: como enfrentar o mal do século', 'autogestao'),
+  ('Burnout: Como lidar com a síndrome do esgotamento profissional', 'autogestao'),
+  ('Capacidade Analítica', 'tech_ia'),
+  ('Como desenvolver a inteligência emocional', 'autogestao'),
+  ('Comunicação Não Violenta', 'autogestao'),
+  ('Comunicação para líderes em momentos sensíveis', 'lideranca'),
+  ('Conectando Gerações', 'lideranca'),
+  ('Confiança', 'autogestao'),
+  ('Desafios da primeira liderança', 'lideranca'),
+  ('Diversidade e Inclusão', 'lideranca'),
+  ('Dominando o ChatGPT: A arte de criacao de prompt', 'tech_ia'),
+  ('Dominando o ChatGPT: Aprender', 'tech_ia'),
+  ('Dominando o ChatGPT: Criando seu projeto', 'tech_ia'),
+  ('Dominando o ChatGPT: Escrever (variáveis)', 'tech_ia'),
+  ('Dominando o ChatGPT: Introducao ao ChatGPT.', 'tech_ia'),
+  ('Dominando o ChatGPT: Pensar (Criterização)', 'tech_ia'),
+  ('Dominando o ChatGPT: Ter Ideias', 'tech_ia'),
+  ('Empatia', 'autogestao'),
+  ('Empresas inclusivas e viés do inconsciente', 'lideranca'),
+  ('Escrita assertiva: elimine conflitos na comunicação escrita', 'autogestao'),
+  ('Escuta Ativa', 'autogestao'),
+  ('Feedback', 'lideranca'),
+  ('Finanças Pessoais', 'autogestao'),
+  ('Foco & Concentração: Como lidar com a SPA', 'autogestao'),
+  ('Formação de multiplicadores de Treinamento', 'lideranca'),
+  ('Gestão das emoções no trabalho', 'autogestao'),
+  ('Gestão do Tempo', 'autogestao'),
+  ('Introdução a Banco de Dados', 'tech_ia'),
+  ('Lógica de Programação', 'tech_ia'),
+  ('Mude seu mindset', 'autogestao'),
+  ('O Fim da Inteligência Emocional', 'autogestao'),
+  ('O poder do networking', 'lideranca'),
+  ('Oratória', 'lideranca'),
+  ('Organização e planejamento', 'autogestao'),
+  ('Pais brilhantes, profissionais fascinantes', 'autogestao'),
+  ('Perfis Comportamentais', 'lideranca'),
+  ('Protagonismo', 'autogestao'),
+  ('Segurança psicológica', 'lideranca')
+) as v(title, profile)
+join pills p on p.title = v.title
+join tracks src on src.title = 'Biblioteca de Cursos' and p.track_id = src.id
+join tracks t on t.diagnostic_profile = v.profile::diagnostic_profile and t.is_catalog = false
 on conflict (track_id, pill_id) do nothing;
 
 -- Gamificação — regras seedadas (admin ajusta points/enabled/label em
