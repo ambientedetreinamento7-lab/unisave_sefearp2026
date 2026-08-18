@@ -371,6 +371,15 @@ const ACTION_LABEL: Record<UserProgress['status'], string> = {
   not_started: 'Iniciar',
 }
 
+// Vermelho pra chamar atenção pro que ainda não começou, navy pra retomar
+// o que já está em andamento, verde (mesma cor de "concluído" no resto do
+// app) pra revisar algo já finalizado.
+const ACTION_COLOR: Record<UserProgress['status'], string> = {
+  completed: 'bg-success hover:bg-green-700',
+  in_progress: 'bg-navy hover:bg-navy-dark',
+  not_started: 'bg-brand-red hover:bg-brand-red-dark',
+}
+
 type DisplayCard = { kind: 'pill'; pill: Pill } | { kind: 'course'; track: Track; modules: Pill[] }
 
 /** Colapsa uma lista de pílulas em cards de exibição: pílulas de um "Curso
@@ -492,7 +501,10 @@ function CourseCard({
         </div>
         {description && <p className="line-clamp-2 text-sm text-ink-soft">{description}</p>}
         <div className="mt-auto flex items-center justify-end pt-2">
-          <span className="flex items-center gap-1.5 rounded-full bg-brand-red px-3.5 py-1.5 text-xs font-bold text-white">
+          <span
+            className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-white transition ${ACTION_COLOR[status]}`}
+          >
+
             {ACTION_LABEL[status]}
             <Icon name="arrow-right" size={12} />
           </span>
