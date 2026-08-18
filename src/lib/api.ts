@@ -156,6 +156,17 @@ export async function markPillInProgress(
   if (!existing) await supabase.rpc('increment_pill_access_count', { p_pill_id: pillId })
 }
 
+/** Marca um tutorial guiado (nav ou PDI) como já visto — concluído ou
+ * pulado — pra não reabrir sozinho de novo (segue acessível manualmente).
+ * Só concede os 15 pontos quando `completed` é true; awardPoints já é
+ * idempotente por rule_key, então reabrir o tutorial pelo menu depois e
+ * concluir de novo não pontua uma segunda vez. */
+export async function completeTour(userId: string, kind: 'nav' | 'pdi', completed: boolean) {
+  const seenField = kind === 'nav' ? 'nav_tutorial_seen' : 'pdi_tutorial_seen'
+  await supabase.from('profiles').update({ [seenField]: true }).eq('id', userId)
+  if (completed) await awardPoints(userId, kind === 'nav' ? 'nav_tutorial' : 'pdi_tutorial', 'completed')
+}
+
 // ---- Catálogo: categorias, favoritos, seções da Minha Trilha ----
 
 export async function getCategories(): Promise<Category[]> {

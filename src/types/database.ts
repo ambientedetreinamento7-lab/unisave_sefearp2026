@@ -31,6 +31,8 @@ export interface Profile {
   total_points: number
   access_streak: number
   last_access_date: string | null
+  nav_tutorial_seen: boolean
+  pdi_tutorial_seen: boolean
 }
 
 export interface PublicProfile {

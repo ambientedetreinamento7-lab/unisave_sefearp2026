@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { AppHeader } from '../../components/AppHeader'
 import { useConfirm } from '../../components/ConfirmDialog'
 import { ProgressBar } from '../../components/ProgressBar'
+import { Tour } from '../../components/Tour'
+import type { TourStep } from '../../components/Tour'
 import { useAuth } from '../../context/AuthContext'
 import {
   addPillToPlan,
   addTrackToPlan,
+  completeTour,
   createPlan,
   createPlanWithPill,
   createPlanWithTrack,
@@ -39,15 +42,72 @@ const BUCKET_LABEL: Record<PdiJornadaBucket, string> = {
 
 type Tab = 'pdi' | 'balanco' | 'biblioteca'
 
+function pdiTourSteps(setTab: (t: Tab) => void): TourStep[] {
+  return [
+    {
+      title: 'Conheça o Meu PDI 🎯',
+      body: 'Aqui você monta seu Plano de Desenvolvimento Individual e acompanha sua evolução. Vamos ver as 3 abas.',
+    },
+    {
+      target: '#pdi-tab-pdi',
+      onEnter: () => setTab('pdi'),
+      title: 'Aba "Meu PDI"',
+      body: 'Seus planos pessoais de desenvolvimento. Cada plano organiza itens em Prática real (70%), Mentoria (20%) e Educação formal (10%) — a metodologia 70-20-10.',
+    },
+    {
+      target: '#pdi-create-plan-btn',
+      onEnter: () => setTab('pdi'),
+      title: 'Criar um plano',
+      body: 'Clique aqui pra criar seu primeiro plano pessoal. Você pode partir da taxonomia de skills do seu curso ou começar do zero.',
+    },
+    {
+      target: '#pdi-tab-balanco',
+      onEnter: () => setTab('balanco'),
+      title: 'Aba "Balanço de Competências"',
+      body: 'Autoavalie suas competências de 1 a 5. É diferente do PDI: aqui você mede onde está hoje, não o que vai fazer a seguir.',
+    },
+    {
+      target: '#pdi-tab-biblioteca',
+      onEnter: () => setTab('biblioteca'),
+      title: 'Aba "Biblioteca de Trilhas"',
+      body: 'Explore trilhas e cursos avulsos além da sua trilha recomendada, e adicione qualquer um deles a um plano pessoal.',
+    },
+    {
+      title: 'Pronto! 🎉',
+      body: 'Agora é só montar seu plano e acompanhar o progresso por aqui sempre que quiser.',
+    },
+  ]
+}
+
 export function MeuPdi() {
-  const { profile } = useAuth()
+  const { profile, refreshProfile } = useAuth()
   const [tab, setTab] = useState<Tab>('pdi')
+  const [runPdiTour, setRunPdiTour] = useState(false)
+
+  useEffect(() => {
+    if (profile && !profile.pdi_tutorial_seen) setRunPdiTour(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id])
+
+  async function finishPdiTour(userId: string, completed: boolean) {
+    setRunPdiTour(false)
+    await completeTour(userId, 'pdi', completed)
+    await refreshProfile()
+  }
 
   return (
     <div className="min-h-screen bg-bg pb-16">
       <AppHeader />
       <main className="mx-auto max-w-3xl px-4 py-8">
-        <h1 className="text-2xl font-extrabold text-ink">Meu PDI</h1>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-2xl font-extrabold text-ink">Meu PDI</h1>
+          <button
+            onClick={() => setRunPdiTour(true)}
+            className="rounded-full border border-navy-light px-3.5 py-1.5 text-xs font-semibold text-navy hover:bg-navy-light"
+          >
+            Tutorial Meu PDI
+          </button>
+        </div>
         <p className="mt-1 text-ink-soft">
           Plano de Desenvolvimento Individual — cruzando sua trilha do evento com a taxonomia de skills do curso.
         </p>
@@ -62,6 +122,7 @@ export function MeuPdi() {
           ).map(([key, label]) => (
             <button
               key={key}
+              id={`pdi-tab-${key}`}
               onClick={() => setTab(key)}
               className={`flex-1 rounded-full py-2 text-sm font-semibold transition ${
                 tab === key ? 'bg-navy text-white' : 'text-ink-soft'
@@ -72,10 +133,20 @@ export function MeuPdi() {
           ))}
         </div>
 
-        {profile && tab === 'pdi' && <MeuPdiTab userId={profile.id} programId={profile.program_id ?? null} />}
-        {profile && tab === 'balanco' && <BalancoTab userId={profile.id} programId={profile.program_id} />}
-        {profile && tab === 'biblioteca' && <BibliotecaTab userId={profile.id} />}
+        <div id="pdi-tab-panel">
+          {profile && tab === 'pdi' && <MeuPdiTab userId={profile.id} programId={profile.program_id ?? null} />}
+          {profile && tab === 'balanco' && <BalancoTab userId={profile.id} programId={profile.program_id} />}
+          {profile && tab === 'biblioteca' && <BibliotecaTab userId={profile.id} />}
+        </div>
       </main>
+
+      {profile && runPdiTour && (
+        <Tour
+          steps={pdiTourSteps(setTab)}
+          onFinish={(completed) => finishPdiTour(profile.id, completed)}
+          laterHint='no topo da página Meu PDI, em "Tutorial Meu PDI"'
+        />
+      )}
     </div>
   )
 }
@@ -109,6 +180,7 @@ function MeuPdiTab({ userId, programId }: { userId: string; programId: string | 
       )}
 
       <button
+        id="pdi-create-plan-btn"
         onClick={() => setShowCreate(true)}
         className="w-full rounded-2xl border-2 border-dashed border-navy-light py-4 font-semibold text-navy hover:border-navy"
       >

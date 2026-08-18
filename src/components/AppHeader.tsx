@@ -59,6 +59,7 @@ export function AppHeader() {
           {NAV_LINKS.map((l) => (
             <NavLink
               key={l.to}
+              id={`tour-nav-${l.to.replace('/', '')}`}
               to={l.to}
               className={({ isActive }) =>
                 `rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
@@ -74,6 +75,7 @@ export function AppHeader() {
         {/* Desktop controls */}
         <div className="ml-auto hidden items-center gap-2 sm:flex">
           <button
+            id="tour-theme-toggle"
             onClick={toggleTheme}
             aria-label="Alternar tema claro/escuro"
             className="flex h-8 w-8 items-center justify-center rounded-full border border-white/25 text-white/80 hover:bg-white/10"
@@ -81,7 +83,9 @@ export function AppHeader() {
             <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={15} />
           </button>
 
-          <NotificationBell />
+          <span id="tour-notifications">
+            <NotificationBell />
+          </span>
 
           {canSwitchViews && (
             <div className="relative">
@@ -136,6 +140,7 @@ export function AppHeader() {
           {profile && (
             <div className="relative">
               <button
+                id="tour-avatar-button"
                 onClick={() => setAvatarMenuOpen((v) => !v)}
                 aria-label="Menu da conta"
                 className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-white/25"
@@ -159,13 +164,20 @@ export function AppHeader() {
                     onClick={() => setAvatarMenuOpen(false)}
                     aria-label="Fechar menu"
                   />
-                  <div className="card absolute right-0 z-20 mt-2 w-44 overflow-hidden p-1.5 text-ink">
+                  <div className="card absolute right-0 z-20 mt-2 w-52 overflow-hidden p-1.5 text-ink">
                     <Link
                       to="/meu-perfil"
                       onClick={() => setAvatarMenuOpen(false)}
                       className="block rounded-lg px-3 py-2 text-sm font-medium hover:bg-navy-light"
                     >
                       Meu Perfil
+                    </Link>
+                    <Link
+                      to="/dashboard?tour=nav"
+                      onClick={() => setAvatarMenuOpen(false)}
+                      className="block rounded-lg px-3 py-2 text-sm font-medium hover:bg-navy-light"
+                    >
+                      Tutorial de navegação
                     </Link>
                     <button
                       onClick={signOut}
@@ -273,6 +285,16 @@ export function AppHeader() {
               )}
             </div>
           )}
+
+          <div className="mt-3 border-t border-white/10 pt-3">
+            <Link
+              to="/dashboard?tour=nav"
+              onClick={() => setMobileOpen(false)}
+              className="block rounded-lg px-3 py-2 text-sm font-medium text-white/80 hover:bg-white/10"
+            >
+              Tutorial de navegação
+            </Link>
+          </div>
 
           <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
             <button

@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { Icon } from '../../components/Icon'
 import { ProgressBar } from '../../components/ProgressBar'
 import { RankingWidget } from '../../components/RankingWidget'
+import { Tour } from '../../components/Tour'
+import type { TourStep } from '../../components/Tour'
 import { useAuth } from '../../context/AuthContext'
 import {
+  completeTour,
   getAllPills,
   getCategories,
   getDashboardSections,
@@ -25,10 +28,67 @@ import {
 import { claimDailyAccess, getLastPointsEvent, getRule } from '../../lib/gamification'
 import type { Category, DashboardSection, GamificationRule, Pill, UserProgress, Track } from '../../types/database'
 
+const NAV_TOUR_STEPS: TourStep[] = [
+  {
+    title: 'Bem-vindo(a) à plataforma! 👋',
+    body: 'Vamos te mostrar rapidinho como navegar por aqui. Leva menos de um minuto.',
+  },
+  {
+    target: '#tour-nav-dashboard',
+    title: 'Trilha',
+    body: 'Sua página inicial: cursos em andamento, recomendados, mais acessados e o catálogo completo pra explorar.',
+  },
+  {
+    target: '#tour-dashboard-tabs',
+    title: 'Minha Trilha x Catálogo Completo',
+    body: '"Minha Trilha" mostra o que já faz sentido pra você (em andamento, recomendados, favoritos). "Explorar Catálogo Completo" lista todos os cursos disponíveis.',
+  },
+  {
+    target: '#tour-nav-meu-pdi',
+    title: 'Meu PDI',
+    body: 'Seu Plano de Desenvolvimento Individual. Tem um tutorial específico pra essa página — vamos te avisar quando você chegar lá.',
+  },
+  {
+    target: '#tour-nav-comunidade',
+    title: 'Comunidade',
+    body: 'O mural social do evento: publique, curta e comente com outros participantes.',
+  },
+  {
+    target: '#tour-nav-conquistas',
+    title: 'Conquistas',
+    body: 'Suas badges e marcos desbloqueados conforme você avança nos cursos.',
+  },
+  {
+    target: '#tour-nav-certificados',
+    title: 'Certificados',
+    body: 'Certificados emitidos automaticamente ao concluir 100% de um curso com certificação habilitada.',
+  },
+  {
+    target: '#tour-ranking-widget',
+    title: 'Ranking',
+    body: 'Sua posição no ranking geral de pontos, ganhos concluindo cursos, tutoriais e mantendo o acesso em dia.',
+  },
+  {
+    target: '#tour-notifications',
+    title: 'Notificações',
+    body: 'O sino te avisa sobre reações, conclusões de curso e pontos ganhos.',
+  },
+  {
+    target: '#tour-avatar-button',
+    title: 'Seu perfil',
+    body: 'Edite seu perfil, refaça este tutorial quando quiser (em "Tutorial de navegação") ou saia da conta por aqui.',
+  },
+  {
+    title: 'Pronto! 🎉',
+    body: 'Você já conhece o essencial. Bons estudos — e não esqueça de fazer o Tutorial do Meu PDI quando visitar aquela página pela primeira vez.',
+  },
+]
+
 const MS_PER_DAY = 86_400_000
 
 export function Dashboard() {
   const { profile, refreshProfile } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [track, setTrack] = useState<Track | null>(null)
   const [trackPills, setTrackPills] = useState<Pill[]>([])
   const [allPills, setAllPills] = useState<Pill[]>([])
@@ -37,6 +97,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [accessRule, setAccessRule] = useState<GamificationRule | null>(null)
   const [showAccessModal, setShowAccessModal] = useState(false)
+  const [runNavTour, setRunNavTour] = useState(false)
 
   const [categories, setCategories] = useState<Category[]>([])
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
@@ -137,6 +198,29 @@ export function Dashboard() {
     await refreshProfile()
   }
 
+  // Abre sozinho no primeiro acesso do aluno (spec: tour guiado). Reabrir
+  // manualmente pelo menu do avatar usa ?tour=nav pra forçar mesmo já
+  // tendo sido visto antes.
+  useEffect(() => {
+    if (!profile || loading) return
+    if (searchParams.get('tour') === 'nav') {
+      setRunNavTour(true)
+      const next = new URLSearchParams(searchParams)
+      next.delete('tour')
+      setSearchParams(next, { replace: true })
+    } else if (!profile.nav_tutorial_seen) {
+      setRunNavTour(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id, loading])
+
+  async function handleNavTourFinish(completed: boolean) {
+    setRunNavTour(false)
+    if (!profile) return
+    await completeTour(profile.id, 'nav', completed)
+    await refreshProfile()
+  }
+
   async function handleToggleFavorite(pillId: string) {
     if (!profile) return
     const currentlyFavorited = favoriteIds.has(pillId)
@@ -206,7 +290,7 @@ export function Dashboard() {
               </section>
             )}
 
-            <div className="mt-8 flex gap-2 rounded-full bg-surface p-1 shadow-sm">
+            <div id="tour-dashboard-tabs" className="mt-8 flex gap-2 rounded-full bg-surface p-1 shadow-sm">
               <button
                 onClick={() => setTab('trilha')}
                 className={`flex-1 rounded-full py-2 text-sm font-semibold transition ${
@@ -324,7 +408,7 @@ export function Dashboard() {
             )}
           </div>
 
-          <aside className="mt-6 lg:sticky lg:top-6 lg:mt-0">
+          <aside id="tour-ranking-widget" className="mt-6 lg:sticky lg:top-6 lg:mt-0">
             {profile && <RankingWidget currentUserId={profile.id} />}
           </aside>
         </div>
@@ -344,6 +428,14 @@ export function Dashboard() {
             </button>
           </div>
         </div>
+      )}
+
+      {runNavTour && (
+        <Tour
+          steps={NAV_TOUR_STEPS}
+          onFinish={handleNavTourFinish}
+          laterHint='no menu do seu avatar, em "Tutorial de navegação"'
+        />
       )}
     </div>
   )

@@ -200,7 +200,14 @@ create table profiles (
   -- Sequência de dias seguidos de acesso e a última data resgatada — só
   -- usados pelo cálculo do bônus de streak (claimDailyAccess).
   access_streak int not null default 0,
-  last_access_date date
+  last_access_date date,
+  -- Marca se o aluno já viu (concluiu OU pulou) cada tutorial guiado, pra
+  -- não reabrir sozinho de novo — mas continua acessível manualmente pelo
+  -- menu do avatar / topo do Meu PDI (spec: tour guiado no primeiro
+  -- acesso). Pontuação em si vem de gamification_rules via
+  -- user_points_events (idempotente por rule_key), não depende desta flag.
+  nav_tutorial_seen boolean not null default false,
+  pdi_tutorial_seen boolean not null default false
 );
 
 create table user_progress (
@@ -1245,7 +1252,9 @@ insert into gamification_rules (key, label, points, recurrence_days, streak_days
   ('first_post_carrossel', 'Primeira postagem em carrossel', 5, null, null),
   ('first_post_video', 'Primeira postagem de vídeo', 5, null, null),
   ('first_post_enquete', 'Primeira enquete criada', 5, null, null),
-  ('first_story', 'Primeiro story publicado', 5, null, null)
+  ('first_story', 'Primeiro story publicado', 5, null, null),
+  ('nav_tutorial', 'Concluiu o tutorial de navegação', 15, null, null),
+  ('pdi_tutorial', 'Concluiu o tutorial do Meu PDI', 15, null, null)
 on conflict (key) do nothing;
 
 insert into gamification_levels (name, min_points, badge_icon) values
