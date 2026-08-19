@@ -50,10 +50,12 @@ export async function getTrackWithPills(trackId: string) {
 }
 
 /** For a batch of pill.track_id values, resolves which ones are real "Curso
- * com Módulos" (non-catalog, sequential, 2+ pills) — as opposed to a
- * catalog shelf pill or a curated trilha (many independent, freely browsed
- * pills, not meant to collapse into a single card). Used to group a pill
- * list into one card per course instead of one card per module. */
+ * com Módulos" (non-catalog, sequential) — as opposed to a catalog shelf
+ * pill or a curated trilha (many independent, freely browsed pills, not
+ * meant to collapse into a single card). Used to group a pill list into
+ * one card per course instead of one card per module — even a course
+ * with a single aula so far should show as the course (its own title/
+ * capa), never as a bare lesson card. */
 export async function getMultiModuleTracks(
   trackIds: (string | null | undefined)[],
 ): Promise<Map<string, { track: Track; pills: Pill[] }>> {
@@ -87,7 +89,7 @@ export async function getMultiModuleTracks(
   }
   for (const track of sequentialTracks) {
     const pills = pillsByTrack.get(track.id) ?? []
-    if (pills.length > 1) result.set(track.id, { track, pills })
+    if (pills.length > 0) result.set(track.id, { track, pills })
   }
   return result
 }

@@ -552,7 +552,7 @@ function CourseCard({
   const thumbnailUrl = isCourse ? item.track.thumbnail_url ?? item.track.cover_url : item.pill.thumbnail_url
   const axis = isCourse ? item.track.title : item.pill.axis
   const metaLine = isCourse
-    ? `${item.modules.length} módulos${item.track.carga_horaria_total ? ` · ${item.track.carga_horaria_total}h` : ''}`
+    ? `${item.modules.length} ${item.modules.length === 1 ? 'módulo' : 'módulos'}${item.track.carga_horaria_total ? ` · ${item.track.carga_horaria_total}h` : ''}`
     : `${item.pill.axis} · ${item.pill.duration}`
 
   let status: UserProgress['status'] = 'not_started'
