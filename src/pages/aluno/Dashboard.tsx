@@ -31,7 +31,7 @@ import type { Category, DashboardSection, GamificationRule, Pill, UserProgress, 
 const NAV_TOUR_STEPS: TourStep[] = [
   {
     title: 'Bem-vindo(a) à plataforma! 👋',
-    body: 'Vamos te mostrar rapidinho como navegar por aqui. Leva menos de um minuto.',
+    body: 'Vamos te mostrar rapidinho como navegar por aqui. Leva menos de um minuto!',
   },
   {
     target: '#tour-nav-dashboard',
