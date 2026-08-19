@@ -6,6 +6,7 @@ import { AdminAnalytics } from './pages/admin/AdminAnalytics'
 import { AdminCertificados } from './pages/admin/AdminCertificados'
 import { AdminComunidade } from './pages/admin/AdminComunidade'
 import { AdminConfiguracoes } from './pages/admin/AdminConfiguracoes'
+import { AdminCursoDetalhe } from './pages/admin/AdminCursoDetalhe'
 import { AdminGamificacao } from './pages/admin/AdminGamificacao'
 import { AdminGrade } from './pages/admin/AdminGrade'
 import { AdminProgramas } from './pages/admin/AdminProgramas'
@@ -161,6 +162,14 @@ function App() {
           element={
             <RouteGuard allow={['admin']}>
               <AdminTrilhas />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/admin/trilhas/:id"
+          element={
+            <RouteGuard allow={['admin']}>
+              <AdminCursoDetalhe />
             </RouteGuard>
           }
         />
