@@ -119,12 +119,22 @@ export async function getAllPills(): Promise<Pill[]> {
 
 /** Cursos avulsos da Biblioteca de Cursos — nunca sugeridos automaticamente,
  * só aparecem no PDI se o aluno adicionar (spec: biblioteca de cursos). */
-export async function getCatalogPills(): Promise<Pill[]> {
+/** Pílulas da Biblioteca de Cursos que batem com o (programa, perfil) do
+ * quiz do aluno — mesma lógica de match usada pela trilha recomendada
+ * (getRecommendedPills), só que aqui pode haver várias trilhas-catálogo
+ * (uma por combinação de programa/perfil) em vez de uma trilha curada só. */
+export async function getCatalogPills(
+  programId: string | null,
+  diagnosticProfile: DiagnosticProfile | null,
+): Promise<Pill[]> {
+  if (!programId || !diagnosticProfile) return []
   const { data } = await supabase
     .from('track_pills')
-    .select('pills(*), tracks!inner(published, is_catalog)')
+    .select('pills(*), tracks!inner(published, is_catalog, program_id, diagnostic_profile)')
     .eq('tracks.published', true)
     .eq('tracks.is_catalog', true)
+    .eq('tracks.program_id', programId)
+    .eq('tracks.diagnostic_profile', diagnosticProfile)
   return ((data as { pills: Pill }[] | null) ?? []).map((r) => r.pills).filter(Boolean)
 }
 

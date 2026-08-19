@@ -25,7 +25,7 @@ import {
 import { getProgramJourney, JORNADA_CADENCE, TIER_META } from '../../lib/pdiJourneys'
 import { TIER_LABEL, TIER_RANGE } from '../../lib/pdiTier'
 import { supabase } from '../../lib/supabase'
-import type { PdiJornadaBucket, PdiPlan, PdiPlanItem, PdiTier, Pill, SkillCategory, SkillRating, Track } from '../../types/database'
+import type { DiagnosticProfile, PdiJornadaBucket, PdiPlan, PdiPlanItem, PdiTier, Pill, SkillCategory, SkillRating, Track } from '../../types/database'
 
 const TIER_BADGE_CLASS: Record<PdiTier, string> = {
   abaixo: 'bg-amber-50 text-amber-700',
@@ -136,7 +136,9 @@ export function MeuPdi() {
         <div id="pdi-tab-panel">
           {profile && tab === 'pdi' && <MeuPdiTab userId={profile.id} programId={profile.program_id ?? null} />}
           {profile && tab === 'balanco' && <BalancoTab userId={profile.id} programId={profile.program_id} />}
-          {profile && tab === 'biblioteca' && <BibliotecaTab userId={profile.id} />}
+          {profile && tab === 'biblioteca' && (
+            <BibliotecaTab userId={profile.id} programId={profile.program_id} diagnosticProfile={profile.diagnostic_profile} />
+          )}
         </div>
       </main>
 
@@ -519,7 +521,15 @@ function BalancoTab({ userId, programId }: { userId: string; programId: string |
 
 type LibraryItem = { kind: 'track'; track: Track } | { kind: 'pill'; pill: Pill }
 
-function BibliotecaTab({ userId }: { userId: string }) {
+function BibliotecaTab({
+  userId,
+  programId,
+  diagnosticProfile,
+}: {
+  userId: string
+  programId: string | null
+  diagnosticProfile: DiagnosticProfile | null
+}) {
   const [tracks, setTracks] = useState<Track[]>([])
   const [catalogPills, setCatalogPills] = useState<Pill[]>([])
   const [plans, setPlans] = useState<PdiPlan[]>([])
@@ -529,7 +539,11 @@ function BibliotecaTab({ userId }: { userId: string }) {
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const [t, cp, p] = await Promise.all([getAllTracks(), getCatalogPills(), getUserPlans(userId)])
+      const [t, cp, p] = await Promise.all([
+        getAllTracks(),
+        getCatalogPills(programId, diagnosticProfile),
+        getUserPlans(userId),
+      ])
       if (!cancelled) {
         setTracks(t)
         setCatalogPills(cp)
@@ -541,7 +555,7 @@ function BibliotecaTab({ userId }: { userId: string }) {
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [userId, programId, diagnosticProfile])
 
   async function handleAddTrack(track: Track) {
     if (plans.length === 0) {
@@ -607,7 +621,13 @@ function BibliotecaTab({ userId }: { userId: string }) {
               </div>
             </div>
           ))}
-          {catalogPills.length === 0 && <p className="text-ink-soft">Nenhum curso avulso disponível ainda.</p>}
+          {catalogPills.length === 0 && (
+            <p className="text-ink-soft">
+              {programId && diagnosticProfile
+                ? 'Nenhum curso avulso disponível para o seu perfil ainda.'
+                : 'Vincule seu curso e perfil pra ver os cursos avulsos disponíveis pra você.'}
+            </p>
+          )}
         </div>
       </div>
 

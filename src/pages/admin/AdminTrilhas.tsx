@@ -504,6 +504,7 @@ function TrackFormModal({
   const [certificateEnabled, setCertificateEnabled] = useState(track?.certificate_enabled ?? false)
   const [sequential, setSequential] = useState(track?.sequential ?? false)
   const [published, setPublished] = useState(track?.published ?? true)
+  const [isCatalog, setIsCatalog] = useState(track?.is_catalog ?? false)
   const [programId, setProgramId] = useState(track?.program_id ?? programs[0]?.id ?? '')
   const [profile, setProfile] = useState<DiagnosticProfile>(track?.diagnostic_profile ?? 'autogestao')
   const [coverFile, setCoverFile] = useState<File | null>(null)
@@ -528,6 +529,7 @@ function TrackFormModal({
         certificate_enabled: certificateEnabled,
         sequential,
         published,
+        is_catalog: isCatalog,
         program_id: programId,
         diagnostic_profile: profile,
         cover_url: coverUrl,
@@ -613,6 +615,12 @@ function TrackFormModal({
         <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
           <input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} />
           Publicado (visível para os alunos)
+        </label>
+
+        <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
+          <input type="checkbox" checked={isCatalog} onChange={(e) => setIsCatalog(e.target.checked)} />
+          Biblioteca de Cursos (prateleira avulsa — só aparece pro aluno que bater com o Programa/Perfil
+          acima, e só entra no PDI dele se ele mesmo adicionar)
         </label>
 
         {error && <p className="text-sm text-brand-red">{error}</p>}
