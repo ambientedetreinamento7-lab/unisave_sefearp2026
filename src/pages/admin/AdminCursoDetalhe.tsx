@@ -158,7 +158,11 @@ export function AdminCursoDetalhe() {
       }))
     )
       return
-    await supabase.from('pills').delete().eq('id', pillId)
+    const { error } = await supabase.from('pills').delete().eq('id', pillId)
+    if (error) {
+      alert(error.message)
+      return
+    }
     if (track) await reloadAulas(track.id)
   }
 

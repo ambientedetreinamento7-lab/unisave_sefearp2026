@@ -31,7 +31,11 @@ export function AdminTrilhas() {
       ))
     )
       return
-    await supabase.from('tracks').delete().eq('id', id)
+    const { error } = await supabase.from('tracks').delete().eq('id', id)
+    if (error) {
+      alert(error.message)
+      return
+    }
     reload()
   }
 
