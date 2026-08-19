@@ -441,20 +441,23 @@ export function Dashboard() {
   )
 }
 
-const BADGE_COLORS = [
-  'bg-blue-100 text-blue-600',
-  'bg-purple-100 text-purple-600',
-  'bg-rose-100 text-rose-600',
-  'bg-emerald-100 text-emerald-600',
-  'bg-amber-100 text-amber-600',
-  'bg-cyan-100 text-cyan-600',
+// Cada eixo/curso cai sempre na mesma família de cor (mesmo hash), só que
+// agora como gradiente — usado na capa de fallback do card, pra ele nunca
+// ficar com um cantinho de ícone boiando num card quase todo em branco.
+const COVER_GRADIENTS = [
+  'from-blue-500 to-indigo-600',
+  'from-purple-500 to-fuchsia-600',
+  'from-rose-500 to-pink-600',
+  'from-emerald-500 to-teal-600',
+  'from-amber-500 to-orange-600',
+  'from-cyan-500 to-sky-600',
 ]
 
-function colorForAxis(axis: string | null) {
+function gradientForAxis(axis: string | null) {
   const s = axis ?? ''
   let hash = 0
   for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0
-  return BADGE_COLORS[hash % BADGE_COLORS.length]
+  return COVER_GRADIENTS[hash % COVER_GRADIENTS.length]
 }
 
 const ACTION_LABEL: Record<UserProgress['status'], string> = {
@@ -547,25 +550,27 @@ function CourseCard({
   const title = isCourse ? item.track.title : item.pill.title
   const description = isCourse ? item.track.description : item.pill.description
   const thumbnailUrl = isCourse ? item.track.thumbnail_url ?? item.track.cover_url : item.pill.thumbnail_url
-  const axis = isCourse ? null : item.pill.axis
+  const axis = isCourse ? item.track.title : item.pill.axis
   const metaLine = isCourse
     ? `${item.modules.length} módulos${item.track.carga_horaria_total ? ` · ${item.track.carga_horaria_total}h` : ''}`
     : `${item.pill.axis} · ${item.pill.duration}`
 
   let status: UserProgress['status'] = 'not_started'
   let linkTargetId: string
+  let pct = 0
   if (isCourse) {
-    const completed = item.modules.filter((m) => progress[m.id]?.status === 'completed')
+    const completedCount = item.modules.filter((m) => progress[m.id]?.status === 'completed').length
     const started = item.modules.some((m) => progress[m.id]?.status !== undefined)
-    status = completed.length === item.modules.length ? 'completed' : started ? 'in_progress' : 'not_started'
+    status = completedCount === item.modules.length ? 'completed' : started ? 'in_progress' : 'not_started'
     linkTargetId = (item.modules.find((m) => progress[m.id]?.status !== 'completed') ?? item.modules[0]).id
+    pct = item.modules.length ? Math.round((completedCount / item.modules.length) * 100) : 0
   } else {
     status = progress[item.pill.id]?.status ?? 'not_started'
     linkTargetId = item.pill.id
   }
 
   return (
-    <div className="card relative flex h-full flex-col gap-3 p-4 transition hover:card-highlight">
+    <div className="card relative flex h-full flex-col overflow-hidden p-0 transition duration-200 hover:-translate-y-1 hover:shadow-lg">
       {onToggleFavorite && (
         <button
           onClick={(e) => {
@@ -579,27 +584,36 @@ function CourseCard({
           <Icon name={favorited ? 'heart-filled' : 'heart'} size={14} className={favorited ? 'text-brand-red' : undefined} />
         </button>
       )}
-      <Link to={`/curso/${linkTargetId}`} className="flex flex-1 flex-col gap-3">
+      <Link to={`/curso/${linkTargetId}`} className="flex flex-1 flex-col">
         {thumbnailUrl ? (
-          <img src={thumbnailUrl} alt="" className="-mx-4 -mt-4 h-28 w-[calc(100%+2rem)] rounded-t-2xl object-cover" />
+          <img src={thumbnailUrl} alt="" className="h-32 w-full shrink-0 object-cover" />
         ) : (
-          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${colorForAxis(axis)}`}>
-            <Icon name="book" size={18} />
-          </span>
+          <div className={`relative flex h-32 w-full shrink-0 items-center justify-center bg-gradient-to-br ${gradientForAxis(axis)}`}>
+            <Icon name={isCourse ? 'graduation-cap' : 'book'} size={34} className="text-white/90" />
+            {isCourse && (
+              <span className="absolute left-3 top-3 rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur-sm">
+                Curso
+              </span>
+            )}
+          </div>
         )}
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{metaLine}</p>
-          <h3 className="mt-0.5 font-bold text-ink">{title}</h3>
-        </div>
-        {description && <p className="line-clamp-2 text-sm text-ink-soft">{description}</p>}
-        <div className="mt-auto flex items-center justify-end pt-2">
-          <span
-            className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-white transition ${ACTION_COLOR[status]}`}
-          >
-
-            {ACTION_LABEL[status]}
-            <Icon name="arrow-right" size={12} />
-          </span>
+        <div className="flex flex-1 flex-col gap-2 p-4">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
+          <h3 className="-mt-1 font-bold leading-snug text-ink">{title}</h3>
+          {description && <p className="line-clamp-2 text-sm text-ink-soft">{description}</p>}
+          {isCourse && status === 'in_progress' && (
+            <div className="mt-1">
+              <ProgressBar value={pct} />
+            </div>
+          )}
+          <div className="mt-auto flex items-center justify-end pt-2">
+            <span
+              className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-white transition ${ACTION_COLOR[status]}`}
+            >
+              {ACTION_LABEL[status]}
+              <Icon name="arrow-right" size={12} />
+            </span>
+          </div>
         </div>
       </Link>
     </div>
