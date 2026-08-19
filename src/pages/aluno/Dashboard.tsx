@@ -31,7 +31,7 @@ import type { Category, DashboardSection, GamificationRule, Pill, UserProgress, 
 const NAV_TOUR_STEPS: TourStep[] = [
   {
     title: 'Bem-vindo(a) à plataforma! 👋',
-    body: 'Vamos te mostrar rapidinho como navegar por aqui. Leva menos de um minuto!',
+    body: 'Vamos te mostrar rapidinho como navegar por aqui. Leva menos de um minuto.',
   },
   {
     target: '#tour-nav-dashboard',
@@ -239,11 +239,18 @@ export function Dashboard() {
   const filteredCatalog = useMemo(() => {
     const q = catalogSearch.trim().toLowerCase()
     return allPills.filter((p) => {
-      if (selectedCategoryId && p.category_id !== selectedCategoryId) return false
+      if (selectedCategoryId) {
+        // Um "Curso com Módulos" pode ter a categoria só no curso (não em
+        // cada aula) — nesse caso a pílula ainda passa no filtro se a
+        // categoria do curso-mãe bater, senão o card do curso inteiro
+        // sumiria do catálogo por causa de uma aula sem categoria própria.
+        const courseCategoryId = multiModuleTracks.get(p.track_id)?.track.category_id
+        if (p.category_id !== selectedCategoryId && courseCategoryId !== selectedCategoryId) return false
+      }
       if (q && !p.title.toLowerCase().includes(q)) return false
       return true
     })
-  }, [allPills, selectedCategoryId, catalogSearch])
+  }, [allPills, selectedCategoryId, catalogSearch, multiModuleTracks])
 
   const catalogCards = useMemo(
     () => collapseToCourseCards(filteredCatalog, multiModuleTracks),

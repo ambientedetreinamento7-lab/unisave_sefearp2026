@@ -64,8 +64,9 @@ export interface Track {
   description: string | null
   icon: string | null
   primary_color: string | null
-  program_id: string
-  diagnostic_profile: DiagnosticProfile
+  program_id: string | null
+  diagnostic_profile: DiagnosticProfile | null
+  category_id: string | null
   objetivo_geral: string | null
   publico_alvo: string | null
   pre_requisitos: string | null

@@ -47,7 +47,8 @@ export function AdminCursoDetalhe() {
   const [published, setPublished] = useState(true)
   const [isCatalog, setIsCatalog] = useState(false)
   const [programId, setProgramId] = useState('')
-  const [profile, setProfile] = useState<DiagnosticProfile>('autogestao')
+  const [profile, setProfile] = useState<DiagnosticProfile | ''>('')
+  const [categoryId, setCategoryId] = useState('')
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
@@ -89,12 +90,11 @@ export function AdminCursoDetalhe() {
           setSequential(row.sequential)
           setPublished(row.published)
           setIsCatalog(row.is_catalog)
-          setProgramId(row.program_id)
-          setProfile(row.diagnostic_profile)
+          setProgramId(row.program_id ?? '')
+          setProfile(row.diagnostic_profile ?? '')
+          setCategoryId(row.category_id ?? '')
         }
         await reloadAulas(id)
-      } else {
-        setProgramId((prog as Program[] | null)?.[0]?.id ?? '')
       }
       if (!cancelled) setLoading(false)
     }
@@ -124,8 +124,9 @@ export function AdminCursoDetalhe() {
         sequential,
         published,
         is_catalog: isCatalog,
-        program_id: programId,
-        diagnostic_profile: profile,
+        program_id: programId || null,
+        diagnostic_profile: profile || null,
+        category_id: categoryId || null,
         cover_url: coverUrl,
         thumbnail_url: thumbnailUrl,
       }
@@ -252,13 +253,29 @@ export function AdminCursoDetalhe() {
             onChange={(e) => setCargaHoraria(e.target.value)}
           />
 
-          <label className="block text-xs font-semibold text-ink-soft">Programa</label>
+          <label className="block text-xs font-semibold text-ink-soft">Categoria (filtro do catálogo)</label>
+          <select className="w-full rounded-xl border border-navy-light px-4 py-3" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <option value="">Sem categoria</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+
+          <label className="block text-xs font-semibold text-ink-soft">
+            Programa <span className="font-normal normal-case text-ink-soft/70">(opcional — pode vincular depois)</span>
+          </label>
           <select className="w-full rounded-xl border border-navy-light px-4 py-3" value={programId} onChange={(e) => setProgramId(e.target.value)}>
+            <option value="">Não definido</option>
             {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
 
-          <label className="block text-xs font-semibold text-ink-soft">Perfil</label>
-          <select className="w-full rounded-xl border border-navy-light px-4 py-3" value={profile} onChange={(e) => setProfile(e.target.value as DiagnosticProfile)}>
+          <label className="block text-xs font-semibold text-ink-soft">
+            Perfil <span className="font-normal normal-case text-ink-soft/70">(opcional — pode vincular depois)</span>
+          </label>
+          <select
+            className="w-full rounded-xl border border-navy-light px-4 py-3"
+            value={profile}
+            onChange={(e) => setProfile(e.target.value as DiagnosticProfile | '')}
+          >
+            <option value="">Não definido</option>
             <option value="autogestao">Autogestão</option>
             <option value="tech_ia">Tech & IA</option>
             <option value="lideranca">Liderança</option>

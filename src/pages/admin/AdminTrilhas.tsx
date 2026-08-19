@@ -218,7 +218,9 @@ export function AdminTrilhas() {
                     )}
                   </div>
                   <p className="text-xs text-ink-soft">
-                    {programs.find((p) => p.id === track.program_id)?.name} · {track.diagnostic_profile}
+                    {track.program_id
+                      ? `${programs.find((p) => p.id === track.program_id)?.name} · ${track.diagnostic_profile ?? 'sem perfil'}`
+                      : 'Programa/perfil não definidos'}
                     {track.carga_horaria_total != null && <> · {track.carga_horaria_total}h</>}
                     {track.certificate_enabled && <> · 🎓 emite certificado</>}
                   </p>
