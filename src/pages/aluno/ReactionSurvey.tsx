@@ -33,7 +33,7 @@ export function ReactionSurvey() {
       if (found) {
         setSurvey(found.survey)
         setQuestions(found.questions)
-        setAlreadySubmitted(await hasSubmittedReaction(found.survey.id, profile!.id))
+        setAlreadySubmitted(await hasSubmittedReaction(id!, profile!.id))
       }
       setLoading(false)
     }
@@ -56,6 +56,7 @@ export function ReactionSurvey() {
     setSubmitting(true)
     await submitReactionResponse(
       survey.id,
+      id,
       profile.id,
       questions.map((q) => {
         const value = answers[q.id]

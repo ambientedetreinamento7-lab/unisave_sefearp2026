@@ -116,6 +116,7 @@ export interface Pill {
   thumbnail_url: string | null
   points_override: number | null
   category_id: string | null
+  reaction_survey_id: string | null
   required: boolean
   access_count: number
   created_at: string
@@ -201,7 +202,7 @@ export interface QuizQuestion {
 
 export interface ReactionSurvey {
   id: string
-  pill_id: string
+  name: string
 }
 
 export interface ReactionQuestion {
@@ -215,6 +216,7 @@ export interface ReactionQuestion {
 export interface ReactionResponse {
   id: string
   survey_id: string
+  pill_id: string
   user_id: string
   submitted_at: string
 }

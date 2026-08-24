@@ -451,10 +451,16 @@ export function trackProgressPct(pills: Pill[], progress: Record<string, UserPro
 
 // ---- Avaliação de Reação (Kirkpatrick nível 1) ----
 
+/** Avaliação de reação da pílula — a pesquisa em si é reutilizável (o
+ * mesmo modelo pode estar em vários cursos), então isso resolve via
+ * pills.reaction_survey_id, não mais um vínculo 1:1 pill↔survey. */
 export async function getReactionSurveyForPill(
   pillId: string,
 ): Promise<{ survey: ReactionSurvey; questions: ReactionQuestion[] } | null> {
-  const { data: survey } = await supabase.from('reaction_surveys').select('*').eq('pill_id', pillId).maybeSingle()
+  const { data: pill } = await supabase.from('pills').select('reaction_survey_id').eq('id', pillId).maybeSingle()
+  const surveyId = (pill as { reaction_survey_id: string | null } | null)?.reaction_survey_id
+  if (!surveyId) return null
+  const { data: survey } = await supabase.from('reaction_surveys').select('*').eq('id', surveyId).maybeSingle()
   if (!survey) return null
   const { data: questions } = await supabase
     .from('reaction_questions')
@@ -464,11 +470,14 @@ export async function getReactionSurveyForPill(
   return { survey: survey as ReactionSurvey, questions: (questions as ReactionQuestion[]) ?? [] }
 }
 
-export async function hasSubmittedReaction(surveyId: string, userId: string): Promise<boolean> {
+/** Se já respondeu a avaliação de reação **desta pílula** especificamente
+ * — por pill_id, não por survey_id, já que a mesma pesquisa reutilizada
+ * em outro curso deve poder ser respondida de novo lá. */
+export async function hasSubmittedReaction(pillId: string, userId: string): Promise<boolean> {
   const { data } = await supabase
     .from('reaction_responses')
     .select('id')
-    .eq('survey_id', surveyId)
+    .eq('pill_id', pillId)
     .eq('user_id', userId)
     .maybeSingle()
   return !!data
@@ -476,12 +485,13 @@ export async function hasSubmittedReaction(surveyId: string, userId: string): Pr
 
 export async function submitReactionResponse(
   surveyId: string,
+  pillId: string,
   userId: string,
   answers: { questionId: string; valueNumber?: number | null; valueText?: string | null }[],
 ) {
   const { data: response, error } = await supabase
     .from('reaction_responses')
-    .insert({ survey_id: surveyId, user_id: userId })
+    .insert({ survey_id: surveyId, pill_id: pillId, user_id: userId })
     .select('id')
     .single()
   if (error) throw error
@@ -494,6 +504,89 @@ export async function submitReactionResponse(
       value_text: a.valueText ?? null,
     })),
   )
+}
+
+// ---- Pesquisas de Reação (gestão central, admin) ----
+
+export async function getReactionSurveys(): Promise<ReactionSurvey[]> {
+  const { data } = await supabase.from('reaction_surveys').select('*').order('name')
+  return (data as ReactionSurvey[]) ?? []
+}
+
+export async function createReactionSurvey(name: string): Promise<ReactionSurvey> {
+  const { data, error } = await supabase.from('reaction_surveys').insert({ name }).select('*').single()
+  if (error) throw error
+  return data as ReactionSurvey
+}
+
+export async function renameReactionSurvey(id: string, name: string) {
+  const { error } = await supabase.from('reaction_surveys').update({ name }).eq('id', id)
+  if (error) throw error
+}
+
+/** Apaga a pesquisa (cascade cuida de perguntas/respostas/respostas
+ * individuais) e desvincula qualquer pílula que a usava. */
+export async function deleteReactionSurvey(id: string) {
+  await supabase.from('pills').update({ reaction_survey_id: null }).eq('reaction_survey_id', id)
+  const { error } = await supabase.from('reaction_surveys').delete().eq('id', id)
+  if (error) throw error
+}
+
+/** Quantas pílulas (cursos/módulos) usam essa pesquisa hoje — pra avisar
+ * o admin antes de excluir ou editar as perguntas de algo compartilhado. */
+export async function countPillsUsingSurvey(surveyId: string): Promise<number> {
+  const { count } = await supabase
+    .from('pills')
+    .select('id', { count: 'exact', head: true })
+    .eq('reaction_survey_id', surveyId)
+  return count ?? 0
+}
+
+/** Respostas de uma pesquisa, já com o nome do curso/aula (pill) onde
+ * cada uma foi respondida e o nome de quem respondeu — pro relatório
+ * (spec: identificar de qual curso cada nota veio). */
+export async function getReactionSurveyResponses(surveyId: string): Promise<
+  {
+    id: string
+    submittedAt: string
+    pillTitle: string
+    userName: string
+    answers: { questionText: string; valueNumber: number | null; valueText: string | null }[]
+  }[]
+> {
+  const { data: responses } = await supabase
+    .from('reaction_responses')
+    .select('id, submitted_at, pills(title), profiles(name)')
+    .eq('survey_id', surveyId)
+    .order('submitted_at', { ascending: false })
+  const rows = (responses as { id: string; submitted_at: string; pills: { title: string } | null; profiles: { name: string } | null }[] | null) ?? []
+  if (rows.length === 0) return []
+
+  const { data: questions } = await supabase
+    .from('reaction_questions')
+    .select('id, question_text')
+    .eq('survey_id', surveyId)
+    .order('order_index')
+  const questionMap = new Map(((questions as { id: string; question_text: string }[]) ?? []).map((q) => [q.id, q.question_text]))
+
+  const { data: answers } = await supabase
+    .from('reaction_answers')
+    .select('response_id, question_id, value_number, value_text')
+    .in('response_id', rows.map((r) => r.id))
+  const answersByResponse = new Map<string, { questionText: string; valueNumber: number | null; valueText: string | null }[]>()
+  for (const a of (answers as { response_id: string; question_id: string; value_number: number | null; value_text: string | null }[] | null) ?? []) {
+    const arr = answersByResponse.get(a.response_id) ?? []
+    arr.push({ questionText: questionMap.get(a.question_id) ?? '—', valueNumber: a.value_number, valueText: a.value_text })
+    answersByResponse.set(a.response_id, arr)
+  }
+
+  return rows.map((r) => ({
+    id: r.id,
+    submittedAt: r.submitted_at,
+    pillTitle: r.pills?.title ?? '—',
+    userName: r.profiles?.name ?? '—',
+    answers: answersByResponse.get(r.id) ?? [],
+  }))
 }
 
 /** Se a trilha "dona" da pílula (pills.track_id) exige ordem sequencial,

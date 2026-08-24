@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AdminLayout } from './AdminLayout'
 import { useConfirm } from '../../components/ConfirmDialog'
-import { linkPillToTrack, unlinkPillFromTrack } from '../../lib/api'
+import { getReactionSurveys, linkPillToTrack, unlinkPillFromTrack } from '../../lib/api'
 import { formatCargaHoraria } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
-import type { Category, ContentType, DiagnosticProfile, Pill, Program, ScormLibraryItem, Track, TrackPill } from '../../types/database'
+import type { Category, ContentType, DiagnosticProfile, Pill, Program, ReactionSurvey, ScormLibraryItem, Track, TrackPill } from '../../types/database'
 
 async function uploadCover(file: File, folder: string): Promise<string> {
   const path = `${folder}/${crypto.randomUUID()}-${file.name}`
@@ -468,6 +468,8 @@ function PillFormModal({
   const [contentUrl, setContentUrl] = useState(pill?.content_url ?? '')
   const [scormLibraryId, setScormLibraryId] = useState(pill?.scorm_library_id ?? '')
   const [scormLibrary, setScormLibrary] = useState<ScormLibraryItem[]>([])
+  const [reactionSurveyId, setReactionSurveyId] = useState(pill?.reaction_survey_id ?? '')
+  const [reactionSurveys, setReactionSurveys] = useState<ReactionSurvey[]>([])
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [pointsOverride, setPointsOverride] = useState(pill?.points_override != null ? String(pill.points_override) : '')
@@ -481,6 +483,11 @@ function PillFormModal({
     supabase.from('scorm_library').select('*').order('name').then(({ data }) => {
       setScormLibrary((data as ScormLibraryItem[]) ?? [])
     })
+  }, [contentType])
+
+  useEffect(() => {
+    if (contentType !== 'reaction') return
+    getReactionSurveys().then(setReactionSurveys)
   }, [contentType])
 
   async function save() {
@@ -501,6 +508,7 @@ function PillFormModal({
         ...(contentType === 'scorm' && scormLibraryId
           ? { scorm_package_url: null, scorm_manifest_path: null }
           : {}),
+        reaction_survey_id: contentType === 'reaction' ? reactionSurveyId || null : null,
         cover_url: coverUrl,
         thumbnail_url: thumbnailUrl,
         points_override: pointsOverride === '' ? null : Number(pointsOverride),
@@ -541,10 +549,26 @@ function PillFormModal({
         </select>
 
         {contentType === 'reaction' && (
-          <p className="rounded-xl border border-navy-light bg-bg px-4 py-3 text-xs text-ink-soft">
-            Esta pílula não tem vídeo/arquivo — ela é a própria avaliação de reação. Depois de salvar, cadastre as
-            perguntas dela em <strong>Quizzes → {title || 'esta pílula'}</strong>.
-          </p>
+          <div>
+            <label className="block text-xs font-semibold text-ink-soft">Pesquisa de satisfação</label>
+            <select
+              className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3"
+              value={reactionSurveyId}
+              onChange={(e) => setReactionSurveyId(e.target.value)}
+            >
+              <option value="">Selecione uma pesquisa…</option>
+              {reactionSurveys.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            <Link to="/admin/quizzes" className="mt-1 inline-block text-xs font-semibold text-navy hover:underline">
+              + Criar/editar pesquisas de reação
+            </Link>
+            <p className="mt-2 rounded-xl border border-navy-light bg-bg px-4 py-3 text-xs text-ink-soft">
+              Esta pílula não tem vídeo/arquivo — ela é a própria avaliação de reação. A mesma pesquisa pode ser
+              usada em outros cursos; o relatório de respostas identifica de qual curso cada resposta veio.
+            </p>
+          </div>
         )}
 
         {contentType !== 'scorm' && contentType !== 'reaction' && (

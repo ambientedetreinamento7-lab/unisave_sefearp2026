@@ -64,8 +64,13 @@ create table tracks (
   description text,
   icon text,
   primary_color text,
-  program_id text not null references programs(id) on delete cascade,
-  diagnostic_profile diagnostic_profile not null,
+  -- Nulos até o curso passar pela etapa de vínculo a programa/perfil (spec:
+  -- criação de curso não deve obrigar programa/perfil de cara — isso é
+  -- preenchido depois, numa etapa separada). Enquanto nulo, o curso não
+  -- entra em nenhum match de trilha recomendada nem de Biblioteca por
+  -- perfil — só fica disponível pra quem o admin adicionar manualmente.
+  program_id text references programs(id) on delete cascade,
+  diagnostic_profile diagnostic_profile,
   -- Curso metadata (spec: página admin de cursos).
   objetivo_geral text,
   publico_alvo text,
@@ -94,7 +99,14 @@ create table tracks (
   -- is completed (spec: módulos sequenciais ou não). Gating lives in
   -- CoursePlayer, not RLS — enforcing it in Postgres would need the
   -- whole ordered progress chain re-derived on every read.
-  sequential boolean not null default false
+  sequential boolean not null default false,
+  -- Banner rotativo do Dashboard (spec: banner de cursos em destaque) —
+  -- usa a mesma capa (cover_url) do curso. Início/fim opcionais: nulo de
+  -- um lado = sem limite naquela ponta (ex.: sem fim = banner permanente
+  -- até ser desativado manualmente).
+  banner_enabled boolean not null default false,
+  banner_start_at timestamptz,
+  banner_end_at timestamptz
 );
 
 -- Many-to-many: which pills (cursos) belong to which trilhas. A pill keeps
@@ -129,6 +141,13 @@ create table categories (
   name text not null,
   order_index int not null default 0
 );
+
+-- Categoria do curso como um todo (spec: escolher categoria na criação do
+-- curso) — filtra o catálogo igual à categoria por pílula já fazia, só que
+-- no nível do curso; um curso "Curso com Módulos" some do card único do
+-- Dashboard se filtrarmos só por pílula, então isso cobre esse caso.
+alter table tracks add column category_id uuid references categories(id) on delete set null;
+create index on tracks (category_id);
 
 create table pills (
   id uuid primary key default gen_random_uuid(),
@@ -177,7 +196,10 @@ create table profiles (
   program_id text references programs(id),
   curriculum_period text,
   diagnostic_profile diagnostic_profile,
-  selected_track_id uuid references tracks(id),
+  -- on delete set null: excluir a trilha não deve ficar travado só
+  -- porque um aluno tem ela como "recomendada" — o ponteiro vira null e
+  -- a Trilha recomendada some do Dashboard dele, sem bloquear o admin.
+  selected_track_id uuid references tracks(id) on delete set null,
   role user_role not null default 'aluno',
   created_at timestamptz not null default now(),
   -- Flips to true once sync_profile_with_auth reconciles this row to a real
@@ -260,14 +282,15 @@ create table questions (
 );
 
 -- ---- Avaliação de Reação (Kirkpatrick nível 1) ----
--- Uma pesquisa de satisfação opcional por pílula — o admin decide quais
--- cursos pedem reação do aluno. Fica de fora da tabela `quizzes` de
--- propósito: não tem nota de corte, não bloqueia o módulo, e conta como
--- um item a mais no cálculo de "% concluído" da trilha (trackProgressPct),
--- não como parte da avaliação de conhecimento.
+-- Um modelo reutilizável de pesquisa de satisfação (spec: reestruturação
+-- — uma avaliação de reação não pertence mais a uma única pílula, pode
+-- ser reaproveitada em qualquer curso). Gerenciada centralmente em
+-- Admin > Quizzes > Pesquisas de Reação; cada pílula do tipo 'reaction'
+-- escolhe qual pesquisa usar via pills.reaction_survey_id (ver abaixo,
+-- coluna adicionada depois porque referencia esta tabela).
 create table reaction_surveys (
   id uuid primary key default gen_random_uuid(),
-  pill_id uuid not null unique references pills(id) on delete cascade
+  name text not null
 );
 
 -- likert5 (escala de concordância 1–5, o clássico "smile sheet" de
@@ -285,9 +308,15 @@ create table reaction_questions (
 create table reaction_responses (
   id uuid primary key default gen_random_uuid(),
   survey_id uuid not null references reaction_surveys(id) on delete cascade,
+  -- Qual pílula (curso/módulo) o aluno estava respondendo — necessário
+  -- pra relatório, já que a mesma pesquisa pode estar em vários cursos
+  -- (spec: coluna que identifique de qual curso a resposta é). Também é
+  -- o que faz a mesma pesquisa poder ser respondida de novo em outro
+  -- curso — a unicidade é por (pill_id, user_id), não (survey_id, user_id).
+  pill_id uuid not null references pills(id) on delete cascade,
   user_id uuid not null references profiles(id) on update cascade on delete cascade,
   submitted_at timestamptz not null default now(),
-  unique (survey_id, user_id)
+  unique (pill_id, user_id)
 );
 
 create table reaction_answers (
@@ -297,6 +326,11 @@ create table reaction_answers (
   value_number int,
   value_text text
 );
+
+-- Qual pesquisa de reação uma pílula 'reaction' usa (null até o admin
+-- escolher uma) — precisa vir depois de reaction_surveys existir.
+alter table pills add column reaction_survey_id uuid references reaction_surveys(id) on delete set null;
+create index on pills (reaction_survey_id);
 
 create table skill_ratings (
   id uuid primary key default gen_random_uuid(),
@@ -606,6 +640,7 @@ create index on user_progress (user_id);
 create index on questions (quiz_id);
 create index on reaction_questions (survey_id);
 create index on reaction_responses (survey_id);
+create index on reaction_responses (pill_id);
 create index on reaction_responses (user_id);
 create index on reaction_answers (response_id);
 create index on skill_ratings (user_id);

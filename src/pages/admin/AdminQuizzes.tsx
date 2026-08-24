@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react'
 import { AdminLayout } from './AdminLayout'
+import {
+  countPillsUsingSurvey,
+  createReactionSurvey,
+  deleteReactionSurvey,
+  getReactionSurveyResponses,
+  getReactionSurveys,
+  renameReactionSurvey,
+} from '../../lib/api'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { parseCsv } from '../../lib/csv'
 import { supabase } from '../../lib/supabase'
 import type { Pill, Quiz, QuizQuestion, ReactionQuestion, ReactionQuestionType, ReactionSurvey, QuestionType, Track } from '../../types/database'
@@ -17,7 +26,56 @@ const REACTION_TYPE_LABEL: Record<ReactionQuestionType, string> = {
   open_text: 'Comentário livre',
 }
 
+function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
+  const escape = (v: string | number) => {
+    const s = String(v)
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const csv = [headers, ...rows].map((row) => row.map(escape).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+type Mode = 'conhecimento' | 'reacao'
+
 export function AdminQuizzes() {
+  const [mode, setMode] = useState<Mode>('conhecimento')
+
+  return (
+    <AdminLayout>
+      <div className="mb-4 flex w-fit gap-2 rounded-full bg-surface p-1 shadow-sm">
+        <button
+          onClick={() => setMode('conhecimento')}
+          className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+            mode === 'conhecimento' ? 'bg-navy text-white' : 'text-ink-soft'
+          }`}
+        >
+          Quiz de Conhecimento
+        </button>
+        <button
+          onClick={() => setMode('reacao')}
+          className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+            mode === 'reacao' ? 'bg-navy text-white' : 'text-ink-soft'
+          }`}
+        >
+          Pesquisas de Reação
+        </button>
+      </div>
+      {mode === 'conhecimento' ? <KnowledgeQuizzesPanel /> : <ReactionSurveysPanel />}
+    </AdminLayout>
+  )
+}
+
+// ============================================================
+// Quiz de Conhecimento (por pílula — inalterado)
+// ============================================================
+
+function KnowledgeQuizzesPanel() {
   const [tracks, setTracks] = useState<Track[]>([])
   const [pills, setPills] = useState<Pill[]>([])
   const [selectedPillId, setSelectedPillId] = useState<string | null>(null)
@@ -26,7 +84,9 @@ export function AdminQuizzes() {
   async function reload() {
     const [{ data: t }, { data: p }] = await Promise.all([
       supabase.from('tracks').select('*'),
-      supabase.from('pills').select('*'),
+      // Avaliação de reação não é mais por pílula — só pílulas de
+      // conteúdo (vídeo/iframe/SCORM) fazem sentido aqui.
+      supabase.from('pills').select('*').neq('content_type', 'reaction'),
     ])
     setTracks((t as Track[]) ?? [])
     setPills((p as Pill[]) ?? [])
@@ -37,51 +97,44 @@ export function AdminQuizzes() {
     reload()
   }, [])
 
-  if (loading) return <AdminLayout><p className="text-ink-soft">Carregando…</p></AdminLayout>
+  if (loading) return <p className="text-ink-soft">Carregando…</p>
 
   const selectedPill = pills.find((p) => p.id === selectedPillId) ?? null
 
   return (
-    <AdminLayout>
-      <div className="grid gap-4 md:grid-cols-[280px_1fr]">
-        <div className="card max-h-[80vh] overflow-y-auto p-3">
-          {tracks.map((track) => (
-            <div key={track.id} className="mb-3">
-              <p className="px-2 py-1 text-xs font-bold uppercase tracking-wide text-ink-soft">{track.title}</p>
-              {pills
-                .filter((p) => p.track_id === track.id)
-                .map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => setSelectedPillId(p.id)}
-                    className={`block w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
-                      selectedPillId === p.id ? 'bg-navy text-white' : 'text-ink hover:bg-navy-light'
-                    }`}
-                  >
-                    {p.title}
-                  </button>
-                ))}
-            </div>
-          ))}
-          {pills.length === 0 && <p className="p-3 text-sm text-ink-soft">Nenhuma pílula cadastrada ainda.</p>}
-        </div>
-
-        <div className="space-y-6">
-          {selectedPill ? (
-            selectedPill.content_type === 'reaction' ? (
-              <ReactionEditor pill={selectedPill} />
-            ) : (
-              <QuizEditor pill={selectedPill} />
-            )
-          ) : (
-            <div className="card p-8 text-center text-ink-soft">
-              Selecione uma pílula à esquerda para editar o quiz de fixação (ou, se ela for do tipo "Avaliação de
-              Reação", as perguntas de reação dela).
-            </div>
-          )}
-        </div>
+    <div className="grid gap-4 md:grid-cols-[280px_1fr]">
+      <div className="card max-h-[80vh] overflow-y-auto p-3">
+        {tracks.map((track) => (
+          <div key={track.id} className="mb-3">
+            <p className="px-2 py-1 text-xs font-bold uppercase tracking-wide text-ink-soft">{track.title}</p>
+            {pills
+              .filter((p) => p.track_id === track.id)
+              .map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setSelectedPillId(p.id)}
+                  className={`block w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
+                    selectedPillId === p.id ? 'bg-navy text-white' : 'text-ink hover:bg-navy-light'
+                  }`}
+                >
+                  {p.title}
+                </button>
+              ))}
+          </div>
+        ))}
+        {pills.length === 0 && <p className="p-3 text-sm text-ink-soft">Nenhuma pílula cadastrada ainda.</p>}
       </div>
-    </AdminLayout>
+
+      <div className="space-y-6">
+        {selectedPill ? (
+          <QuizEditor pill={selectedPill} />
+        ) : (
+          <div className="card p-8 text-center text-ink-soft">
+            Selecione uma pílula à esquerda para editar o quiz de fixação dela.
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -542,49 +595,144 @@ function QuizCsvImport({ onImport }: { onImport: (rows: ParsedQuizRow[]) => Prom
 // Avaliação de Reação (Kirkpatrick nível 1)
 // ============================================================
 
-function ReactionEditor({ pill }: { pill: Pill }) {
-  const [survey, setSurvey] = useState<ReactionSurvey | null>(null)
-  const [questions, setQuestions] = useState<ReactionQuestion[]>([])
+// ============================================================
+// Pesquisas de Reação (spec: reestruturação — reutilizáveis entre
+// cursos, não presas a uma pílula só)
+// ============================================================
+
+function ReactionSurveysPanel() {
+  const confirm = useConfirm()
+  const [surveys, setSurveys] = useState<ReactionSurvey[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+
+  async function reload() {
+    const list = await getReactionSurveys()
+    setSurveys(list)
+    setLoading(false)
+    return list
+  }
+
+  useEffect(() => {
+    reload()
+  }, [])
+
+  async function handleCreate() {
+    const name = prompt('Nome da nova pesquisa de reação (ex: "Avaliação de Reação — Curso Online")')
+    if (!name?.trim()) return
+    setCreating(true)
+    const created = await createReactionSurvey(name.trim())
+    await reload()
+    setSelectedId(created.id)
+    setCreating(false)
+  }
+
+  async function handleDelete(survey: ReactionSurvey) {
+    const usedBy = await countPillsUsingSurvey(survey.id)
+    const warning =
+      usedBy > 0
+        ? `Excluir "${survey.name}"? Ela está em uso em ${usedBy} pílula(s) — elas ficarão sem avaliação de reação. Todas as respostas já registradas também somem.`
+        : `Excluir "${survey.name}"? Todas as respostas já registradas também somem.`
+    if (!(await confirm(warning, { danger: true, confirmLabel: 'Excluir' }))) return
+    await deleteReactionSurvey(survey.id)
+    if (selectedId === survey.id) setSelectedId(null)
+    await reload()
+  }
+
+  if (loading) return <p className="text-ink-soft">Carregando…</p>
+
+  const selected = surveys.find((s) => s.id === selectedId) ?? null
+
+  return (
+    <div className="grid gap-4 md:grid-cols-[280px_1fr]">
+      <div className="card max-h-[80vh] overflow-y-auto p-3">
+        <button
+          onClick={handleCreate}
+          disabled={creating}
+          className="mb-2 block w-full rounded-lg border-2 border-dashed border-navy-light px-3 py-2 text-left text-sm font-semibold text-navy hover:border-navy disabled:opacity-60"
+        >
+          + Nova pesquisa
+        </button>
+        {surveys.map((s) => (
+          <div key={s.id} className="group flex items-center gap-1">
+            <button
+              onClick={() => setSelectedId(s.id)}
+              className={`block flex-1 truncate rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
+                selectedId === s.id ? 'bg-navy text-white' : 'text-ink hover:bg-navy-light'
+              }`}
+            >
+              {s.name}
+            </button>
+            <button
+              onClick={() => handleDelete(s)}
+              title="Excluir pesquisa"
+              className={`shrink-0 px-1.5 text-sm ${selectedId === s.id ? 'text-white/70 hover:text-white' : 'text-ink-soft hover:text-brand-red'}`}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        {surveys.length === 0 && <p className="p-3 text-sm text-ink-soft">Nenhuma pesquisa cadastrada ainda.</p>}
+      </div>
+
+      <div className="space-y-6">
+        {selected ? (
+          <ReactionSurveyEditor key={selected.id} survey={selected} onRenamed={reload} />
+        ) : (
+          <div className="card p-8 text-center text-ink-soft">
+            Selecione uma pesquisa à esquerda (ou crie uma nova) pra editar as perguntas e ver as respostas. Pra
+            usar uma pesquisa num curso, escolha-a no formulário da pílula do tipo "Avaliação de Reação" em Admin
+            → Cursos.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ReactionSurveyEditor({ survey, onRenamed }: { survey: ReactionSurvey; onRenamed: () => Promise<unknown> }) {
+  const [name, setName] = useState(survey.name)
+  const [questions, setQuestions] = useState<ReactionQuestion[]>([])
+  const [usedByCount, setUsedByCount] = useState(0)
+  const [responses, setResponses] = useState<Awaited<ReturnType<typeof getReactionSurveyResponses>>>([])
+  const [loading, setLoading] = useState(true)
+  const [savingName, setSavingName] = useState(false)
   const [error, setError] = useState('')
 
   async function reload() {
     setLoading(true)
-    const { data: surveyData } = await supabase.from('reaction_surveys').select('*').eq('pill_id', pill.id).maybeSingle()
-    setSurvey(surveyData as ReactionSurvey | null)
-    if (surveyData) {
-      const { data: qs } = await supabase
-        .from('reaction_questions')
-        .select('*')
-        .eq('survey_id', surveyData.id)
-        .order('order_index')
-      setQuestions((qs as ReactionQuestion[]) ?? [])
-    } else {
-      setQuestions([])
-    }
+    const [{ data: qs }, usedBy, resps] = await Promise.all([
+      supabase.from('reaction_questions').select('*').eq('survey_id', survey.id).order('order_index'),
+      countPillsUsingSurvey(survey.id),
+      getReactionSurveyResponses(survey.id),
+    ])
+    setQuestions((qs as ReactionQuestion[]) ?? [])
+    setUsedByCount(usedBy)
+    setResponses(resps)
     setLoading(false)
   }
 
   useEffect(() => {
     reload()
-  }, [pill.id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [survey.id])
 
-  async function ensureSurvey(): Promise<ReactionSurvey> {
-    if (survey) return survey
-    const { data, error } = await supabase.from('reaction_surveys').insert({ pill_id: pill.id }).select('*').single()
-    if (error) throw error
-    setSurvey(data as ReactionSurvey)
-    return data as ReactionSurvey
+  async function saveName() {
+    if (!name.trim() || name === survey.name) return
+    setSavingName(true)
+    await renameReactionSurvey(survey.id, name.trim())
+    await onRenamed()
+    setSavingName(false)
   }
 
   async function addQuestions(rows: { text: string; type: ReactionQuestionType }[]) {
     if (rows.length === 0) return
     setError('')
     try {
-      const s = await ensureSurvey()
       const { error: insertError } = await supabase.from('reaction_questions').insert(
         rows.map((r, i) => ({
-          survey_id: s.id,
+          survey_id: survey.id,
           question_text: r.text,
           question_type: r.type,
           order_index: questions.length + i,
@@ -592,8 +740,6 @@ function ReactionEditor({ pill }: { pill: Pill }) {
       )
       if (insertError) throw insertError
     } catch (err) {
-      // PostgrestError não é instanceof Error, então `err instanceof Error`
-      // sempre caía na mensagem genérica e escondia o motivo real do erro.
       const message = (err as { message?: string } | null)?.message
       setError(message || 'Falha ao salvar a(s) pergunta(s).')
       throw err
@@ -611,60 +757,121 @@ function ReactionEditor({ pill }: { pill: Pill }) {
     setQuestions((prev) => prev.filter((q) => q.id !== id))
   }
 
-  async function disableSurvey() {
-    if (!survey) return
-    setError('')
-    const { error: deleteError } = await supabase.from('reaction_surveys').delete().eq('id', survey.id)
-    if (deleteError) {
-      setError(deleteError.message)
-      return
-    }
-    setSurvey(null)
-    setQuestions([])
-  }
-
   if (loading) return <p className="text-ink-soft">Carregando…</p>
 
   return (
     <div className="space-y-4">
       {error && <p className="rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-brand-red">{error}</p>}
+
       <div className="card p-5">
-        <div className="flex items-center justify-between">
-          <h3 className="font-bold text-ink">Avaliação de reação — {pill.title}</h3>
-          {survey && (
-            <button onClick={disableSurvey} className="text-xs font-semibold text-brand-red hover:underline">
-              Desativar avaliação de reação neste módulo
-            </button>
-          )}
+        <label className="block text-xs font-semibold text-ink-soft">Nome da pesquisa</label>
+        <div className="mt-1 flex gap-2">
+          <input
+            className="flex-1 rounded-xl border border-navy-light px-4 py-2.5 text-sm"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <button
+            onClick={saveName}
+            disabled={savingName || !name.trim() || name === survey.name}
+            className="rounded-xl bg-navy px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            Salvar
+          </button>
         </div>
-        <p className="mt-1 text-sm text-ink-soft">
-          Pesquisa de satisfação exibida ao aluno assim que ele conclui o módulo. Conta como um item a mais no
-          percentual de conclusão da trilha. Cadastre ao menos uma pergunta abaixo para habilitá-la.
+        <p className="mt-2 text-xs text-ink-soft">
+          Usada em <strong>{usedByCount}</strong> pílula(s) hoje — editar as perguntas aqui afeta todos os cursos
+          que usam esta pesquisa.
         </p>
       </div>
 
-      {survey && (
-        <div className="card p-5">
-          <h4 className="font-bold text-ink">Perguntas ({questions.length})</h4>
-          <div className="mt-3 space-y-2">
-            {questions.map((q, qi) => (
-              <div key={q.id} className="flex items-start justify-between gap-2 rounded-xl border border-navy-light p-3">
-                <div>
-                  <p className="font-medium text-ink">{qi + 1}. {q.question_text}</p>
-                  <p className="text-xs font-semibold text-ink-soft">{REACTION_TYPE_LABEL[q.question_type]}</p>
-                </div>
-                <button onClick={() => deleteQuestion(q.id)} className="shrink-0 text-xs font-semibold text-brand-red hover:underline">
-                  Remover
-                </button>
+      <div className="card p-5">
+        <h4 className="font-bold text-ink">Perguntas ({questions.length})</h4>
+        <div className="mt-3 space-y-2">
+          {questions.map((q, qi) => (
+            <div key={q.id} className="flex items-start justify-between gap-2 rounded-xl border border-navy-light p-3">
+              <div>
+                <p className="font-medium text-ink">{qi + 1}. {q.question_text}</p>
+                <p className="text-xs font-semibold text-ink-soft">{REACTION_TYPE_LABEL[q.question_type]}</p>
               </div>
-            ))}
-            {questions.length === 0 && <p className="text-sm text-ink-soft">Nenhuma pergunta cadastrada ainda.</p>}
-          </div>
+              <button onClick={() => deleteQuestion(q.id)} className="shrink-0 text-xs font-semibold text-brand-red hover:underline">
+                Remover
+              </button>
+            </div>
+          ))}
+          {questions.length === 0 && <p className="text-sm text-ink-soft">Nenhuma pergunta cadastrada ainda.</p>}
         </div>
-      )}
+      </div>
 
       <NewReactionQuestionForm onAdd={(row) => addQuestions([row])} />
       <ReactionCsvImport onImport={addQuestions} />
+
+      <ReactionResponsesTable surveyName={survey.name} responses={responses} />
+    </div>
+  )
+}
+
+function ReactionResponsesTable({
+  surveyName,
+  responses,
+}: {
+  surveyName: string
+  responses: Awaited<ReturnType<typeof getReactionSurveyResponses>>
+}) {
+  function exportCsv() {
+    const headers = ['Curso', 'Aluno', 'Data', 'Respostas']
+    const rows = responses.map((r) => [
+      r.pillTitle,
+      r.userName,
+      new Date(r.submittedAt).toLocaleString('pt-BR'),
+      r.answers.map((a) => `${a.questionText}: ${a.valueText ?? a.valueNumber ?? '—'}`).join(' | '),
+    ])
+    downloadCsv(`respostas-${surveyName.toLowerCase().replace(/\s+/g, '-')}.csv`, headers, rows)
+  }
+
+  return (
+    <div className="card p-5">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="font-bold text-ink">Respostas ({responses.length})</h4>
+        {responses.length > 0 && (
+          <button onClick={exportCsv} className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy">
+            Baixar CSV
+          </button>
+        )}
+      </div>
+      <p className="mt-1 text-xs text-ink-soft">
+        A coluna "Curso" identifica em qual curso o aluno estava quando respondeu — a mesma pesquisa pode
+        aparecer aqui com cursos diferentes.
+      </p>
+      <div className="mt-3 max-h-96 overflow-y-auto">
+        <table className="w-full text-left text-xs">
+          <thead className="sticky top-0 bg-surface">
+            <tr className="text-ink-soft">
+              <th className="px-2 py-1.5">Curso</th>
+              <th className="px-2 py-1.5">Aluno</th>
+              <th className="px-2 py-1.5">Data</th>
+              <th className="px-2 py-1.5">Respostas</th>
+            </tr>
+          </thead>
+          <tbody>
+            {responses.map((r) => (
+              <tr key={r.id} className="border-t border-navy-light/60 align-top">
+                <td className="px-2 py-2 font-semibold text-navy">{r.pillTitle}</td>
+                <td className="px-2 py-2">{r.userName}</td>
+                <td className="px-2 py-2 whitespace-nowrap">{new Date(r.submittedAt).toLocaleString('pt-BR')}</td>
+                <td className="px-2 py-2">
+                  {r.answers.map((a, i) => (
+                    <p key={i}>
+                      <span className="text-ink-soft">{a.questionText}:</span> {a.valueText ?? a.valueNumber ?? '—'}
+                    </p>
+                  ))}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {responses.length === 0 && <p className="p-3 text-sm text-ink-soft">Nenhuma resposta registrada ainda.</p>}
+      </div>
     </div>
   )
 }
