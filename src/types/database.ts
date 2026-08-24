@@ -117,6 +117,7 @@ export interface Pill {
   points_override: number | null
   category_id: string | null
   reaction_survey_id: string | null
+  allow_manual_completion: boolean
   required: boolean
   access_count: number
   created_at: string

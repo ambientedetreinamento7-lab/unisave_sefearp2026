@@ -475,6 +475,7 @@ function PillFormModal({
   const [pointsOverride, setPointsOverride] = useState(pill?.points_override != null ? String(pill.points_override) : '')
   const [categoryId, setCategoryId] = useState(pill?.category_id ?? '')
   const [required, setRequired] = useState(pill?.required ?? false)
+  const [allowManualCompletion, setAllowManualCompletion] = useState(pill?.allow_manual_completion ?? false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -514,6 +515,7 @@ function PillFormModal({
         points_override: pointsOverride === '' ? null : Number(pointsOverride),
         category_id: categoryId || null,
         required,
+        allow_manual_completion: allowManualCompletion,
       }
       if (pill) {
         const { error: saveError } = await supabase.from('pills').update(payload).eq('id', pill.id)
@@ -635,6 +637,23 @@ function PillFormModal({
           <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
           Curso obrigatório
         </label>
+
+        {contentType === 'video' && (
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-ink">
+              <input
+                type="checkbox"
+                checked={allowManualCompletion}
+                onChange={(e) => setAllowManualCompletion(e.target.checked)}
+              />
+              Permitir concluir manualmente
+            </label>
+            <p className="mt-1 text-xs text-ink-soft">
+              Por padrão o módulo só conclui automaticamente quando o aluno assiste o vídeo até o fim, sem pular
+              trechos. Marque esta opção para liberar também um botão "Concluir Módulo" manual.
+            </p>
+          </div>
+        )}
 
         {error && <p className="text-sm text-brand-red">{error}</p>}
 

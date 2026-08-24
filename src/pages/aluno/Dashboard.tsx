@@ -719,8 +719,11 @@ function CourseCard({
           <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
           <h3 className="-mt-1 font-bold leading-snug text-ink">{title}</h3>
           {description && <p className="line-clamp-2 text-sm text-ink-soft">{description}</p>}
-          {isCourse && status === 'in_progress' && (
+          {isCourse && status !== 'not_started' && (
             <div className="mt-1">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-ink-soft">
+                <span>{pct}% concluído</span>
+              </div>
               <ProgressBar value={pct} />
             </div>
           )}

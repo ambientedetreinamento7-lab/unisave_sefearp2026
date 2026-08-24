@@ -175,6 +175,13 @@ create table pills (
   category_id uuid references categories(id) on delete set null,
   -- Aparece na seção "Cursos obrigatórios" da Minha Trilha.
   required boolean not null default false,
+  -- Por padrão a conclusão do módulo é automática e específica do
+  -- conteúdo (vídeo: assistir até o fim sem pular à frente; scorm: pacote
+  -- reporta 'completed'; último módulo com quiz: nota de aprovação). Só
+  -- quando o admin liga esse campo é que aparece o botão manual
+  -- "Concluir Módulo" como atalho — usado, por ex., em iframes genéricos
+  -- (não vídeo) onde não há como rastrear o progresso automaticamente.
+  allow_manual_completion boolean not null default false,
   -- Quantos alunos distintos já iniciaram essa pílula — incrementado em
   -- markPillInProgress só na primeira vez de cada aluno, alimenta a
   -- seção "Mais acessados".

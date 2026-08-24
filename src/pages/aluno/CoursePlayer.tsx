@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { Icon } from '../../components/Icon'
+import { ProgressBar } from '../../components/ProgressBar'
 import { ScormPlayer } from '../../components/ScormPlayer'
 import { useAuth } from '../../context/AuthContext'
 import { completePill, getBlockingPill, getTrackWithPills, getUserProgressMap, markPillInProgress } from '../../lib/api'
@@ -17,20 +18,51 @@ const CONTENT_TYPE_ICON: Record<Pill['content_type'], string> = {
 
 // Links do Vimeo/YouTube (mesmo os de "compartilhar") não são um arquivo de
 // vídeo direto — a tag <video> não consegue tocá-los. Precisam do player
-// embutido em iframe. Detecta esses casos e devolve a URL de embed correta;
-// null significa "é mesmo um arquivo de vídeo direto (mp4 etc.), usa <video>".
-function getVideoEmbedUrl(url: string): string | null {
+// embutido em iframe. Detecta esses casos e devolve os dados de embed
+// corretos; null significa "é mesmo um arquivo de vídeo direto (mp4 etc.),
+// usa <video>".
+function getVideoEmbedInfo(url: string): { provider: 'vimeo' | 'youtube'; embedUrl: string } | null {
   const vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)(?:\/([a-zA-Z0-9]+))?/)
   if (vimeoMatch) {
     const [, videoId, hash] = vimeoMatch
-    return `https://player.vimeo.com/video/${videoId}${hash ? `?h=${hash}` : ''}`
+    return {
+      provider: 'vimeo',
+      embedUrl: `https://player.vimeo.com/video/${videoId}${hash ? `?h=${hash}` : ''}`,
+    }
   }
   const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]+)/)
   if (youtubeMatch) {
-    return `https://www.youtube.com/embed/${youtubeMatch[1]}`
+    return {
+      provider: 'youtube',
+      embedUrl: `https://www.youtube.com/embed/${youtubeMatch[1]}?enablejsapi=1`,
+    }
   }
   return null
 }
+
+// Carrega um <script> externo uma única vez (cache por src), devolvendo uma
+// promise que resolve quando o script já está pronto — usado pros SDKs
+// oficiais do Vimeo Player e do YouTube IFrame, que só existem via CDN deles
+// (não são pacotes npm instaláveis).
+const loadedScripts = new Map<string, Promise<void>>()
+function loadScript(src: string): Promise<void> {
+  let promise = loadedScripts.get(src)
+  if (!promise) {
+    promise = new Promise((resolve, reject) => {
+      const script = document.createElement('script')
+      script.src = src
+      script.onload = () => resolve()
+      script.onerror = () => reject(new Error(`Falha ao carregar ${src}`))
+      document.head.appendChild(script)
+    })
+    loadedScripts.set(src, promise)
+  }
+  return promise
+}
+
+// Tolerância de "pulo pra frente" antes de ser considerado skip — cobre a
+// flutuação normal de timeupdate/heartbeat dos players, sem travar o aluno.
+const SKIP_TOLERANCE_SECONDS = 2
 
 export function CoursePlayer() {
   const { id } = useParams<{ id: string }>()
@@ -154,8 +186,8 @@ export function CoursePlayer() {
     }
   }, [id, profile])
 
-  async function completeModule() {
-    if (!profile || !id || completing) return
+  const completeModule = useCallback(async () => {
+    if (!profile || !id) return
     setCompleting(true)
     await completePill(profile.id, id, null, pill?.title ?? 'Curso', pill?.points_override)
     const { data: progressData } = await supabase
@@ -166,7 +198,141 @@ export function CoursePlayer() {
       .maybeSingle()
     setProgress(progressData as UserProgress | null)
     setCompleting(false)
+  }, [profile, id, pill])
+
+  // Antiskip: guarda até onde o aluno já assistiu de fato — usado tanto
+  // pra vídeo nativo (<video>) quanto pros embeds do Vimeo/YouTube abaixo,
+  // pra impedir avançar sem ter passado por aquele trecho e pra saber
+  // quando o vídeo foi realmente assistido até o fim.
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const embedIframeRef = useRef<HTMLIFrameElement>(null)
+  const watchedFarthestRef = useRef(0)
+  const autoCompletedRef = useRef(false)
+
+  useEffect(() => {
+    watchedFarthestRef.current = 0
+    autoCompletedRef.current = false
+  }, [pill?.id])
+
+  function handleVideoTimeUpdate(e: SyntheticEvent<HTMLVideoElement>) {
+    const v = e.currentTarget
+    if (v.currentTime > watchedFarthestRef.current) watchedFarthestRef.current = v.currentTime
   }
+
+  function handleVideoSeeking(e: SyntheticEvent<HTMLVideoElement>) {
+    const v = e.currentTarget
+    if (v.currentTime > watchedFarthestRef.current + SKIP_TOLERANCE_SECONDS) {
+      v.currentTime = watchedFarthestRef.current
+    }
+  }
+
+  function handleVideoEnded(e: SyntheticEvent<HTMLVideoElement>) {
+    const v = e.currentTarget
+    if (!autoCompletedRef.current && watchedFarthestRef.current >= v.duration - SKIP_TOLERANCE_SECONDS) {
+      autoCompletedRef.current = true
+      completeModule()
+    }
+  }
+
+  // Mesma lógica de antiskip + conclusão automática, só que pros embeds
+  // (Vimeo/YouTube não são a tag <video>, então usam os SDKs oficiais
+  // deles via postMessage). Só entra em ação quando esse módulo não é o
+  // último-com-quiz (aí quem conclui é o quiz, não o vídeo).
+  useEffect(() => {
+    if (!pill || pill.content_type !== 'video' || !pill.content_url) return
+    const embedInfo = getVideoEmbedInfo(pill.content_url)
+    if (!embedInfo) return
+
+    const isLastModuleNow = modules.length > 0 && modules[modules.length - 1].id === pill.id
+    const gatedByQuiz = isLastModuleNow && hasQuiz
+    if (gatedByQuiz) return
+
+    let cancelled = false
+    let cleanup: (() => void) | null = null
+
+    async function setup() {
+      const iframeEl = embedIframeRef.current
+      if (!iframeEl) return
+
+      if (embedInfo!.provider === 'vimeo') {
+        await loadScript('https://player.vimeo.com/api/player.js')
+        if (cancelled) return
+        const player = new (window as any).Vimeo.Player(iframeEl)
+        const onTimeUpdate = ({ seconds }: { seconds: number }) => {
+          if (seconds > watchedFarthestRef.current) watchedFarthestRef.current = seconds
+        }
+        const onSeeked = ({ seconds }: { seconds: number }) => {
+          if (seconds > watchedFarthestRef.current + SKIP_TOLERANCE_SECONDS) {
+            player.setCurrentTime(watchedFarthestRef.current)
+          }
+        }
+        const onEnded = () => {
+          if (!autoCompletedRef.current) {
+            autoCompletedRef.current = true
+            completeModule()
+          }
+        }
+        player.on('timeupdate', onTimeUpdate)
+        player.on('seeked', onSeeked)
+        player.on('ended', onEnded)
+        cleanup = () => {
+          player.off('timeupdate', onTimeUpdate)
+          player.off('seeked', onSeeked)
+          player.off('ended', onEnded)
+        }
+      } else {
+        await loadScript('https://www.youtube.com/iframe_api')
+        if (cancelled) return
+        const YTNS = (window as any).YT
+        const ready: Promise<void> = YTNS?.Player
+          ? Promise.resolve()
+          : new Promise((resolve) => {
+              const prev = (window as any).onYouTubeIframeAPIReady
+              ;(window as any).onYouTubeIframeAPIReady = () => {
+                prev?.()
+                resolve()
+              }
+            })
+        await ready
+        if (cancelled) return
+        const YT = (window as any).YT
+        let lastTime = 0
+        let pollInterval: ReturnType<typeof setInterval> | null = null
+        const player = new YT.Player(iframeEl, {
+          events: {
+            onReady: () => {
+              pollInterval = setInterval(() => {
+                const t = player.getCurrentTime?.()
+                if (typeof t !== 'number') return
+                if (t > lastTime + SKIP_TOLERANCE_SECONDS) {
+                  player.seekTo(watchedFarthestRef.current, true)
+                } else if (t > watchedFarthestRef.current) {
+                  watchedFarthestRef.current = t
+                }
+                lastTime = t
+              }, 1000)
+            },
+            onStateChange: (e: { data: number }) => {
+              if (e.data === YT.PlayerState.ENDED && !autoCompletedRef.current) {
+                autoCompletedRef.current = true
+                completeModule()
+              }
+            },
+          },
+        })
+        cleanup = () => {
+          if (pollInterval) clearInterval(pollInterval)
+          player.destroy?.()
+        }
+      }
+    }
+
+    setup()
+    return () => {
+      cancelled = true
+      cleanup?.()
+    }
+  }, [pill, modules, hasQuiz, completeModule])
 
   const handleScormProgress = useCallback(
     async (
@@ -232,7 +398,14 @@ export function CoursePlayer() {
   // cadastrou um pra ele — os demais módulos concluem direto, sem quiz.
   const needsFixationQuiz =
     pill.content_type !== 'scorm' && pill.content_type !== 'reaction' && isLastModule && hasQuiz
-  const needsPlainCompletion = pill.content_type !== 'scorm' && pill.content_type !== 'reaction' && !needsFixationQuiz
+  const videoEmbedInfo = pill.content_type === 'video' && pill.content_url ? getVideoEmbedInfo(pill.content_url) : null
+  // Vídeo conclui sozinho ao ser assistido até o fim sem pular (ver refs
+  // acima); iframe genérico não dá pra rastrear, então só conclui manual.
+  // "Permitir concluir manualmente" (admin) libera o botão também no vídeo.
+  const needsPlainCompletion =
+    !needsFixationQuiz &&
+    (pill.content_type === 'iframe' || (pill.content_type === 'video' && pill.allow_manual_completion))
+  const isStrictVideoTracking = pill.content_type === 'video' && !needsFixationQuiz && !pill.allow_manual_completion
 
   // Um módulo trava (quando o curso é sequencial) se algum módulo anterior
   // na ordem ainda não foi concluído — mesma regra do getBlockingPill.
@@ -243,6 +416,8 @@ export function CoursePlayer() {
     if (!completed) unlockedSoFar = false
     return { pill: m, completed, locked }
   })
+  const courseCompletedCount = moduleStates.filter((m) => m.completed).length
+  const coursePct = modules.length ? Math.round((courseCompletedCount / modules.length) * 100) : 0
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-bg pb-16">
@@ -255,7 +430,16 @@ export function CoursePlayer() {
       >
         {modules.length > 1 && (
           <aside className="card mb-6 h-fit max-h-[75vh] overflow-y-auto p-4 lg:sticky lg:top-6 lg:mb-0">
-            <p className="text-xs font-bold uppercase tracking-wide text-navy">Módulos do curso</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold uppercase tracking-wide text-navy">Módulos do curso</p>
+              <span className="text-xs font-bold text-ink-soft">{coursePct}%</span>
+            </div>
+            <p className="mt-0.5 text-[11px] text-ink-soft">
+              {courseCompletedCount}/{modules.length} concluído{courseCompletedCount === 1 ? '' : 's'}
+            </p>
+            <div className="mt-2">
+              <ProgressBar value={coursePct} />
+            </div>
             <div className="mt-3 space-y-1.5">
               {moduleStates.map(({ pill: m, completed, locked }) => {
                 const isCurrent = m.id === pill.id
@@ -356,15 +540,25 @@ export function CoursePlayer() {
                   <Icon name={isFullscreen ? 'minimize' : 'maximize'} size={16} />
                 </button>
                 {pill.content_type === 'video' && pill.content_url && (
-                  getVideoEmbedUrl(pill.content_url) ? (
+                  videoEmbedInfo ? (
                     <iframe
-                      src={getVideoEmbedUrl(pill.content_url)!}
+                      ref={embedIframeRef}
+                      src={videoEmbedInfo.embedUrl}
                       title={pill.title}
                       className="h-full w-full border-0"
                       allow="autoplay; fullscreen; picture-in-picture"
                     />
                   ) : (
-                    <video controls className="h-full w-full" src={pill.content_url} />
+                    <video
+                      ref={videoRef}
+                      controls
+                      controlsList={isStrictVideoTracking ? 'nodownload noplaybackrate' : 'nodownload'}
+                      onTimeUpdate={handleVideoTimeUpdate}
+                      onSeeking={isStrictVideoTracking ? handleVideoSeeking : undefined}
+                      onEnded={handleVideoEnded}
+                      className="h-full w-full"
+                      src={pill.content_url}
+                    />
                   )
                 )}
                 {pill.content_type === 'iframe' && pill.content_url && (
@@ -417,6 +611,14 @@ export function CoursePlayer() {
                   {isCompleted
                     ? 'Módulo SCORM concluído ✓'
                     : 'O progresso deste módulo SCORM é registrado automaticamente pelo pacote.'}
+                </p>
+              )}
+
+              {isStrictVideoTracking && (
+                <p className="mt-5 text-sm text-ink-soft">
+                  {isCompleted
+                    ? 'Módulo concluído ✓'
+                    : 'Assista o vídeo até o final, sem pular trechos, para concluir este módulo automaticamente.'}
                 </p>
               )}
             </>
