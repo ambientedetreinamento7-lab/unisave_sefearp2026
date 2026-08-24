@@ -42,7 +42,7 @@ export function ScormPlayer({
       if (initialLocation) api.cmi.core.lesson_location = initialLocation
       if (initialSuspendData) api.cmi.suspend_data = initialSuspendData
       api.cmi.core.entry = initialLocation ? 'resume' : 'ab-initio'
-      api.on('LMSCommit', () => {
+      const reportProgress = () => {
         if (!api || cancelled) return
         const status = api.cmi.core.lesson_status
         const raw = api.cmi.core.score.raw
@@ -51,7 +51,16 @@ export function ScormPlayer({
           location: api.cmi.core.lesson_location,
           suspendData: api.cmi.suspend_data,
         })
-      })
+      }
+      // LMSCommit cobre pacotes que salvam periodicamente/explicitamente,
+      // mas muitos pacotes só chamam LMSFinish ao fechar (o "X" da tela
+      // final) sem um LMSCommit explícito antes — pelo spec, LMSFinish já
+      // faz um commit implícito dos dados, só que sem emitir o evento
+      // 'LMSCommit'. Sem ouvir 'LMSFinish' também, a conclusão desse
+      // pacote nunca chegava a ser salva (curso ficava travado em
+      // "Em andamento" mesmo depois do aluno terminar).
+      api.on('LMSCommit', reportProgress)
+      api.on('LMSFinish', reportProgress)
       ;(window as unknown as { API: Scorm12APIType }).API = api
     }
 
