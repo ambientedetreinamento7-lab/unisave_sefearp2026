@@ -77,7 +77,7 @@ export function ReactionSurvey() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-bg">
+      <div className="min-h-screen w-full overflow-x-hidden bg-bg">
         <AppHeader />
         <p className="p-8 text-center text-ink-soft">Carregando…</p>
       </div>
@@ -86,7 +86,7 @@ export function ReactionSurvey() {
 
   if (!survey || questions.length === 0) {
     return (
-      <div className="min-h-screen bg-bg">
+      <div className="min-h-screen w-full overflow-x-hidden bg-bg">
         <AppHeader />
         <div className="mx-auto max-w-xl px-4 py-10 text-center">
           <p className="text-ink-soft">Este módulo não possui avaliação de reação cadastrada.</p>
@@ -111,7 +111,7 @@ export function ReactionSurvey() {
 
   if (submitted || alreadySubmitted) {
     return (
-      <div className="min-h-screen bg-bg pb-16">
+      <div className="min-h-screen w-full overflow-x-hidden bg-bg pb-16">
         <AppHeader />
         <main className="mx-auto max-w-xl px-4 py-8">
           <div className="card p-8 text-center">
@@ -137,10 +137,10 @@ export function ReactionSurvey() {
   const pct = Math.round(((step + 1) / total) * 100)
 
   return (
-    <div className="min-h-screen bg-bg pb-16">
+    <div className="min-h-screen w-full overflow-x-hidden bg-bg pb-16">
       <AppHeader />
       <main className="mx-auto max-w-xl px-4 py-6 sm:max-w-2xl sm:py-8">
-        <h1 className="text-lg font-extrabold text-ink sm:text-xl">Avaliação de reação — {pill?.title}</h1>
+        <h1 className="break-words text-lg font-extrabold text-ink sm:text-xl">Avaliação de reação — {pill?.title}</h1>
         <p className="mt-1 text-sm text-ink-soft">
           Sua opinião sincera ajuda a melhorar este curso. Leva menos de um minuto.
         </p>
@@ -153,8 +153,8 @@ export function ReactionSurvey() {
           <ProgressBar value={pct} />
         </div>
 
-        <div className="card mt-4 p-5 sm:p-8">
-          <p className="text-base font-semibold text-ink sm:text-lg">{q.question_text}</p>
+        <div className="card mt-4 min-w-0 p-5 sm:p-8">
+          <p className="min-w-0 break-words text-base font-semibold text-ink sm:text-lg">{q.question_text}</p>
 
           {q.question_type === 'likert5' && (
             <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-5 sm:gap-1.5">
