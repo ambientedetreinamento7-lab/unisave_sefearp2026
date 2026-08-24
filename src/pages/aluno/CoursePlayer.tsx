@@ -15,6 +15,23 @@ const CONTENT_TYPE_ICON: Record<Pill['content_type'], string> = {
   reaction: '📝',
 }
 
+// Links do Vimeo/YouTube (mesmo os de "compartilhar") não são um arquivo de
+// vídeo direto — a tag <video> não consegue tocá-los. Precisam do player
+// embutido em iframe. Detecta esses casos e devolve a URL de embed correta;
+// null significa "é mesmo um arquivo de vídeo direto (mp4 etc.), usa <video>".
+function getVideoEmbedUrl(url: string): string | null {
+  const vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)(?:\/([a-zA-Z0-9]+))?/)
+  if (vimeoMatch) {
+    const [, videoId, hash] = vimeoMatch
+    return `https://player.vimeo.com/video/${videoId}${hash ? `?h=${hash}` : ''}`
+  }
+  const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]+)/)
+  if (youtubeMatch) {
+    return `https://www.youtube.com/embed/${youtubeMatch[1]}`
+  }
+  return null
+}
+
 export function CoursePlayer() {
   const { id } = useParams<{ id: string }>()
   const { profile } = useAuth()
@@ -313,7 +330,16 @@ export function CoursePlayer() {
                   <Icon name={isFullscreen ? 'minimize' : 'maximize'} size={16} />
                 </button>
                 {pill.content_type === 'video' && pill.content_url && (
-                  <video controls className="h-full w-full" src={pill.content_url} />
+                  getVideoEmbedUrl(pill.content_url) ? (
+                    <iframe
+                      src={getVideoEmbedUrl(pill.content_url)!}
+                      title={pill.title}
+                      className="h-full w-full border-0"
+                      allow="autoplay; fullscreen; picture-in-picture"
+                    />
+                  ) : (
+                    <video controls className="h-full w-full" src={pill.content_url} />
+                  )
                 )}
                 {pill.content_type === 'iframe' && pill.content_url && (
                   <iframe
