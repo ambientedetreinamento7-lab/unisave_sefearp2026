@@ -302,7 +302,16 @@ create table reaction_questions (
   survey_id uuid not null references reaction_surveys(id) on delete cascade,
   question_text text not null,
   question_type text not null default 'likert5',
-  order_index int not null default 0
+  order_index int not null default 0,
+  -- Agrupamento opcional por tema (spec: reorganizar/agrupar perguntas
+  -- por tema, ex.: "Conteúdo e Qualidade", "Experiência de Aprendizado").
+  -- Denormalizado de propósito (texto livre, não uma tabela separada de
+  -- grupos): perguntas consecutivas (por order_index) com o mesmo
+  -- group_name viram um bloco visual com essa cabeçalho; renomear um
+  -- grupo é um update em massa de todas as linhas com esse group_name.
+  -- Nulo = pergunta avulsa, fora de qualquer grupo (agrupar não é
+  -- obrigatório).
+  group_name text
 );
 
 create table reaction_responses (

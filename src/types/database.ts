@@ -211,6 +211,7 @@ export interface ReactionQuestion {
   question_text: string
   question_type: ReactionQuestionType
   order_index: number
+  group_name: string | null
 }
 
 export interface ReactionResponse {

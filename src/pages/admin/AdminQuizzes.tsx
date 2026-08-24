@@ -726,7 +726,7 @@ function ReactionSurveyEditor({ survey, onRenamed }: { survey: ReactionSurvey; o
     setSavingName(false)
   }
 
-  async function addQuestions(rows: { text: string; type: ReactionQuestionType }[]) {
+  async function addQuestions(rows: { text: string; type: ReactionQuestionType; group?: string }[]) {
     if (rows.length === 0) return
     setError('')
     try {
@@ -735,6 +735,7 @@ function ReactionSurveyEditor({ survey, onRenamed }: { survey: ReactionSurvey; o
           survey_id: survey.id,
           question_text: r.text,
           question_type: r.type,
+          group_name: r.group?.trim() || null,
           order_index: questions.length + i,
         })),
       )
@@ -757,7 +758,63 @@ function ReactionSurveyEditor({ survey, onRenamed }: { survey: ReactionSurvey; o
     setQuestions((prev) => prev.filter((q) => q.id !== id))
   }
 
+  async function updateQuestion(id: string, patch: { question_text: string; question_type: ReactionQuestionType; group_name: string | null }) {
+    setError('')
+    const { error: updateError } = await supabase.from('reaction_questions').update(patch).eq('id', id)
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+    await reload()
+  }
+
+  // Ordem/agrupamento são a mesma coisa: perguntas consecutivas (por
+  // order_index) com o mesmo group_name viram um bloco visual — mover
+  // uma pergunta pra cima/baixo também é o que tira/coloca ela num
+  // grupo. Sem tabela de grupos separada — o nome fica na própria linha.
+  async function moveQuestion(index: number, direction: -1 | 1) {
+    const target = index + direction
+    if (target < 0 || target >= questions.length) return
+    const a = questions[index]
+    const b = questions[target]
+    setError('')
+    const [{ error: e1 }, { error: e2 }] = await Promise.all([
+      supabase.from('reaction_questions').update({ order_index: b.order_index }).eq('id', a.id),
+      supabase.from('reaction_questions').update({ order_index: a.order_index }).eq('id', b.id),
+    ])
+    if (e1 || e2) {
+      setError((e1 ?? e2)!.message)
+      return
+    }
+    await reload()
+  }
+
+  async function renameGroup(oldName: string, newName: string) {
+    if (!newName.trim() || newName === oldName) return
+    setError('')
+    const { error: updateError } = await supabase
+      .from('reaction_questions')
+      .update({ group_name: newName.trim() })
+      .eq('survey_id', survey.id)
+      .eq('group_name', oldName)
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+    await reload()
+  }
+
   if (loading) return <p className="text-ink-soft">Carregando…</p>
+
+  // Agrupa a lista já ordenada em blocos visuais (mesma lógica descrita
+  // acima em moveQuestion).
+  const blocks: { groupName: string | null; items: { q: ReactionQuestion; index: number }[] }[] = []
+  questions.forEach((q, index) => {
+    const last = blocks[blocks.length - 1]
+    if (last && last.groupName === q.group_name) last.items.push({ q, index })
+    else blocks.push({ groupName: q.group_name, items: [{ q, index }] })
+  })
+  const existingGroupNames = [...new Set(questions.map((q) => q.group_name).filter((g): g is string => !!g))]
 
   return (
     <div className="space-y-4">
@@ -787,26 +844,200 @@ function ReactionSurveyEditor({ survey, onRenamed }: { survey: ReactionSurvey; o
 
       <div className="card p-5">
         <h4 className="font-bold text-ink">Perguntas ({questions.length})</h4>
-        <div className="mt-3 space-y-2">
-          {questions.map((q, qi) => (
-            <div key={q.id} className="flex items-start justify-between gap-2 rounded-xl border border-navy-light p-3">
-              <div>
-                <p className="font-medium text-ink">{qi + 1}. {q.question_text}</p>
-                <p className="text-xs font-semibold text-ink-soft">{REACTION_TYPE_LABEL[q.question_type]}</p>
+        <p className="mt-1 text-xs text-ink-soft">
+          Use as setas para reordenar. Perguntas com o mesmo grupo (nome ao lado do campo "Tipo") ficam
+          juntas automaticamente — o agrupamento é opcional.
+        </p>
+        <div className="mt-3 space-y-4">
+          {blocks.map((block, bi) => (
+            <div key={bi}>
+              {block.groupName && (
+                <GroupHeader
+                  name={block.groupName}
+                  onRename={(newName) => renameGroup(block.groupName!, newName)}
+                />
+              )}
+              <div className={`space-y-2 ${block.groupName ? 'mt-2 border-l-2 border-navy-light pl-3' : ''}`}>
+                {block.items.map(({ q, index }) => (
+                  <ReactionQuestionRow
+                    key={q.id}
+                    question={q}
+                    isFirst={index === 0}
+                    isLast={index === questions.length - 1}
+                    existingGroupNames={existingGroupNames}
+                    onMove={(dir) => moveQuestion(index, dir)}
+                    onSave={(patch) => updateQuestion(q.id, patch)}
+                    onDelete={() => deleteQuestion(q.id)}
+                  />
+                ))}
               </div>
-              <button onClick={() => deleteQuestion(q.id)} className="shrink-0 text-xs font-semibold text-brand-red hover:underline">
-                Remover
-              </button>
             </div>
           ))}
           {questions.length === 0 && <p className="text-sm text-ink-soft">Nenhuma pergunta cadastrada ainda.</p>}
         </div>
       </div>
 
-      <NewReactionQuestionForm onAdd={(row) => addQuestions([row])} />
+      <NewReactionQuestionForm onAdd={(row) => addQuestions([row])} existingGroupNames={existingGroupNames} />
       <ReactionCsvImport onImport={addQuestions} />
 
       <ReactionResponsesTable surveyName={survey.name} responses={responses} />
+    </div>
+  )
+}
+
+function GroupHeader({ name, onRename }: { name: string; onRename: (newName: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(name)
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <h5 className="text-sm font-bold uppercase tracking-wide text-navy">{name}</h5>
+        <button
+          onClick={() => {
+            setValue(name)
+            setEditing(true)
+          }}
+          className="text-xs font-semibold text-ink-soft hover:underline"
+        >
+          Renomear grupo
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        autoFocus
+        className="rounded-lg border border-navy-light px-2 py-1 text-sm"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+      />
+      <button
+        onClick={() => {
+          onRename(value)
+          setEditing(false)
+        }}
+        disabled={!value.trim()}
+        className="text-xs font-semibold text-navy hover:underline disabled:opacity-60"
+      >
+        Salvar
+      </button>
+      <button onClick={() => setEditing(false)} className="text-xs font-semibold text-ink-soft hover:underline">
+        Cancelar
+      </button>
+    </div>
+  )
+}
+
+function ReactionQuestionRow({
+  question,
+  isFirst,
+  isLast,
+  existingGroupNames,
+  onMove,
+  onSave,
+  onDelete,
+}: {
+  question: ReactionQuestion
+  isFirst: boolean
+  isLast: boolean
+  existingGroupNames: string[]
+  onMove: (direction: -1 | 1) => void
+  onSave: (patch: { question_text: string; question_type: ReactionQuestionType; group_name: string | null }) => Promise<void>
+  onDelete: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState(question.question_text)
+  const [type, setType] = useState<ReactionQuestionType>(question.question_type)
+  const [group, setGroup] = useState(question.group_name ?? '')
+  const [saving, setSaving] = useState(false)
+  const groupListId = `group-options-${question.id}`
+
+  async function save() {
+    if (!text.trim()) return
+    setSaving(true)
+    await onSave({ question_text: text.trim(), question_type: type, group_name: group.trim() || null })
+    setSaving(false)
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <div className="rounded-xl border border-navy-light p-3">
+        <textarea
+          className="w-full rounded-xl border border-navy-light px-3 py-2 text-sm"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <div className="mt-2 flex flex-wrap gap-2">
+          <select
+            className="rounded-lg border border-navy-light px-2 py-1.5 text-xs"
+            value={type}
+            onChange={(e) => setType(e.target.value as ReactionQuestionType)}
+          >
+            {(Object.entries(REACTION_TYPE_LABEL) as [ReactionQuestionType, string][]).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+          <input
+            className="rounded-lg border border-navy-light px-2 py-1.5 text-xs"
+            placeholder="Grupo (opcional)"
+            list={groupListId}
+            value={group}
+            onChange={(e) => setGroup(e.target.value)}
+          />
+          <datalist id={groupListId}>
+            {existingGroupNames.map((g) => <option key={g} value={g} />)}
+          </datalist>
+        </div>
+        <div className="mt-2 flex justify-end gap-3">
+          <button onClick={() => setEditing(false)} className="text-xs font-semibold text-ink-soft hover:underline">
+            Cancelar
+          </button>
+          <button onClick={save} disabled={!text.trim() || saving} className="text-xs font-semibold text-navy hover:underline disabled:opacity-60">
+            {saving ? 'Salvando…' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-start justify-between gap-2 rounded-xl border border-navy-light p-3">
+      <div className="flex items-start gap-2">
+        <div className="flex flex-col">
+          <button
+            onClick={() => onMove(-1)}
+            disabled={isFirst}
+            className="text-ink-soft hover:text-navy disabled:opacity-30"
+            title="Mover para cima"
+          >
+            ▲
+          </button>
+          <button
+            onClick={() => onMove(1)}
+            disabled={isLast}
+            className="text-ink-soft hover:text-navy disabled:opacity-30"
+            title="Mover para baixo"
+          >
+            ▼
+          </button>
+        </div>
+        <div>
+          <p className="font-medium text-ink">{question.question_text}</p>
+          <p className="text-xs font-semibold text-ink-soft">{REACTION_TYPE_LABEL[question.question_type]}</p>
+        </div>
+      </div>
+      <div className="flex shrink-0 gap-3">
+        <button onClick={() => setEditing(true)} className="text-xs font-semibold text-navy hover:underline">
+          Editar
+        </button>
+        <button onClick={onDelete} className="text-xs font-semibold text-brand-red hover:underline">
+          Remover
+        </button>
+      </div>
     </div>
   )
 }
@@ -876,16 +1107,23 @@ function ReactionResponsesTable({
   )
 }
 
-function NewReactionQuestionForm({ onAdd }: { onAdd: (row: { text: string; type: ReactionQuestionType }) => Promise<void> }) {
+function NewReactionQuestionForm({
+  onAdd,
+  existingGroupNames,
+}: {
+  onAdd: (row: { text: string; type: ReactionQuestionType; group?: string }) => Promise<void>
+  existingGroupNames: string[]
+}) {
   const [text, setText] = useState('')
   const [type, setType] = useState<ReactionQuestionType>('likert5')
+  const [group, setGroup] = useState('')
   const [saving, setSaving] = useState(false)
 
   async function submit() {
     if (!text.trim()) return
     setSaving(true)
     try {
-      await onAdd({ text: text.trim(), type })
+      await onAdd({ text: text.trim(), type, group: group.trim() || undefined })
       setText('')
     } catch {
       // erro já exibido pelo ReactionEditor — mantém o formulário preenchido pro admin tentar de novo
@@ -896,16 +1134,33 @@ function NewReactionQuestionForm({ onAdd }: { onAdd: (row: { text: string; type:
   return (
     <div className="card p-5">
       <h4 className="font-bold text-ink">Nova pergunta de reação</h4>
-      <label className="mt-3 block text-xs font-semibold text-ink-soft">Tipo de pergunta</label>
-      <select
-        className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5 text-sm"
-        value={type}
-        onChange={(e) => setType(e.target.value as ReactionQuestionType)}
-      >
-        {(Object.entries(REACTION_TYPE_LABEL) as [ReactionQuestionType, string][]).map(([value, label]) => (
-          <option key={value} value={value}>{label}</option>
-        ))}
-      </select>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <div>
+          <label className="block text-xs font-semibold text-ink-soft">Tipo de pergunta</label>
+          <select
+            className="mt-1 rounded-xl border border-navy-light px-4 py-2.5 text-sm"
+            value={type}
+            onChange={(e) => setType(e.target.value as ReactionQuestionType)}
+          >
+            {(Object.entries(REACTION_TYPE_LABEL) as [ReactionQuestionType, string][]).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex-1">
+          <label className="block text-xs font-semibold text-ink-soft">Grupo (opcional)</label>
+          <input
+            className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5 text-sm"
+            placeholder='Ex: "Conteúdo e Qualidade"'
+            list="new-reaction-question-group-options"
+            value={group}
+            onChange={(e) => setGroup(e.target.value)}
+          />
+          <datalist id="new-reaction-question-group-options">
+            {existingGroupNames.map((g) => <option key={g} value={g} />)}
+          </datalist>
+        </div>
+      </div>
       <textarea
         className="mt-3 w-full rounded-xl border border-navy-light px-4 py-3"
         placeholder='Ex: "O conteúdo do módulo atendeu às minhas expectativas"'
