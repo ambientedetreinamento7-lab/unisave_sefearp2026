@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
+import { ProgressBar } from '../../components/ProgressBar'
 import { useAuth } from '../../context/AuthContext'
 import { completePill, getReactionSurveyForPill, hasSubmittedReaction, submitReactionResponse } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
@@ -17,6 +18,7 @@ export function ReactionSurvey() {
   const [survey, setSurvey] = useState<ReactionSurveyRow | null>(null)
   const [questions, setQuestions] = useState<ReactionQuestion[]>([])
   const [answers, setAnswers] = useState<Record<string, number | string>>({})
+  const [step, setStep] = useState(0)
   const [alreadySubmitted, setAlreadySubmitted] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -96,10 +98,16 @@ export function ReactionSurvey() {
     )
   }
 
-  const answeredCount = questions.filter((q) => answers[q.id] !== undefined && answers[q.id] !== '').length
   const requiredAnswered = questions
     .filter((q) => q.question_type !== 'open_text')
     .every((q) => typeof answers[q.id] === 'number')
+
+  // "Aberta" é opcional (a pergunta pode ficar em branco); as demais
+  // exigem uma resposta antes de liberar o "Próxima" — assim, ao chegar
+  // na última pergunta, requiredAnswered acima já está garantido.
+  function isAnswered(q: ReactionQuestion) {
+    return q.question_type === 'open_text' || typeof answers[q.id] === 'number'
+  }
 
   if (submitted || alreadySubmitted) {
     return (
@@ -122,88 +130,114 @@ export function ReactionSurvey() {
     )
   }
 
+  const total = questions.length
+  const q = questions[step]
+  const isLastStep = step === total - 1
+  const canAdvance = isAnswered(q)
+  const pct = Math.round(((step + 1) / total) * 100)
+
   return (
     <div className="min-h-screen bg-bg pb-16">
       <AppHeader />
-      <main className="mx-auto max-w-xl px-4 py-8">
-        <h1 className="text-xl font-extrabold text-ink">Avaliação de reação — {pill?.title}</h1>
+      <main className="mx-auto max-w-xl px-4 py-6 sm:max-w-2xl sm:py-8">
+        <h1 className="text-lg font-extrabold text-ink sm:text-xl">Avaliação de reação — {pill?.title}</h1>
         <p className="mt-1 text-sm text-ink-soft">
           Sua opinião sincera ajuda a melhorar este curso. Leva menos de um minuto.
         </p>
 
-        <div className="mt-6 space-y-6">
-          {questions.map((q, qi) => (
-            <div key={q.id} className="card p-5">
-              <p className="font-semibold text-ink">
-                {qi + 1}. {q.question_text}
-              </p>
+        <div className="mt-5 flex items-center justify-between text-xs font-semibold text-ink-soft sm:mt-6">
+          <span>Pergunta {step + 1} de {total}</span>
+          <span>{pct}%</span>
+        </div>
+        <div className="mt-1.5">
+          <ProgressBar value={pct} />
+        </div>
 
-              {q.question_type === 'likert5' && (
-                <div className="mt-3 grid grid-cols-5 gap-1.5">
-                  {LIKERT_LABELS.map((label, i) => {
-                    const value = i + 1
-                    const selected = answers[q.id] === value
-                    return (
-                      <button
-                        key={value}
-                        onClick={() => setLikert(q.id, value)}
-                        title={label}
-                        className={`flex flex-col items-center gap-1 rounded-xl border-2 px-1 py-2.5 text-center text-[10px] font-semibold transition ${
-                          selected ? 'border-brand-red bg-red-50 text-brand-red' : 'border-navy-light text-ink-soft hover:border-navy'
-                        }`}
-                      >
-                        <span className="text-base font-extrabold">{value}</span>
-                        <span className="leading-tight">{label}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
+        <div className="card mt-4 p-5 sm:p-8">
+          <p className="text-base font-semibold text-ink sm:text-lg">{q.question_text}</p>
 
-              {q.question_type === 'nps' && (
-                <div>
-                  <div className="mt-3 grid grid-cols-11 gap-1">
-                    {Array.from({ length: 11 }, (_, value) => (
-                      <button
-                        key={value}
-                        onClick={() => setLikert(q.id, value)}
-                        className={`rounded-lg border-2 py-2 text-xs font-bold transition ${
-                          answers[q.id] === value
-                            ? 'border-brand-red bg-red-50 text-brand-red'
-                            : 'border-navy-light text-ink-soft hover:border-navy'
-                        }`}
-                      >
-                        {value}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-1 flex justify-between text-[11px] text-ink-soft">
-                    <span>Não recomendaria</span>
-                    <span>Recomendaria com certeza</span>
-                  </div>
-                </div>
-              )}
-
-              {q.question_type === 'open_text' && (
-                <textarea
-                  className="mt-3 w-full rounded-xl border border-navy-light px-4 py-2.5 text-sm"
-                  placeholder="Comentário (opcional)…"
-                  rows={3}
-                  value={(answers[q.id] as string) ?? ''}
-                  onChange={(e) => setOpenText(q.id, e.target.value)}
-                />
-              )}
+          {q.question_type === 'likert5' && (
+            <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-5 sm:gap-1.5">
+              {LIKERT_LABELS.map((label, i) => {
+                const value = i + 1
+                const selected = answers[q.id] === value
+                return (
+                  <button
+                    key={value}
+                    onClick={() => setLikert(q.id, value)}
+                    title={label}
+                    className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left text-sm font-semibold transition sm:flex-col sm:items-center sm:gap-1 sm:px-1 sm:py-2.5 sm:text-center sm:text-[10px] ${
+                      selected ? 'border-brand-red bg-red-50 text-brand-red' : 'border-navy-light text-ink-soft hover:border-navy'
+                    }`}
+                  >
+                    <span className="text-base font-extrabold">{value}</span>
+                    <span className="leading-tight">{label}</span>
+                  </button>
+                )
+              })}
             </div>
-          ))}
+          )}
 
+          {q.question_type === 'nps' && (
+            <div>
+              <div className="mt-5 grid grid-cols-6 gap-1.5 sm:grid-cols-11">
+                {Array.from({ length: 11 }, (_, value) => (
+                  <button
+                    key={value}
+                    onClick={() => setLikert(q.id, value)}
+                    className={`rounded-lg border-2 py-3 text-sm font-bold transition sm:py-2 sm:text-xs ${
+                      answers[q.id] === value
+                        ? 'border-brand-red bg-red-50 text-brand-red'
+                        : 'border-navy-light text-ink-soft hover:border-navy'
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 flex justify-between text-[11px] text-ink-soft">
+                <span>Não recomendaria</span>
+                <span>Recomendaria com certeza</span>
+              </div>
+            </div>
+          )}
+
+          {q.question_type === 'open_text' && (
+            <textarea
+              className="mt-5 w-full rounded-xl border border-navy-light px-4 py-2.5 text-sm"
+              placeholder="Comentário (opcional)…"
+              rows={4}
+              value={(answers[q.id] as string) ?? ''}
+              onChange={(e) => setOpenText(q.id, e.target.value)}
+            />
+          )}
+        </div>
+
+        <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
           <button
-            onClick={submit}
-            disabled={!requiredAnswered || submitting}
-            className="w-full rounded-xl bg-brand-red py-3 font-bold text-white transition hover:bg-brand-red-dark disabled:opacity-50"
+            onClick={() => setStep((s) => Math.max(0, s - 1))}
+            disabled={step === 0}
+            className="rounded-xl border border-navy-light px-6 py-3 font-semibold text-ink-soft transition hover:border-navy disabled:opacity-40 sm:py-2.5"
           >
-            {submitting ? 'Enviando…' : 'Enviar avaliação'}
+            ← Voltar
           </button>
-          <p className="text-center text-xs text-ink-soft">{answeredCount} de {questions.length} perguntas respondidas</p>
+          {isLastStep ? (
+            <button
+              onClick={submit}
+              disabled={!requiredAnswered || submitting}
+              className="rounded-xl bg-brand-red px-6 py-3 font-bold text-white transition hover:bg-brand-red-dark disabled:opacity-50 sm:py-2.5"
+            >
+              {submitting ? 'Enviando…' : 'Enviar avaliação'}
+            </button>
+          ) : (
+            <button
+              onClick={() => setStep((s) => Math.min(total - 1, s + 1))}
+              disabled={!canAdvance}
+              className="rounded-xl bg-navy px-6 py-3 font-bold text-white transition hover:bg-navy-dark disabled:opacity-50 sm:py-2.5"
+            >
+              Próxima →
+            </button>
+          )}
         </div>
       </main>
     </div>
