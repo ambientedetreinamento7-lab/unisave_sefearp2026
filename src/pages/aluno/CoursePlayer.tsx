@@ -535,7 +535,13 @@ export function CoursePlayer() {
                 <button
                   onClick={toggleFullscreen}
                   title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
-                  className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70"
+                  // Fica no canto esquerdo (não direito) de propósito: o
+                  // canto superior direito é onde a maioria dos pacotes
+                  // SCORM posiciona o próprio botão de fechar/sair — se o
+                  // nosso botão ficasse em cima, os cliques do aluno no "X"
+                  // do pacote iam pra tela cheia em vez de pro fechamento
+                  // real do conteúdo (que é o que dispara LMSFinish).
+                  className="absolute left-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70"
                 >
                   <Icon name={isFullscreen ? 'minimize' : 'maximize'} size={16} />
                 </button>
