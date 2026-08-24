@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AdminLayout } from './AdminLayout'
 import { useConfirm } from '../../components/ConfirmDialog'
+import { formatCargaHoraria } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import type { Category, DashboardSection, Pill, Program, Track, TrackPill } from '../../types/database'
 
@@ -221,7 +222,7 @@ export function AdminTrilhas() {
                     {track.program_id
                       ? `${programs.find((p) => p.id === track.program_id)?.name} · ${track.diagnostic_profile ?? 'sem perfil'}`
                       : 'Programa/perfil não definidos'}
-                    {track.carga_horaria_total != null && <> · {track.carga_horaria_total}h</>}
+                    {track.carga_horaria_total != null && <> · {formatCargaHoraria(track.carga_horaria_total)}</>}
                     {track.certificate_enabled && <> · 🎓 emite certificado</>}
                   </p>
                 </div>

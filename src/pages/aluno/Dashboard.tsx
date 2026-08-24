@@ -27,6 +27,7 @@ import {
   trackProgressPct,
 } from '../../lib/api'
 import { brasiliaDaysBetween, claimDailyAccess, getLastPointsEvent, getRule } from '../../lib/gamification'
+import { formatCargaHoraria } from '../../lib/format'
 import type { Category, DashboardSection, GamificationRule, Pill, UserProgress, Track } from '../../types/database'
 
 const NAV_TOUR_STEPS: TourStep[] = [
@@ -669,7 +670,7 @@ function CourseCard({
   const thumbnailUrl = isCourse ? item.track.thumbnail_url ?? item.track.cover_url : item.pill.thumbnail_url
   const axis = isCourse ? item.track.title : item.pill.axis
   const metaLine = isCourse
-    ? `${item.modules.length} ${item.modules.length === 1 ? 'módulo' : 'módulos'}${item.track.carga_horaria_total ? ` · ${item.track.carga_horaria_total}h` : ''}`
+    ? `${item.modules.length} ${item.modules.length === 1 ? 'módulo' : 'módulos'}${item.track.carga_horaria_total ? ` · ${formatCargaHoraria(item.track.carga_horaria_total)}` : ''}`
     : `${item.pill.axis} · ${item.pill.duration}`
 
   let status: UserProgress['status'] = 'not_started'

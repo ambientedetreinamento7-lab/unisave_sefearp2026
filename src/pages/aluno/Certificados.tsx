@@ -4,6 +4,7 @@ import { AppHeader } from '../../components/AppHeader'
 import { useAuth } from '../../context/AuthContext'
 import { applyCertificateVariables } from '../../lib/certificate'
 import { awardPoints } from '../../lib/gamification'
+import { formatCargaHoraria } from '../../lib/format'
 import { getAllTracks, getOrCreateCertificate, getTrackWithPills, getUserProgressMap, trackProgressPct } from '../../lib/api'
 import type { Pill, Track } from '../../types/database'
 
@@ -166,7 +167,7 @@ function CertificateModal({
     {
       nomeCompleto: studentName,
       nomeDoCurso: entry.track.title,
-      cargaHorariaCurso: String(entry.track.carga_horaria_total ?? '—'),
+      cargaHorariaCurso: formatCargaHoraria(entry.track.carga_horaria_total),
       dataConclusao: entry.completedAt
         ? new Date(entry.completedAt).toLocaleDateString('pt-BR')
         : new Date().toLocaleDateString('pt-BR'),

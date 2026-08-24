@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AdminLayout } from './AdminLayout'
 import { useConfirm } from '../../components/ConfirmDialog'
 import { linkPillToTrack, unlinkPillFromTrack } from '../../lib/api'
+import { formatCargaHoraria } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import type { Category, ContentType, DiagnosticProfile, Pill, Program, ScormLibraryItem, Track, TrackPill } from '../../types/database'
 
@@ -268,12 +269,17 @@ export function AdminCursoDetalhe() {
           <label className="block text-xs font-semibold text-ink-soft">Pré-requisitos</label>
           <textarea className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Conhecimentos ou cursos necessários antes deste (opcional)" value={preRequisitos} onChange={(e) => setPreRequisitos(e.target.value)} />
 
-          <label className="block text-xs font-semibold text-ink-soft">Carga horária total (horas)</label>
+          <label className="block text-xs font-semibold text-ink-soft">
+            Carga horária total (minutos){' '}
+            <span className="font-normal normal-case text-ink-soft/70">
+              {cargaHoraria ? `— exibido como ${formatCargaHoraria(Number(cargaHoraria))}` : '(ex: 90 = 1h30min)'}
+            </span>
+          </label>
           <input
             type="number"
             min={0}
             className="w-full rounded-xl border border-navy-light px-4 py-3"
-            placeholder="Ex: 40"
+            placeholder="Ex: 90"
             value={cargaHoraria}
             onChange={(e) => setCargaHoraria(e.target.value)}
           />

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { AdminLayout } from './AdminLayout'
 import { applyCertificateVariables } from '../../lib/certificate'
 import { getIssuedCertificates } from '../../lib/api'
+import { formatCargaHoraria } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import type { IssuedCertificate, Track } from '../../types/database'
 
@@ -24,7 +25,7 @@ function previewVariables(html: string, track: Track) {
   return applyCertificateVariables(html, {
     nomeCompleto: 'Nome do Aluno',
     nomeDoCurso: track.title,
-    cargaHorariaCurso: String(track.carga_horaria_total ?? '—'),
+    cargaHorariaCurso: formatCargaHoraria(track.carga_horaria_total),
     dataConclusao: new Date().toLocaleDateString('pt-BR'),
   })
 }
