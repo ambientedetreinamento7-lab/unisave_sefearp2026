@@ -55,14 +55,32 @@ export async function awardPoints(
   await notifyPoints(userId, points, rule.label)
 }
 
+const BRASILIA_TZ = 'America/Sao_Paulo'
+
+// Dia civil em Brasília (não UTC) — o resgate de pontos de acesso deve
+// resetar na meia-noite de Brasília, não a cada 24h corridas desde o
+// último resgate (isso fazia o horário "andar" — se o aluno resgatasse
+// às 16:43 hoje, só liberava de novo às 16:43 do dia seguinte, em vez de
+// à meia-noite).
+function brasiliaDateStr(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: BRASILIA_TZ }).format(date)
+}
+
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return brasiliaDateStr(new Date())
 }
 
 function yesterdayStr() {
-  const d = new Date()
-  d.setDate(d.getDate() - 1)
-  return d.toISOString().slice(0, 10)
+  return brasiliaDateStr(new Date(Date.now() - 86_400_000))
+}
+
+/** Quantos dias civis de Brasília separam duas datas (0 = mesmo dia). Usado
+ * pra saber se já "virou o dia" em Brasília desde o último resgate, em vez
+ * de contar 24h corridas a partir do horário exato do último resgate. */
+export function brasiliaDaysBetween(a: Date, b: Date): number {
+  const [ay, am, ad] = brasiliaDateStr(a).split('-').map(Number)
+  const [by, bm, bd] = brasiliaDateStr(b).split('-').map(Number)
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000)
 }
 
 /**
