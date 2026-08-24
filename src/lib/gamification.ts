@@ -129,6 +129,11 @@ export async function getPublicProfile(userId: string): Promise<PublicProfile | 
 }
 
 export async function getRanking(limit = 10): Promise<PublicProfile[]> {
-  const { data } = await supabase.from('public_profiles').select('*').order('total_points', { ascending: false }).limit(limit)
+  const { data } = await supabase
+    .from('public_profiles')
+    .select('*')
+    .eq('ranking_opt_out', false)
+    .order('total_points', { ascending: false })
+    .limit(limit)
   return (data as PublicProfile[]) ?? []
 }

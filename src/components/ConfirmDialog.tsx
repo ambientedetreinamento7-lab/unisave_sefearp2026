@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { usePlatformSettings } from '../context/PlatformSettingsContext'
 import { Icon } from './Icon'
 
 interface ConfirmOptions {
@@ -18,6 +19,7 @@ type ConfirmFn = (message: string, options?: ConfirmOptions) => Promise<boolean>
 const ConfirmContext = createContext<ConfirmFn | undefined>(undefined)
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
+  const { branding } = usePlatformSettings()
   const [pending, setPending] = useState<PendingConfirm | null>(null)
   const resolver = useRef<(value: boolean) => void>(undefined)
 
@@ -40,9 +42,9 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-deep/60 px-4 backdrop-blur-sm">
           <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-surface shadow-2xl">
             <div className="flex items-center gap-2 bg-navy px-5 py-3">
-              <img src="/logos/UniSave.png" alt="" className="h-4 w-auto" />
+              <img src={branding.logoUrl ?? '/logos/UniSave.png'} alt="" className="h-4 w-auto" />
               <div className="h-4 w-px bg-white/25" />
-              <img src="/logos/sefea.png" alt="" className="h-4 w-auto" />
+              <img src={branding.secondaryLogoUrl ?? '/logos/sefea.png'} alt="" className="h-4 w-auto" />
             </div>
             <div className="px-5 pt-4">
               <div className="flex items-start gap-3">

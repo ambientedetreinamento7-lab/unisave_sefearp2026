@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { HeroBrandBar } from '../../components/HeroBrandBar'
 import { Icon } from '../../components/Icon'
+import { usePlatformSettings } from '../../context/PlatformSettingsContext'
 import { PROGRAMS, QUIZ_QUESTIONS, computeProfile, type ProgramSlug } from '../../lib/quiz'
+import { getSignupSettings } from '../../lib/settings'
 import { supabase } from '../../lib/supabase'
+import type { SignupSettings } from '../../types/database'
 
 type Step = 0 | 1 | 2 | 3 | 4 // 0 = curso, 1-3 = quiz Qs, 4 = capture
 
@@ -11,6 +14,8 @@ const TOTAL_STEPS = 5
 
 export function Estande() {
   const navigate = useNavigate()
+  const { legal } = usePlatformSettings()
+  const [signup, setSignup] = useState<SignupSettings | null>(null)
   const [step, setStep] = useState<Step>(0)
   const [program, setProgram] = useState<ProgramSlug | ''>('')
   const [fase, setFase] = useState('')
@@ -20,8 +25,13 @@ export function Estande() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
+  const [termsAccepted, setTermsAccepted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    getSignupSettings().then(setSignup)
+  }, [])
 
   const answers = { fase, desafio, objetivo }
   const pct = Math.round(((step + 1) / TOTAL_STEPS) * 100)
@@ -41,6 +51,10 @@ export function Estande() {
   async function submit() {
     if (!name || !email || !program) {
       setError('Preencha nome, e-mail e curso antes de continuar.')
+      return
+    }
+    if (signup?.requireTermsAcceptance && !termsAccepted) {
+      setError('Aceite os Termos de Uso antes de continuar.')
       return
     }
     setSubmitting(true)
@@ -90,6 +104,17 @@ export function Estande() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (signup && !signup.open) {
+    return (
+      <div className="hero-gradient flex min-h-screen items-center justify-center px-4">
+        <div className="mx-auto max-w-md text-center">
+          <HeroBrandBar compact />
+          <p className="mt-8 text-white/80">{signup.closedMessage}</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -181,10 +206,31 @@ export function Estande() {
                   onChange={(e) => setWhatsapp(e.target.value)}
                 />
               </div>
+              {signup?.requireTermsAcceptance && (
+                <label className="mt-4 flex items-start gap-2 text-left text-xs text-ink-soft">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={termsAccepted}
+                    onChange={(e) => setTermsAccepted(e.target.checked)}
+                  />
+                  <span>
+                    Li e aceito os{' '}
+                    {legal.termsUrl ? (
+                      <a href={legal.termsUrl} target="_blank" rel="noreferrer" className="font-semibold text-navy hover:underline">
+                        Termos de Uso
+                      </a>
+                    ) : (
+                      'Termos de Uso'
+                    )}
+                    .
+                  </span>
+                </label>
+              )}
               {error && <p className="mt-3 text-sm text-brand-red">{error}</p>}
               <button
                 onClick={submit}
-                disabled={submitting}
+                disabled={submitting || (signup?.requireTermsAcceptance && !termsAccepted)}
                 className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-red py-3 font-bold text-white transition hover:bg-brand-red-dark disabled:opacity-60"
               >
                 {submitting ? 'Enviando…' : 'Gerar meu PDI'}

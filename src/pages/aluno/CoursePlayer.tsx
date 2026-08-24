@@ -6,6 +6,7 @@ import { ProgressBar } from '../../components/ProgressBar'
 import { ScormPlayer } from '../../components/ScormPlayer'
 import { useAuth } from '../../context/AuthContext'
 import { completePill, getBlockingPill, getTrackWithPills, getUserProgressMap, markPillInProgress } from '../../lib/api'
+import { getModuleCompletionSettings } from '../../lib/settings'
 import { supabase } from '../../lib/supabase'
 import type { Pill, ScormLibraryItem, UserProgress } from '../../types/database'
 
@@ -75,6 +76,7 @@ export function CoursePlayer() {
   const [moduleProgress, setModuleProgress] = useState<Record<string, UserProgress>>({})
   const [sequential, setSequential] = useState(false)
   const [hasQuiz, setHasQuiz] = useState(false)
+  const [manualCompletionDefault, setManualCompletionDefault] = useState(false)
   const [loading, setLoading] = useState(true)
   const [unavailable, setUnavailable] = useState(false)
   const [blockedBy, setBlockedBy] = useState<string | null>(null)
@@ -116,6 +118,7 @@ export function CoursePlayer() {
         .from('quizzes')
         .select('id', { count: 'exact', head: true })
         .eq('pill_id', id!)
+      const moduleCompletion = await getModuleCompletionSettings()
       const { data: progressData } = await supabase
         .from('user_progress')
         .select('*')
@@ -126,6 +129,7 @@ export function CoursePlayer() {
       const pillRow = pillData as Pill
       setPill(pillRow)
       setHasQuiz((quizCount ?? 0) > 0)
+      setManualCompletionDefault(moduleCompletion.allowManualCompletionDefault)
       setProgress(progressData as UserProgress | null)
       setUnavailable(!isAvailable)
       if (!isAvailable) {
@@ -402,10 +406,12 @@ export function CoursePlayer() {
   // Vídeo conclui sozinho ao ser assistido até o fim sem pular (ver refs
   // acima); iframe genérico não dá pra rastrear, então só conclui manual.
   // "Permitir concluir manualmente" (admin) libera o botão também no vídeo.
+  // pill.allow_manual_completion nulo = herda o padrão da plataforma
+  // (Configurações → Conclusão de módulo).
+  const allowManual = pill.allow_manual_completion ?? manualCompletionDefault
   const needsPlainCompletion =
-    !needsFixationQuiz &&
-    (pill.content_type === 'iframe' || (pill.content_type === 'video' && pill.allow_manual_completion))
-  const isStrictVideoTracking = pill.content_type === 'video' && !needsFixationQuiz && !pill.allow_manual_completion
+    !needsFixationQuiz && (pill.content_type === 'iframe' || (pill.content_type === 'video' && allowManual))
+  const isStrictVideoTracking = pill.content_type === 'video' && !needsFixationQuiz && !allowManual
 
   // Um módulo trava (quando o curso é sequencial) se algum módulo anterior
   // na ordem ainda não foi concluído — mesma regra do getBlockingPill.

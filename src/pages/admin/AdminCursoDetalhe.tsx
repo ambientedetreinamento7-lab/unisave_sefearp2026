@@ -475,7 +475,9 @@ function PillFormModal({
   const [pointsOverride, setPointsOverride] = useState(pill?.points_override != null ? String(pill.points_override) : '')
   const [categoryId, setCategoryId] = useState(pill?.category_id ?? '')
   const [required, setRequired] = useState(pill?.required ?? false)
-  const [allowManualCompletion, setAllowManualCompletion] = useState(pill?.allow_manual_completion ?? false)
+  const [allowManualCompletion, setAllowManualCompletion] = useState<'default' | 'true' | 'false'>(
+    pill?.allow_manual_completion == null ? 'default' : pill.allow_manual_completion ? 'true' : 'false',
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -515,7 +517,7 @@ function PillFormModal({
         points_override: pointsOverride === '' ? null : Number(pointsOverride),
         category_id: categoryId || null,
         required,
-        allow_manual_completion: allowManualCompletion,
+        allow_manual_completion: allowManualCompletion === 'default' ? null : allowManualCompletion === 'true',
       }
       if (pill) {
         const { error: saveError } = await supabase.from('pills').update(payload).eq('id', pill.id)
@@ -640,17 +642,19 @@ function PillFormModal({
 
         {contentType === 'video' && (
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-ink">
-              <input
-                type="checkbox"
-                checked={allowManualCompletion}
-                onChange={(e) => setAllowManualCompletion(e.target.checked)}
-              />
-              Permitir concluir manualmente
-            </label>
+            <label className="block text-xs font-semibold text-ink-soft">Conclusão manual deste módulo</label>
+            <select
+              className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3"
+              value={allowManualCompletion}
+              onChange={(e) => setAllowManualCompletion(e.target.value as 'default' | 'true' | 'false')}
+            >
+              <option value="default">Padrão da plataforma (Configurações → Conclusão de módulo)</option>
+              <option value="true">Sempre permitir concluir manualmente</option>
+              <option value="false">Nunca permitir — exigir assistir até o fim</option>
+            </select>
             <p className="mt-1 text-xs text-ink-soft">
-              Por padrão o módulo só conclui automaticamente quando o aluno assiste o vídeo até o fim, sem pular
-              trechos. Marque esta opção para liberar também um botão "Concluir Módulo" manual.
+              "Sem override" o módulo segue o padrão da plataforma; quando o padrão não permite manual, o módulo só
+              conclui automaticamente ao assistir o vídeo até o fim, sem pular trechos.
             </p>
           </div>
         )}

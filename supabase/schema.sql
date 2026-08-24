@@ -181,7 +181,10 @@ create table pills (
   -- quando o admin liga esse campo é que aparece o botão manual
   -- "Concluir Módulo" como atalho — usado, por ex., em iframes genéricos
   -- (não vídeo) onde não há como rastrear o progresso automaticamente.
-  allow_manual_completion boolean not null default false,
+  -- Nulo = herda o padrão da plataforma (app_settings['module_completion'],
+  -- spec: Configurações → Conclusão de módulo) — só true/false vira um
+  -- override explícito desse módulo específico.
+  allow_manual_completion boolean,
   -- Quantos alunos distintos já iniciaram essa pílula — incrementado em
   -- markPillInProgress só na primeira vez de cada aluno, alimenta a
   -- seção "Mais acessados".
@@ -236,7 +239,15 @@ create table profiles (
   -- acesso). Pontuação em si vem de gamification_rules via
   -- user_points_events (idempotente por rule_key), não depende desta flag.
   nav_tutorial_seen boolean not null default false,
-  pdi_tutorial_seen boolean not null default false
+  pdi_tutorial_seen boolean not null default false,
+  -- Aluno pede pra não aparecer no ranking público (spec: Configurações →
+  -- Comunidade e Ranking, opt-out só existe quando o admin liga a opção).
+  ranking_opt_out boolean not null default false,
+  -- Aceite dos Termos de Uso (spec: Configurações → Legal/LGPD). Versão
+  -- string livre (ex: "2026-01") comparada com app_settings['legal'] —
+  -- trocar a versão em Configurações força reaceite de todo mundo.
+  terms_accepted_version text,
+  terms_accepted_at timestamptz
 );
 
 create table user_progress (
@@ -624,8 +635,11 @@ create table user_points_events (
 -- contorna a RLS restritiva de profiles ("self read profile") — é
 -- justamente por isso que ela existe, em vez de simplesmente abrir mais
 -- uma policy de select em profiles (que exporia e-mail/whatsapp junto).
+-- ranking_opt_out vai junto (não pra exibir, só pra getRanking() poder
+-- filtrar quem pediu pra sair do ranking sem afetar getPublicProfile,
+-- que continua abrindo o perfil de qualquer aluno normalmente).
 create view public_profiles as
-  select id, name, avatar_url, total_points, program_id from profiles;
+  select id, name, avatar_url, total_points, program_id, ranking_opt_out from profiles;
 grant select on public_profiles to authenticated;
 
 -- Validação pública de certificado (sem login): expõe só o necessário

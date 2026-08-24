@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { ConfirmProvider } from './components/ConfirmDialog'
 import { RouteGuard } from './components/RouteGuard'
 import { AuthProvider } from './context/AuthContext'
+import { PlatformSettingsProvider } from './context/PlatformSettingsContext'
+import { AceitarTermos } from './pages/aluno/AceitarTermos'
 import { AdminAnalytics } from './pages/admin/AdminAnalytics'
 import { AdminCertificados } from './pages/admin/AdminCertificados'
 import { AdminComunidade } from './pages/admin/AdminComunidade'
@@ -34,6 +36,7 @@ import { ValidarCertificado } from './pages/public/ValidarCertificado'
 
 function App() {
   return (
+    <PlatformSettingsProvider>
     <AuthProvider>
       <ConfirmProvider>
       <Routes>
@@ -246,10 +249,20 @@ function App() {
           }
         />
 
+        <Route
+          path="/aceitar-termos"
+          element={
+            <RouteGuard>
+              <AceitarTermos />
+            </RouteGuard>
+          }
+        />
+
         <Route path="*" element={<Navigate to="/estande" replace />} />
       </Routes>
       </ConfirmProvider>
     </AuthProvider>
+    </PlatformSettingsProvider>
   )
 }
 

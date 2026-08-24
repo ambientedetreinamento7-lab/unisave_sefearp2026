@@ -5,6 +5,7 @@ import { NivelCard } from '../../components/NivelCard'
 import { useAuth } from '../../context/AuthContext'
 import { colorForName, initials } from '../../lib/avatar'
 import { awardPoints } from '../../lib/gamification'
+import { getCommunitySettings } from '../../lib/settings'
 import { supabase } from '../../lib/supabase'
 import type { Program } from '../../types/database'
 
@@ -16,6 +17,11 @@ const FASE_OPTIONS = [
 
 export function MeuPerfil() {
   const { profile, refreshProfile } = useAuth()
+  const [allowRankingOptOut, setAllowRankingOptOut] = useState(false)
+
+  useEffect(() => {
+    getCommunitySettings().then((s) => setAllowRankingOptOut(s.allowRankingOptOut))
+  }, [])
 
   if (!profile) return null
 
@@ -38,6 +44,9 @@ export function MeuPerfil() {
           initialFase={profile.curriculum_period}
           onChanged={refreshProfile}
         />
+        {allowRankingOptOut && (
+          <PrivacidadeCard userId={profile.id} initialOptOut={profile.ranking_opt_out} onChanged={refreshProfile} />
+        )}
         <SenhaCard />
       </main>
     </div>
@@ -229,6 +238,37 @@ function DadosCard({
       >
         {saving ? 'Salvando…' : 'Salvar alterações'}
       </button>
+    </div>
+  )
+}
+
+function PrivacidadeCard({
+  userId,
+  initialOptOut,
+  onChanged,
+}: {
+  userId: string
+  initialOptOut: boolean
+  onChanged: () => Promise<void>
+}) {
+  const [optOut, setOptOut] = useState(initialOptOut)
+  const [saving, setSaving] = useState(false)
+
+  async function toggle(value: boolean) {
+    setOptOut(value)
+    setSaving(true)
+    await supabase.from('profiles').update({ ranking_opt_out: value }).eq('id', userId)
+    await onChanged()
+    setSaving(false)
+  }
+
+  return (
+    <div className="card mt-4 p-5">
+      <h3 className="font-bold text-ink">Privacidade</h3>
+      <label className="mt-3 flex items-center gap-2 text-sm font-medium text-ink">
+        <input type="checkbox" checked={optOut} disabled={saving} onChange={(e) => toggle(e.target.checked)} />
+        Não aparecer no ranking público
+      </label>
     </div>
   )
 }

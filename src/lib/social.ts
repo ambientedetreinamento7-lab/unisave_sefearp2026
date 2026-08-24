@@ -1,5 +1,6 @@
 import { awardPoints } from './gamification'
 import { notifyReaction } from './notifications'
+import { getCommunitySettings } from './settings'
 import { supabase } from './supabase'
 import type {
   SocialComment,
@@ -15,6 +16,15 @@ import type {
   SocialStoryReaction,
   SocialStoryView,
 } from '../types/database'
+
+// Spec: Configurações → Comunidade e Ranking. Quando ligado, post novo
+// entra como published=false (RLS já só mostra pra autor/moderador/admin
+// até alguém aprovar via setPostPublished) — sem isso, tudo publica direto
+// (pós-moderação, comportamento original).
+async function isPublishedByDefault(): Promise<boolean> {
+  const { requireModeration } = await getCommunitySettings()
+  return !requireModeration
+}
 
 export interface PollOptionResult extends SocialPollOption {
   voteCount: number
@@ -129,6 +139,7 @@ export async function createPost(input: {
   images: File[]
 }): Promise<void> {
   const postType: SocialPostType = input.images.length > 1 ? 'carrossel' : input.images.length === 1 ? 'imagem' : 'texto'
+  const published = await isPublishedByDefault()
 
   const { data: post, error } = await supabase
     .from('social_posts')
@@ -140,6 +151,7 @@ export async function createPost(input: {
       program_id: input.scope === 'curso' ? input.programId : null,
       post_type: postType,
       body: input.body || null,
+      published,
     })
     .select('*')
     .single()
@@ -182,6 +194,7 @@ export async function createVideoPost(input: {
     post_type: 'video' as SocialPostType,
     body: input.body || null,
     vimeo_id: input.vimeoId,
+    published: await isPublishedByDefault(),
   })
   if (error) throw error
   await awardPoints(input.authorId, 'first_post_video', '')
@@ -206,6 +219,7 @@ export async function createPollPost(input: {
       program_id: input.scope === 'curso' ? input.programId : null,
       post_type: 'enquete' as SocialPostType,
       body: input.question,
+      published: await isPublishedByDefault(),
     })
     .select('*')
     .single()

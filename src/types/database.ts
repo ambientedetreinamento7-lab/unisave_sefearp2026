@@ -33,6 +33,9 @@ export interface Profile {
   last_access_date: string | null
   nav_tutorial_seen: boolean
   pdi_tutorial_seen: boolean
+  ranking_opt_out: boolean
+  terms_accepted_version: string | null
+  terms_accepted_at: string | null
 }
 
 export interface PublicProfile {
@@ -41,6 +44,7 @@ export interface PublicProfile {
   avatar_url: string | null
   total_points: number
   program_id: string | null
+  ranking_opt_out: boolean
 }
 
 export interface Program {
@@ -117,7 +121,7 @@ export interface Pill {
   points_override: number | null
   category_id: string | null
   reaction_survey_id: string | null
-  allow_manual_completion: boolean
+  allow_manual_completion: boolean | null
   required: boolean
   access_count: number
   created_at: string
@@ -151,6 +155,44 @@ export interface AppSetting {
 export interface TrialSettings {
   enabled: boolean
   days: number
+}
+
+export interface BrandingSettings {
+  platformName: string | null
+  logoUrl: string | null
+  secondaryLogoUrl: string | null
+  primaryColor: string | null
+  accentColor: string | null
+}
+
+export interface SignupSettings {
+  open: boolean
+  closedMessage: string
+  requireTermsAcceptance: boolean
+}
+
+export interface ModuleCompletionSettings {
+  allowManualCompletionDefault: boolean
+}
+
+export interface CommunitySettings {
+  requireModeration: boolean
+  allowRankingOptOut: boolean
+}
+
+export interface SessionSettings {
+  inactivityTimeoutMinutes: number | null
+}
+
+export interface LegalSettings {
+  termsUrl: string | null
+  privacyUrl: string | null
+  termsVersion: string
+}
+
+export interface MaintenanceSettings {
+  enabled: boolean
+  message: string
 }
 
 export interface IssuedCertificate {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { usePlatformSettings } from '../context/PlatformSettingsContext'
 import { useTheme } from '../context/ThemeContext'
 import { colorForName, initials } from '../lib/avatar'
 import { getTrialSettings } from '../lib/settings'
@@ -23,6 +24,7 @@ function daysLeft(createdAt: string, trialDays: number) {
 
 export function AppHeader() {
   const { profile, signOut } = useAuth()
+  const { branding } = usePlatformSettings()
   const { theme, toggleTheme } = useTheme()
   const [menuOpen, setMenuOpen] = useState(false)
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false)
@@ -42,9 +44,9 @@ export function AppHeader() {
     <header className="bg-navy text-white">
       <div className="mx-auto flex max-w-5xl items-center gap-x-6 gap-y-3 px-5 py-3">
         <Link to="/dashboard" className="flex items-center gap-2 shrink-0">
-          <img src="/logos/UniSave.png" alt="UniSave" className="h-6 w-auto" />
+          <img src={branding.logoUrl ?? '/logos/UniSave.png'} alt={branding.platformName ?? 'UniSave'} className="h-6 w-auto" />
           <div className="h-5 w-px bg-white/25" />
-          <img src="/logos/sefea.png" alt="sefea Ribeirão Preto" className="h-6 w-auto" />
+          <img src={branding.secondaryLogoUrl ?? '/logos/sefea.png'} alt="sefea Ribeirão Preto" className="h-6 w-auto" />
         </Link>
 
         {profile && (
