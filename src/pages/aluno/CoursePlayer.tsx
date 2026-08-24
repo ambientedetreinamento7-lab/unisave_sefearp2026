@@ -42,10 +42,12 @@ export function CoursePlayer() {
   const [modules, setModules] = useState<Pill[]>([])
   const [moduleProgress, setModuleProgress] = useState<Record<string, UserProgress>>({})
   const [sequential, setSequential] = useState(false)
+  const [hasQuiz, setHasQuiz] = useState(false)
   const [loading, setLoading] = useState(true)
   const [unavailable, setUnavailable] = useState(false)
   const [blockedBy, setBlockedBy] = useState<string | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [completing, setCompleting] = useState(false)
   const playerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -78,6 +80,10 @@ export function CoursePlayer() {
       const isAvailable = ((links as { tracks: { published: boolean } | null }[] | null) ?? []).some(
         (l) => l.tracks?.published,
       )
+      const { count: quizCount } = await supabase
+        .from('quizzes')
+        .select('id', { count: 'exact', head: true })
+        .eq('pill_id', id!)
       const { data: progressData } = await supabase
         .from('user_progress')
         .select('*')
@@ -87,6 +93,7 @@ export function CoursePlayer() {
       if (cancelled) return
       const pillRow = pillData as Pill
       setPill(pillRow)
+      setHasQuiz((quizCount ?? 0) > 0)
       setProgress(progressData as UserProgress | null)
       setUnavailable(!isAvailable)
       if (!isAvailable) {
@@ -147,6 +154,20 @@ export function CoursePlayer() {
     }
   }, [id, profile])
 
+  async function completeModule() {
+    if (!profile || !id || completing) return
+    setCompleting(true)
+    await completePill(profile.id, id, null, pill?.title ?? 'Curso', pill?.points_override)
+    const { data: progressData } = await supabase
+      .from('user_progress')
+      .select('*')
+      .eq('user_id', profile.id)
+      .eq('pill_id', id)
+      .maybeSingle()
+    setProgress(progressData as UserProgress | null)
+    setCompleting(false)
+  }
+
   const handleScormProgress = useCallback(
     async (
       status: 'in_progress' | 'completed',
@@ -206,7 +227,12 @@ export function CoursePlayer() {
   }
 
   const isCompleted = progress?.status === 'completed'
-  const needsFixationQuiz = pill.content_type !== 'scorm' && pill.content_type !== 'reaction'
+  const isLastModule = modules.length > 0 && modules[modules.length - 1].id === pill.id
+  // Quiz de fixação é só do último módulo do curso, e só quando o admin
+  // cadastrou um pra ele — os demais módulos concluem direto, sem quiz.
+  const needsFixationQuiz =
+    pill.content_type !== 'scorm' && pill.content_type !== 'reaction' && isLastModule && hasQuiz
+  const needsPlainCompletion = pill.content_type !== 'scorm' && pill.content_type !== 'reaction' && !needsFixationQuiz
 
   // Um módulo trava (quando o curso é sequencial) se algum módulo anterior
   // na ordem ainda não foi concluído — mesma regra do getBlockingPill.
@@ -376,7 +402,17 @@ export function CoursePlayer() {
                 </button>
               )}
 
-              {!needsFixationQuiz && (
+              {needsPlainCompletion && (
+                <button
+                  onClick={completeModule}
+                  disabled={isCompleted || completing}
+                  className="mt-5 w-full rounded-xl bg-brand-red py-3 font-bold text-white transition hover:bg-brand-red-dark disabled:opacity-50 sm:w-auto sm:px-8"
+                >
+                  {isCompleted ? 'Módulo concluído ✓' : completing ? 'Concluindo…' : 'Concluir Módulo'}
+                </button>
+              )}
+
+              {pill.content_type === 'scorm' && (
                 <p className="mt-5 text-sm text-ink-soft">
                   {isCompleted
                     ? 'Módulo SCORM concluído ✓'
