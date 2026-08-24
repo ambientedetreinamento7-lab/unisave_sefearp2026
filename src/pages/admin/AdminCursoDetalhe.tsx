@@ -16,6 +16,22 @@ async function uploadCover(file: File, folder: string): Promise<string> {
   return supabase.storage.from('covers').getPublicUrl(path).data.publicUrl
 }
 
+// <input type="datetime-local"> só aceita/devolve "YYYY-MM-DDTHH:mm" em
+// horário local do navegador — sem timezone. Convertendo assim (em vez de
+// usar toISOString, que é UTC), a data digitada bate com o relógio local
+// de quem está preenchendo o formulário.
+function toDatetimeLocal(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function fromDatetimeLocal(value: string): string | null {
+  if (!value) return null
+  return new Date(value).toISOString()
+}
+
 type Tab = 'detalhes' | 'aulas'
 
 export function AdminCursoDetalhe() {
@@ -46,6 +62,9 @@ export function AdminCursoDetalhe() {
   const [sequential, setSequential] = useState(false)
   const [published, setPublished] = useState(true)
   const [isCatalog, setIsCatalog] = useState(false)
+  const [bannerEnabled, setBannerEnabled] = useState(false)
+  const [bannerStart, setBannerStart] = useState('')
+  const [bannerEnd, setBannerEnd] = useState('')
   const [programId, setProgramId] = useState('')
   const [profile, setProfile] = useState<DiagnosticProfile | ''>('')
   const [categoryId, setCategoryId] = useState('')
@@ -90,6 +109,9 @@ export function AdminCursoDetalhe() {
           setSequential(row.sequential)
           setPublished(row.published)
           setIsCatalog(row.is_catalog)
+          setBannerEnabled(row.banner_enabled)
+          setBannerStart(toDatetimeLocal(row.banner_start_at))
+          setBannerEnd(toDatetimeLocal(row.banner_end_at))
           setProgramId(row.program_id ?? '')
           setProfile(row.diagnostic_profile ?? '')
           setCategoryId(row.category_id ?? '')
@@ -124,6 +146,9 @@ export function AdminCursoDetalhe() {
         sequential,
         published,
         is_catalog: isCatalog,
+        banner_enabled: bannerEnabled,
+        banner_start_at: fromDatetimeLocal(bannerStart),
+        banner_end_at: fromDatetimeLocal(bannerEnd),
         program_id: programId || null,
         diagnostic_profile: profile || null,
         category_id: categoryId || null,
@@ -312,6 +337,39 @@ export function AdminCursoDetalhe() {
             Biblioteca de Cursos (prateleira avulsa — só aparece pro aluno que bater com o Programa/Perfil
             acima, e só entra no PDI dele se ele mesmo adicionar)
           </label>
+
+          <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
+            <input type="checkbox" checked={bannerEnabled} onChange={(e) => setBannerEnabled(e.target.checked)} />
+            Banner (exibe este curso no carrossel rotativo do Dashboard, usando a Capa acima — recomendado:
+            1326×495px)
+          </label>
+
+          {bannerEnabled && (
+            <div className="grid gap-3 rounded-xl border border-navy-light p-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-semibold text-ink-soft">
+                  Data de início do banner <span className="font-normal normal-case text-ink-soft/70">(opcional)</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  className="mt-1 w-full rounded-xl border border-navy-light px-3 py-2.5 text-sm"
+                  value={bannerStart}
+                  onChange={(e) => setBannerStart(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-ink-soft">
+                  Data de fim do banner <span className="font-normal normal-case text-ink-soft/70">(opcional)</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  className="mt-1 w-full rounded-xl border border-navy-light px-3 py-2.5 text-sm"
+                  value={bannerEnd}
+                  onChange={(e) => setBannerEnd(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 

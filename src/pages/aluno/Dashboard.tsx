@@ -10,6 +10,7 @@ import { useAuth } from '../../context/AuthContext'
 import {
   completeTour,
   getAllPills,
+  getBannerTracks,
   getCategories,
   getDashboardSections,
   getFavoritePillIds,
@@ -25,7 +26,7 @@ import {
   toggleFavorite,
   trackProgressPct,
 } from '../../lib/api'
-import { claimDailyAccess, getLastPointsEvent, getRule } from '../../lib/gamification'
+import { brasiliaDaysBetween, claimDailyAccess, getLastPointsEvent, getRule } from '../../lib/gamification'
 import type { Category, DashboardSection, GamificationRule, Pill, UserProgress, Track } from '../../types/database'
 
 const NAV_TOUR_STEPS: TourStep[] = [
@@ -84,8 +85,6 @@ const NAV_TOUR_STEPS: TourStep[] = [
   },
 ]
 
-const MS_PER_DAY = 86_400_000
-
 export function Dashboard() {
   const { profile, refreshProfile } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -106,17 +105,19 @@ export function Dashboard() {
   const [sections, setSections] = useState<DashboardSection[]>([])
   const [sectionPills, setSectionPills] = useState<Record<string, Pill[]>>({})
   const [multiModuleTracks, setMultiModuleTracks] = useState<Map<string, { track: Track; pills: Pill[] }>>(new Map())
+  const [bannerTracks, setBannerTracks] = useState<{ track: Track; pills: Pill[] }[]>([])
 
   useEffect(() => {
     if (!profile) return
     let cancelled = false
     async function load() {
-      const [progressMap, pills, cats, favIds, sects] = await Promise.all([
+      const [progressMap, pills, cats, favIds, sects, banners] = await Promise.all([
         getUserProgressMap(profile!.id),
         getAllPills(),
         getCategories(),
         getFavoritePillIds(profile!.id),
         getDashboardSections(),
+        getBannerTracks(),
       ])
       if (cancelled) return
       setProgress(progressMap)
@@ -124,6 +125,7 @@ export function Dashboard() {
       setCategories(cats)
       setFavoriteIds(favIds)
       setSections(sects)
+      setBannerTracks(banners)
 
       let recommendedPills: Pill[] = []
       if (profile!.selected_track_id) {
@@ -179,7 +181,7 @@ export function Dashboard() {
       if (cancelled) return
       const recurrenceDays = rule.recurrence_days ?? 1
       const dueForRefresh =
-        !lastEvent || Date.now() - new Date(lastEvent.created_at).getTime() >= recurrenceDays * MS_PER_DAY
+        !lastEvent || brasiliaDaysBetween(new Date(lastEvent.created_at), new Date()) >= recurrenceDays
       if (dueForRefresh) {
         setAccessRule(rule)
         setShowAccessModal(true)
@@ -279,6 +281,15 @@ export function Dashboard() {
             <p className="mt-1 text-sm text-ink-soft sm:text-base">
               Continue evoluindo o seu Plano de Desenvolvimento Individual.
             </p>
+
+            {bannerTracks.length > 0 && (
+              <BannerCarousel
+                items={bannerTracks}
+                progress={progress}
+                favoriteIds={favoriteIds}
+                onToggleFavorite={handleToggleFavorite}
+              />
+            )}
 
             {track && (
               <section className="card card-highlight mt-6 p-5 sm:p-6">
@@ -505,6 +516,105 @@ function collapseToCourseCards(
     }
   }
   return cards
+}
+
+function BannerCarousel({
+  items,
+  progress,
+  favoriteIds,
+  onToggleFavorite,
+}: {
+  items: { track: Track; pills: Pill[] }[]
+  progress: Record<string, UserProgress>
+  favoriteIds: Set<string>
+  onToggleFavorite: (pillId: string) => void
+}) {
+  const [index, setIndex] = useState(0)
+  const count = items.length
+
+  useEffect(() => {
+    if (count <= 1) return
+    const timer = setInterval(() => setIndex((i) => (i + 1) % count), 6000)
+    return () => clearInterval(timer)
+  }, [count])
+
+  // Se a lista de banners mudar (ex: um expirou), não deixa o índice
+  // apontar pra fora dos limites.
+  const current = items[index] ?? items[0]
+  if (!current) return null
+
+  // "Iniciar" e "favoritar" apontam pro primeiro módulo não concluído do
+  // curso (ou o primeiro, se nenhum foi começado ainda) — mesma regra do
+  // card de curso normal.
+  const target = current.pills.find((p) => progress[p.id]?.status !== 'completed') ?? current.pills[0]
+  const favorited = target ? favoriteIds.has(target.id) : false
+
+  return (
+    <div
+      className="group relative mt-6 w-full overflow-hidden rounded-2xl bg-navy-light"
+      style={{ aspectRatio: '1326 / 495' }}
+    >
+      {items.map((item, i) => (
+        <img
+          key={item.track.id}
+          src={item.track.cover_url ?? undefined}
+          alt={item.track.title}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
+            i === index ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+      ))}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-black/0" />
+
+      {target && (
+        <div className="absolute bottom-4 left-4 flex items-center gap-3">
+          <Link
+            to={`/curso/${target.id}`}
+            aria-label="Iniciar curso"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-red text-white shadow-lg transition hover:scale-105 hover:bg-brand-red-dark"
+          >
+            <span className="ml-0.5 text-lg">▶</span>
+          </Link>
+          <button
+            onClick={() => onToggleFavorite(target.id)}
+            aria-label={favorited ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/90 text-ink-soft shadow-lg transition hover:scale-105"
+          >
+            <Icon name={favorited ? 'heart-filled' : 'heart'} size={18} className={favorited ? 'text-brand-red' : undefined} />
+          </button>
+        </div>
+      )}
+
+      {count > 1 && (
+        <>
+          <button
+            onClick={() => setIndex((i) => (i - 1 + count) % count)}
+            aria-label="Banner anterior"
+            className="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white opacity-0 transition hover:bg-black/50 group-hover:opacity-100"
+          >
+            ‹
+          </button>
+          <button
+            onClick={() => setIndex((i) => (i + 1) % count)}
+            aria-label="Próximo banner"
+            className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white opacity-0 transition hover:bg-black/50 group-hover:opacity-100"
+          >
+            ›
+          </button>
+          <div className="absolute bottom-4 right-4 flex gap-1.5">
+            {items.map((item, i) => (
+              <button
+                key={item.track.id}
+                onClick={() => setIndex(i)}
+                aria-label={`Ir para o banner ${i + 1}`}
+                className={`h-1.5 w-4 rounded-full transition ${i === index ? 'bg-white' : 'bg-white/40'}`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
 }
 
 function CourseRow({

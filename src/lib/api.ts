@@ -94,6 +94,43 @@ export async function getMultiModuleTracks(
   return result
 }
 
+/** Cursos marcados como "Banner" (admin, aba Detalhes), publicados, com
+ * capa definida e dentro da janela banner_start_at/banner_end_at (lado
+ * nulo = sem limite naquela ponta) — pro carrossel do Dashboard. Traz as
+ * pílulas de cada um só pra saber pra onde o botão "Iniciar" leva. */
+export async function getBannerTracks(): Promise<{ track: Track; pills: Pill[] }[]> {
+  const { data: tracks } = await supabase
+    .from('tracks')
+    .select('*')
+    .eq('banner_enabled', true)
+    .eq('published', true)
+    .not('cover_url', 'is', null)
+  const now = Date.now()
+  const active = ((tracks as Track[]) ?? []).filter((t) => {
+    if (t.banner_start_at && new Date(t.banner_start_at).getTime() > now) return false
+    if (t.banner_end_at && new Date(t.banner_end_at).getTime() < now) return false
+    return true
+  })
+  if (active.length === 0) return []
+
+  const { data: links } = await supabase
+    .from('track_pills')
+    .select('track_id, order_index, pills(*)')
+    .in(
+      'track_id',
+      active.map((t) => t.id),
+    )
+    .order('order_index')
+  const pillsByTrack = new Map<string, Pill[]>()
+  for (const row of (links as { track_id: string; pills: Pill }[] | null) ?? []) {
+    if (!row.pills) continue
+    const arr = pillsByTrack.get(row.track_id) ?? []
+    arr.push(row.pills)
+    pillsByTrack.set(row.track_id, arr)
+  }
+  return active.map((track) => ({ track, pills: pillsByTrack.get(track.id) ?? [] }))
+}
+
 export async function getUserProgressMap(userId: string): Promise<Record<string, UserProgress>> {
   const { data } = await supabase.from('user_progress').select('*').eq('user_id', userId)
   const map: Record<string, UserProgress> = {}

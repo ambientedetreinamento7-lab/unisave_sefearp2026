@@ -79,6 +79,9 @@ export interface Track {
   published: boolean
   is_catalog: boolean
   sequential: boolean
+  banner_enabled: boolean
+  banner_start_at: string | null
+  banner_end_at: string | null
 }
 
 export interface TrackPill {
