@@ -581,6 +581,7 @@ export function CoursePlayer() {
                     manifestPath={scormSource.manifestPath}
                     initialLocation={progress?.scorm_location}
                     initialSuspendData={progress?.scorm_suspend_data}
+                    initialCompleted={isCompleted}
                     onProgress={handleScormProgress}
                   />
                 )}

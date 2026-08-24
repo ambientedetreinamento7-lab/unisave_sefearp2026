@@ -11,19 +11,23 @@ import type { Scorm12API as Scorm12APIType } from 'scorm-again'
  * saved bookmark before the package boots, so it resumes where the
  * student left off instead of restarting from the first slide — and
  * reports the current location/suspend_data back on every commit so
- * `onProgress` can persist it.
+ * `onProgress` can persist it. Also preloads lesson_status as
+ * 'completed' when the module was already finished, so reopening it
+ * doesn't look like a fresh incomplete attempt to the package.
  */
 export function ScormPlayer({
   packageUrl,
   manifestPath,
   initialLocation,
   initialSuspendData,
+  initialCompleted,
   onProgress,
 }: {
   packageUrl: string
   manifestPath: string
   initialLocation?: string | null
   initialSuspendData?: string | null
+  initialCompleted?: boolean
   onProgress: (
     status: 'in_progress' | 'completed',
     score: number | null,
@@ -41,6 +45,12 @@ export function ScormPlayer({
       api = new Scorm12API({ autocommit: true, logLevel: 1 })
       if (initialLocation) api.cmi.core.lesson_location = initialLocation
       if (initialSuspendData) api.cmi.suspend_data = initialSuspendData
+      // Sem isso, reabrir um módulo já concluído fazia o pacote iniciar um
+      // novo attempt do zero (lesson_status nasce 'not attempted' numa
+      // instância nova da API) — muitos pacotes então reportavam
+      // 'incomplete' de novo nesse boot, "desconcluindo" o módulo pro
+      // aluno mesmo sem ele ter feito nada.
+      if (initialCompleted) api.cmi.core.lesson_status = 'completed'
       api.cmi.core.entry = initialLocation ? 'resume' : 'ab-initio'
       const reportProgress = () => {
         if (!api || cancelled) return
@@ -73,7 +83,7 @@ export function ScormPlayer({
       api?.LMSCommit('')
       if (api) delete (window as { API?: Scorm12APIType }).API
     }
-  }, [initialLocation, initialSuspendData, onProgress])
+  }, [initialLocation, initialSuspendData, initialCompleted, onProgress])
 
   const entryUrl = `${packageUrl.replace(/\/$/, '')}/${manifestPath.replace(/^\//, '')}`
 

@@ -184,16 +184,21 @@ export async function markPillInProgress(
 ) {
   const { data: existing } = await supabase
     .from('user_progress')
-    .select('id')
+    .select('id, status')
     .eq('user_id', userId)
     .eq('pill_id', pillId)
     .maybeSingle()
+  // Reabrir um SCORM já concluído reinicia o pacote do zero — se ele
+  // reportar 'incomplete' de novo nesse boot (comum quando o pacote não
+  // sabe que já tinha terminado), isso não pode rebaixar o progresso já
+  // salvo como 'completed' de volta pra 'in_progress'.
+  const alreadyCompleted = (existing as { status: string } | null)?.status === 'completed'
 
   await supabase.from('user_progress').upsert(
     {
       user_id: userId,
       pill_id: pillId,
-      status: 'in_progress',
+      status: alreadyCompleted ? 'completed' : 'in_progress',
       ...(bookmark ? { scorm_location: bookmark.location, scorm_suspend_data: bookmark.suspendData } : {}),
     },
     { onConflict: 'user_id,pill_id' },
