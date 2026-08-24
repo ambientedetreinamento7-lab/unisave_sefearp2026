@@ -613,11 +613,19 @@ export function CoursePlayer() {
               )}
 
               {pill.content_type === 'scorm' && (
-                <p className="mt-5 text-sm text-ink-soft">
-                  {isCompleted
-                    ? 'Módulo SCORM concluído ✓'
-                    : 'O progresso deste módulo SCORM é registrado automaticamente pelo pacote.'}
-                </p>
+                <div className="mt-5 space-y-1 text-sm text-ink-soft">
+                  <p>
+                    {isCompleted
+                      ? 'Módulo SCORM concluído ✓'
+                      : 'O progresso deste módulo SCORM é registrado automaticamente pelo pacote.'}
+                  </p>
+                  {!isCompleted && (
+                    <p>
+                      Se você já terminou o conteúdo e o módulo continua aparecendo como "Em andamento",
+                      atualize a página (F5) — às vezes a confirmação de conclusão só aparece depois disso.
+                    </p>
+                  )}
+                </div>
               )}
 
               {isStrictVideoTracking && (
