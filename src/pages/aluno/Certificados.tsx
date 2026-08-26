@@ -1,4 +1,5 @@
 import { toPng } from 'html-to-image'
+import { jsPDF } from 'jspdf'
 import { useEffect, useRef, useState } from 'react'
 import { AppHeader } from '../../components/AppHeader'
 import { useAuth } from '../../context/AuthContext'
@@ -168,6 +169,7 @@ function CertificateModal({
 }) {
   const verifyUrl = entry.code ? `${window.location.origin}/validar-certificado?codigo=${entry.code}` : null
   const certRef = useRef<HTMLDivElement>(null)
+  const syllabusRef = useRef<HTMLDivElement>(null)
   const [downloading, setDownloading] = useState(false)
   const [shareError, setShareError] = useState('')
 
@@ -183,31 +185,58 @@ function CertificateModal({
     },
   )
 
-  async function renderImage(): Promise<Blob | null> {
+  // Carrega a imagem numa <img> só pra ler as dimensões reais em pixel do
+  // PNG gerado (toPng não devolve isso) — o jsPDF usa esse tamanho exato
+  // como tamanho da página (unit: 'px'), sem precisar converter pra mm.
+  function loadImageSize(dataUrl: string): Promise<{ width: number; height: number }> {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
+      img.onerror = reject
+      img.src = dataUrl
+    })
+  }
+
+  async function renderPdfBlob(): Promise<Blob | null> {
     if (!certRef.current) return null
     // pixelRatio alto o bastante pra bater com o tamanho recomendado do
     // fundo (1400×895px) — o preview na tela é bem menor que isso (limitado
     // pelo modal), então um pixelRatio baixo gerava uma imagem borrada
     // tanto pra baixar quanto pra compartilhar.
-    const dataUrl = await toPng(certRef.current, { pixelRatio: 3, backgroundColor: '#ffffff' })
-    const res = await fetch(dataUrl)
-    return res.blob()
+    const certDataUrl = await toPng(certRef.current, { pixelRatio: 3, backgroundColor: '#ffffff' })
+    const certSize = await loadImageSize(certDataUrl)
+
+    const pdf = new jsPDF({
+      unit: 'px',
+      format: [certSize.width, certSize.height],
+      orientation: certSize.width >= certSize.height ? 'landscape' : 'portrait',
+    })
+    pdf.addImage(certDataUrl, 'PNG', 0, 0, certSize.width, certSize.height)
+
+    if (entry.track.conteudo_programatico && syllabusRef.current) {
+      const syllabusDataUrl = await toPng(syllabusRef.current, { pixelRatio: 2, backgroundColor: '#ffffff' })
+      const syllabusSize = await loadImageSize(syllabusDataUrl)
+      pdf.addPage([syllabusSize.width, syllabusSize.height], syllabusSize.width >= syllabusSize.height ? 'landscape' : 'portrait')
+      pdf.addImage(syllabusDataUrl, 'PNG', 0, 0, syllabusSize.width, syllabusSize.height)
+    }
+
+    return pdf.output('blob')
   }
 
   async function handleDownload() {
     setDownloading(true)
     setShareError('')
     try {
-      const blob = await renderImage()
+      const blob = await renderPdfBlob()
       if (!blob) return
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `certificado-${entry.track.title.toLowerCase().replace(/\s+/g, '-')}.png`
+      a.download = `certificado-${entry.track.title.toLowerCase().replace(/\s+/g, '-')}.pdf`
       a.click()
       URL.revokeObjectURL(url)
     } catch {
-      setShareError('Não foi possível gerar a imagem do certificado.')
+      setShareError('Não foi possível gerar o PDF do certificado.')
     }
     setDownloading(false)
   }
@@ -216,15 +245,15 @@ function CertificateModal({
     setDownloading(true)
     setShareError('')
     try {
-      const blob = await renderImage()
+      const blob = await renderPdfBlob()
       if (!blob) return
-      const file = new File([blob], `certificado-${entry.track.title}.png`, { type: 'image/png' })
+      const file = new File([blob], `certificado-${entry.track.title}.pdf`, { type: 'application/pdf' })
       const shareText = `Concluí o curso "${entry.track.title}"! 🎓`
       if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
         await navigator.share({ files: [file], title: 'Meu certificado', text: shareText })
       } else {
         await handleDownload()
-        setShareError('Compartilhamento direto não é suportado neste navegador — a imagem foi baixada, poste manualmente.')
+        setShareError('Compartilhamento direto não é suportado neste navegador — o PDF foi baixado, poste manualmente.')
       }
     } catch (err) {
       if (err instanceof Error && err.name !== 'AbortError') {
@@ -275,6 +304,28 @@ function CertificateModal({
           </p>
         )}
 
+        {entry.track.conteudo_programatico && (
+          <p className="mt-2 text-xs text-ink-soft">
+            O PDF gerado inclui uma 2ª página com o conteúdo programático deste curso.
+          </p>
+        )}
+
+        {/* Fora da tela de propósito — só existe pro html-to-image conseguir
+            capturar a 2ª página do PDF (o conteúdo programático), sem
+            aparecer na pré-visualização do certificado em si. */}
+        {entry.track.conteudo_programatico && (
+          <div className="fixed left-[-9999px] top-0" aria-hidden="true">
+            <div ref={syllabusRef} className="w-[1000px] bg-white p-16 text-ink">
+              <p className="text-xs font-bold uppercase tracking-wide text-navy">Conteúdo Programático</p>
+              <h2 className="mt-1 text-2xl font-extrabold text-ink">{entry.track.title}</h2>
+              <div
+                className="mt-6 text-base leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: entry.track.conteudo_programatico }}
+              />
+            </div>
+          </div>
+        )}
+
         {shareError && <p className="mt-3 text-sm text-brand-red">{shareError}</p>}
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -283,7 +334,7 @@ function CertificateModal({
             disabled={downloading}
             className="rounded-xl bg-navy px-4 py-2.5 text-sm font-semibold text-white hover:bg-navy-dark disabled:opacity-60"
           >
-            {downloading ? 'Gerando…' : 'Baixar imagem'}
+            {downloading ? 'Gerando…' : 'Baixar PDF'}
           </button>
           <button
             onClick={handleShare}

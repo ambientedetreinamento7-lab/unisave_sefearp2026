@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AdminLayout } from './AdminLayout'
 import { useConfirm } from '../../components/ConfirmDialog'
+import { RichTextEditor } from '../../components/RichTextEditor'
 import { getReactionSurveys, linkPillToTrack, unlinkPillFromTrack } from '../../lib/api'
 import { formatCargaHoraria } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
@@ -58,6 +59,7 @@ export function AdminCursoDetalhe() {
   const [objetivoGeral, setObjetivoGeral] = useState('')
   const [publicoAlvo, setPublicoAlvo] = useState('')
   const [preRequisitos, setPreRequisitos] = useState('')
+  const [conteudoProgramatico, setConteudoProgramatico] = useState('')
   const [cargaHoraria, setCargaHoraria] = useState('')
   const [certificateEnabled, setCertificateEnabled] = useState(false)
   const [certificateTemplateId, setCertificateTemplateId] = useState('')
@@ -109,6 +111,7 @@ export function AdminCursoDetalhe() {
           setObjetivoGeral(row.objetivo_geral ?? '')
           setPublicoAlvo(row.publico_alvo ?? '')
           setPreRequisitos(row.pre_requisitos ?? '')
+          setConteudoProgramatico(row.conteudo_programatico ?? '')
           setCargaHoraria(row.carga_horaria_total?.toString() ?? '')
           setCertificateEnabled(row.certificate_enabled)
           setCertificateTemplateId(row.certificate_template_id ?? '')
@@ -147,6 +150,7 @@ export function AdminCursoDetalhe() {
         objetivo_geral: objetivoGeral || null,
         publico_alvo: publicoAlvo || null,
         pre_requisitos: preRequisitos || null,
+        conteudo_programatico: conteudoProgramatico || null,
         carga_horaria_total: cargaHoraria ? Number(cargaHoraria) : null,
         certificate_enabled: certificateEnabled,
         certificate_template_id: certificateTemplateId || null,
@@ -274,6 +278,16 @@ export function AdminCursoDetalhe() {
 
           <label className="block text-xs font-semibold text-ink-soft">Pré-requisitos</label>
           <textarea className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="Conhecimentos ou cursos necessários antes deste (opcional)" value={preRequisitos} onChange={(e) => setPreRequisitos(e.target.value)} />
+
+          <div>
+            <label className="block text-xs font-semibold text-ink-soft">Conteúdo programático</label>
+            <p className="mt-0.5 text-xs text-ink-soft">
+              Aparece como uma segunda página junto do certificado deste curso (opcional).
+            </p>
+            <div className="mt-1">
+              <RichTextEditor value={conteudoProgramatico} onChange={setConteudoProgramatico} />
+            </div>
+          </div>
 
           <label className="block text-xs font-semibold text-ink-soft">
             Carga horária total (minutos){' '}

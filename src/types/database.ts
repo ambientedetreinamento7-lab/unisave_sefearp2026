@@ -79,6 +79,7 @@ export interface Track {
   cover_url: string | null
   thumbnail_url: string | null
   certificate_template_id: string | null
+  conteudo_programatico: string | null
   published: boolean
   is_catalog: boolean
   sequential: boolean

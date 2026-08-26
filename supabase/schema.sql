@@ -86,6 +86,12 @@ create table tracks (
   -- biblioteca de certificados — criar uma vez, selecionar por curso).
   -- Nulo mesmo com certificate_enabled=true = ainda não escolheu um modelo.
   certificate_template_id uuid references certificate_templates(id) on delete set null,
+  -- Conteúdo programático do curso (spec: incluir conteúdo programático
+  -- no certificado) — texto rico, mesmo padrão da mensagem do
+  -- certificado. Como o certificado agora é um modelo compartilhado
+  -- entre cursos, essa info específica do curso não pode mais viver
+  -- nele; entra como uma 2ª página do PDF na hora de emitir.
+  conteudo_programatico text,
   -- Unpublished tracks are hidden from every student-facing view (spec:
   -- publicar/despublicar cursos) but stay editable in the admin panel.
   published boolean not null default true,
