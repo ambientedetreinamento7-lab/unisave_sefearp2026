@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { AdminLayout } from './AdminLayout'
+import { getIssuedCertificates } from '../../lib/api'
 import { getLevels, levelForPoints } from '../../lib/gamification'
 import { TIER_LABEL } from '../../lib/pdiTier'
 import { supabase } from '../../lib/supabase'
 import type {
   GamificationLevel,
+  IssuedCertificate,
   PdiPlan,
   PdiTier,
   Profile,
@@ -75,6 +77,11 @@ export function AdminAnalytics() {
       ultimoAcesso: string
     }[]
   >([])
+  const [issuedCertificates, setIssuedCertificates] = useState<IssuedCertificate[]>([])
+  const [certFilterName, setCertFilterName] = useState('')
+  const [certFilterTrackId, setCertFilterTrackId] = useState('')
+  const [certFilterFrom, setCertFilterFrom] = useState('')
+  const [certFilterTo, setCertFilterTo] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -90,6 +97,7 @@ export function AdminAnalytics() {
         { data: skillRatings },
         { count: certificadosEmitidos },
         levels,
+        issued,
       ] = await Promise.all([
         supabase.from('profiles').select('*').eq('role', 'aluno'),
         supabase.from('pdi_plans').select('*'),
@@ -101,7 +109,9 @@ export function AdminAnalytics() {
         supabase.from('skill_ratings').select('*'),
         supabase.from('issued_certificates').select('*', { count: 'exact', head: true }),
         getLevels(),
+        getIssuedCertificates(),
       ])
+      setIssuedCertificates(issued)
 
       const profilesArr = (profiles as Profile[]) ?? []
       const plansArr = (plans as PdiPlan[]) ?? []
@@ -228,6 +238,23 @@ export function AdminAnalytics() {
   }, [])
 
   if (loading) return <AdminLayout><p className="text-ink-soft">Carregando…</p></AdminLayout>
+
+  const certTrackOptions = Array.from(
+    new Map(issuedCertificates.map((c) => [c.track_id, c.track_title])).entries(),
+  ).sort((a, b) => a[1].localeCompare(b[1]))
+
+  const filteredCertificates = issuedCertificates.filter((c) => {
+    if (certFilterName && !c.student_name.toLowerCase().includes(certFilterName.toLowerCase())) return false
+    if (certFilterTrackId && c.track_id !== certFilterTrackId) return false
+    if (c.completed_at) {
+      const completedDate = c.completed_at.slice(0, 10)
+      if (certFilterFrom && completedDate < certFilterFrom) return false
+      if (certFilterTo && completedDate > certFilterTo) return false
+    } else if (certFilterFrom || certFilterTo) {
+      return false
+    }
+    return true
+  })
 
   return (
     <AdminLayout>
@@ -401,6 +428,97 @@ export function AdminAnalytics() {
                 ))}
                 {students.length === 0 && (
                   <tr><td colSpan={7} className="py-3 text-ink-soft">Sem dados ainda.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card p-5 lg:col-span-2">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-ink">Certificados emitidos</h2>
+            <CsvButton
+              filename="certificados-emitidos.csv"
+              headers={['Aluno', 'Curso', 'Código', 'Concluído em', 'Emitido em']}
+              rows={filteredCertificates.map((c) => [
+                c.student_name,
+                c.track_title,
+                c.code,
+                c.completed_at ? new Date(c.completed_at).toLocaleDateString('pt-BR') : '—',
+                new Date(c.issued_at).toLocaleDateString('pt-BR'),
+              ])}
+            />
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <input
+              className="rounded-lg border border-navy-light px-3 py-2 text-sm"
+              placeholder="Buscar aluno…"
+              value={certFilterName}
+              onChange={(e) => setCertFilterName(e.target.value)}
+            />
+            <select
+              className="rounded-lg border border-navy-light px-3 py-2 text-sm"
+              value={certFilterTrackId}
+              onChange={(e) => setCertFilterTrackId(e.target.value)}
+            >
+              <option value="">Todos os cursos</option>
+              {certTrackOptions.map(([trackId, title]) => (
+                <option key={trackId} value={trackId}>{title}</option>
+              ))}
+            </select>
+            <input
+              type="date"
+              className="rounded-lg border border-navy-light px-3 py-2 text-sm"
+              value={certFilterFrom}
+              onChange={(e) => setCertFilterFrom(e.target.value)}
+              title="Concluído a partir de"
+            />
+            <input
+              type="date"
+              className="rounded-lg border border-navy-light px-3 py-2 text-sm"
+              value={certFilterTo}
+              onChange={(e) => setCertFilterTo(e.target.value)}
+              title="Concluído até"
+            />
+          </div>
+
+          <div className="mt-4 max-h-96 overflow-y-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-xs uppercase text-ink-soft">
+                  <th className="pb-2">Aluno</th>
+                  <th className="pb-2">Curso</th>
+                  <th className="pb-2">Código</th>
+                  <th className="pb-2">Concluído em</th>
+                  <th className="pb-2">Emitido em</th>
+                  <th className="pb-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredCertificates.map((c) => (
+                  <tr key={c.id} className="border-t border-navy-light/60">
+                    <td className="py-2 font-medium text-ink">{c.student_name}</td>
+                    <td className="py-2 text-ink-soft">{c.track_title}</td>
+                    <td className="py-2 font-mono text-xs text-ink-soft">{c.code}</td>
+                    <td className="py-2 text-ink-soft">
+                      {c.completed_at ? new Date(c.completed_at).toLocaleDateString('pt-BR') : '—'}
+                    </td>
+                    <td className="py-2 text-ink-soft">{new Date(c.issued_at).toLocaleDateString('pt-BR')}</td>
+                    <td className="py-2 text-right">
+                      <a
+                        href={`/validar-certificado?codigo=${c.code}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-semibold text-navy hover:underline"
+                      >
+                        Ver certificado
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+                {filteredCertificates.length === 0 && (
+                  <tr><td colSpan={6} className="py-3 text-ink-soft">Nenhum certificado encontrado com esses filtros.</td></tr>
                 )}
               </tbody>
             </table>

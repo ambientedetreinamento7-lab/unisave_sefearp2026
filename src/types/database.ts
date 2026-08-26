@@ -78,8 +78,7 @@ export interface Track {
   certificate_enabled: boolean
   cover_url: string | null
   thumbnail_url: string | null
-  certificate_background_url: string | null
-  certificate_message: string | null
+  certificate_template_id: string | null
   published: boolean
   is_catalog: boolean
   sequential: boolean
@@ -100,6 +99,14 @@ export interface ScormLibraryItem {
   name: string
   package_url: string
   manifest_path: string
+  created_at: string
+}
+
+export interface CertificateTemplate {
+  id: string
+  name: string
+  background_url: string | null
+  message: string | null
   created_at: string
 }
 

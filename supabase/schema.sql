@@ -82,10 +82,10 @@ create table tracks (
   -- Recommended: cover 1326x495px, thumbnail 895x495px (spec: capa/miniatura).
   cover_url text,
   thumbnail_url text,
-  -- Certificate template (spec: página de criação de certificados).
-  -- Recommended background size: 1400x895px.
-  certificate_background_url text,
-  certificate_message text,
+  -- Qual modelo da Biblioteca de Certificados este curso usa (spec:
+  -- biblioteca de certificados — criar uma vez, selecionar por curso).
+  -- Nulo mesmo com certificate_enabled=true = ainda não escolheu um modelo.
+  certificate_template_id uuid references certificate_templates(id) on delete set null,
   -- Unpublished tracks are hidden from every student-facing view (spec:
   -- publicar/despublicar cursos) but stay editable in the admin panel.
   published boolean not null default true,
@@ -131,6 +131,19 @@ create table scorm_library (
   name text not null,
   package_url text not null,
   manifest_path text not null default 'index.html',
+  created_at timestamptz not null default now()
+);
+
+-- Biblioteca de Certificados (mesmo padrão de scorm_library acima): o
+-- admin cria um modelo de certificado (fundo + texto com variáveis) uma
+-- vez só, aqui, e cada curso só referencia qual modelo usar via
+-- tracks.certificate_template_id — em vez de recriar o design por curso.
+-- Recommended background size: 1400x895px.
+create table certificate_templates (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  background_url text,
+  message text,
   created_at timestamptz not null default now()
 );
 

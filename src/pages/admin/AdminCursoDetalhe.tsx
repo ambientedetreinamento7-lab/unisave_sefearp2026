@@ -5,7 +5,7 @@ import { useConfirm } from '../../components/ConfirmDialog'
 import { getReactionSurveys, linkPillToTrack, unlinkPillFromTrack } from '../../lib/api'
 import { formatCargaHoraria } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
-import type { Category, ContentType, DiagnosticProfile, Pill, Program, ReactionSurvey, ScormLibraryItem, Track, TrackPill } from '../../types/database'
+import type { Category, CertificateTemplate, ContentType, DiagnosticProfile, Pill, Program, ReactionSurvey, ScormLibraryItem, Track, TrackPill } from '../../types/database'
 
 async function uploadCover(file: File, folder: string): Promise<string> {
   const path = `${folder}/${crypto.randomUUID()}-${file.name}`
@@ -60,6 +60,8 @@ export function AdminCursoDetalhe() {
   const [preRequisitos, setPreRequisitos] = useState('')
   const [cargaHoraria, setCargaHoraria] = useState('')
   const [certificateEnabled, setCertificateEnabled] = useState(false)
+  const [certificateTemplateId, setCertificateTemplateId] = useState('')
+  const [certificateTemplates, setCertificateTemplates] = useState<CertificateTemplate[]>([])
   const [sequential, setSequential] = useState(false)
   const [published, setPublished] = useState(true)
   const [isCatalog, setIsCatalog] = useState(false)
@@ -87,13 +89,15 @@ export function AdminCursoDetalhe() {
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const [{ data: prog }, { data: cat }] = await Promise.all([
+      const [{ data: prog }, { data: cat }, { data: certs }] = await Promise.all([
         supabase.from('programs').select('*'),
         supabase.from('categories').select('*').order('order_index'),
+        supabase.from('certificate_templates').select('*').order('name'),
       ])
       if (cancelled) return
       setPrograms((prog as Program[]) ?? [])
       setCategories((cat as Category[]) ?? [])
+      setCertificateTemplates((certs as CertificateTemplate[]) ?? [])
       if (!isNew && id) {
         const { data: t } = await supabase.from('tracks').select('*').eq('id', id).single()
         if (cancelled) return
@@ -107,6 +111,7 @@ export function AdminCursoDetalhe() {
           setPreRequisitos(row.pre_requisitos ?? '')
           setCargaHoraria(row.carga_horaria_total?.toString() ?? '')
           setCertificateEnabled(row.certificate_enabled)
+          setCertificateTemplateId(row.certificate_template_id ?? '')
           setSequential(row.sequential)
           setPublished(row.published)
           setIsCatalog(row.is_catalog)
@@ -144,6 +149,7 @@ export function AdminCursoDetalhe() {
         pre_requisitos: preRequisitos || null,
         carga_horaria_total: cargaHoraria ? Number(cargaHoraria) : null,
         certificate_enabled: certificateEnabled,
+        certificate_template_id: certificateTemplateId || null,
         sequential,
         published,
         is_catalog: isCatalog,
@@ -327,6 +333,25 @@ export function AdminCursoDetalhe() {
             <input type="checkbox" checked={certificateEnabled} onChange={(e) => setCertificateEnabled(e.target.checked)} />
             Emite certificado ao concluir 100% das pílulas do curso
           </label>
+
+          {certificateEnabled && (
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft">Selecione o certificado</label>
+              <select
+                className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3"
+                value={certificateTemplateId}
+                onChange={(e) => setCertificateTemplateId(e.target.value)}
+              >
+                <option value="">Selecione um certificado…</option>
+                {certificateTemplates.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <Link to="/admin/certificados" className="mt-1 inline-block text-xs font-semibold text-navy hover:underline">
+                + Criar/editar certificados
+              </Link>
+            </div>
+          )}
 
           <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
             <input type="checkbox" checked={sequential} onChange={(e) => setSequential(e.target.checked)} />

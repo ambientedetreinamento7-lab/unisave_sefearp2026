@@ -6,10 +6,12 @@ import { applyCertificateVariables } from '../../lib/certificate'
 import { awardPoints } from '../../lib/gamification'
 import { formatCargaHoraria } from '../../lib/format'
 import { getAllTracks, getOrCreateCertificate, getTrackWithPills, getUserProgressMap, trackProgressPct } from '../../lib/api'
-import type { Pill, Track } from '../../types/database'
+import { supabase } from '../../lib/supabase'
+import type { CertificateTemplate, Pill, Track } from '../../types/database'
 
 interface CertificateEntry {
   track: Track
+  template: CertificateTemplate | null
   pills: Pill[]
   pct: number
   completedAt: string | null
@@ -26,7 +28,12 @@ export function Certificados() {
     if (!profile) return
     let cancelled = false
     async function load() {
-      const [tracks, progressMap] = await Promise.all([getAllTracks(), getUserProgressMap(profile!.id)])
+      const [tracks, progressMap, { data: templatesData }] = await Promise.all([
+        getAllTracks(),
+        getUserProgressMap(profile!.id),
+        supabase.from('certificate_templates').select('*'),
+      ])
+      const templates = (templatesData as CertificateTemplate[]) ?? []
       const eligible = tracks.filter((t) => t.certificate_enabled)
       const withPills = await Promise.all(eligible.map((t) => getTrackWithPills(t.id)))
       if (cancelled) return
@@ -38,8 +45,10 @@ export function Certificados() {
         const completedAt = completedDates.length
           ? completedDates.sort().at(-1)!
           : null
+        const resolvedTrack = track ?? eligible[i]
         return {
-          track: track ?? eligible[i],
+          track: resolvedTrack,
+          template: templates.find((t) => t.id === resolvedTrack.certificate_template_id) ?? null,
           pills,
           pct: trackProgressPct(pills, progressMap),
           completedAt,
@@ -101,12 +110,12 @@ export function Certificados() {
               <div
                 className="flex aspect-[1400/895] w-full items-center justify-center bg-cover bg-center p-4"
                 style={
-                  entry.track.certificate_background_url
-                    ? { backgroundImage: `url(${entry.track.certificate_background_url})` }
+                  entry.template?.background_url
+                    ? { backgroundImage: `url(${entry.template.background_url})` }
                     : { background: 'linear-gradient(135deg,#1A3B6E,#373896)' }
                 }
               >
-                {!entry.track.certificate_background_url && <span className="text-3xl">🏆</span>}
+                {!entry.template?.background_url && <span className="text-3xl">🏆</span>}
               </div>
               <div className="p-4">
                 <p className="text-[11px] font-bold uppercase tracking-wide text-success">Concluído</p>
@@ -163,7 +172,7 @@ function CertificateModal({
   const [shareError, setShareError] = useState('')
 
   const html = applyCertificateVariables(
-    entry.track.certificate_message || 'Certificamos que {NOME_COMPLETO} concluiu o curso {NOME_DO_CURSO}.',
+    entry.template?.message || 'Certificamos que {NOME_COMPLETO} concluiu o curso {NOME_DO_CURSO}.',
     {
       nomeCompleto: studentName,
       nomeDoCurso: entry.track.title,
@@ -176,7 +185,11 @@ function CertificateModal({
 
   async function renderImage(): Promise<Blob | null> {
     if (!certRef.current) return null
-    const dataUrl = await toPng(certRef.current, { pixelRatio: 2 })
+    // pixelRatio alto o bastante pra bater com o tamanho recomendado do
+    // fundo (1400×895px) — o preview na tela é bem menor que isso (limitado
+    // pelo modal), então um pixelRatio baixo gerava uma imagem borrada
+    // tanto pra baixar quanto pra compartilhar.
+    const dataUrl = await toPng(certRef.current, { pixelRatio: 3, backgroundColor: '#ffffff' })
     const res = await fetch(dataUrl)
     return res.blob()
   }
@@ -231,21 +244,26 @@ function CertificateModal({
           </button>
         </div>
 
-        <div
-          ref={certRef}
-          className="relative mt-4 flex aspect-[1400/895] w-full items-center justify-center overflow-hidden rounded-xl border border-navy-light bg-cover bg-center p-8 text-center"
-          style={
-            entry.track.certificate_background_url
-              ? { backgroundImage: `url(${entry.track.certificate_background_url})`, backgroundColor: '#fff' }
-              : { background: 'linear-gradient(135deg,#1A3B6E,#373896)', color: '#fff' }
-          }
-        >
-          <div className="max-w-lg text-sm font-medium" dangerouslySetInnerHTML={{ __html: html }} />
-          {entry.code && (
-            <p className="absolute bottom-3 right-4 text-[10px] font-semibold uppercase tracking-wide opacity-70">
-              Código de verificação: {entry.code}
-            </p>
-          )}
+        {/* Moldura só pra tela — não faz parte do que é capturado, senão a
+            imagem baixada/compartilhada saía com borda arredondada de UI,
+            como print de tela em vez de um certificado de verdade. */}
+        <div className="mt-4 overflow-hidden rounded-xl border border-navy-light shadow-sm">
+          <div
+            ref={certRef}
+            className="relative flex aspect-[1400/895] w-full items-center justify-center bg-cover bg-center p-10 text-center"
+            style={
+              entry.template?.background_url
+                ? { backgroundImage: `url(${entry.template.background_url})`, backgroundColor: '#fff' }
+                : { background: 'linear-gradient(135deg,#1A3B6E,#373896)', color: '#fff' }
+            }
+          >
+            <div className="max-w-lg text-base font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
+            {entry.code && (
+              <p className="absolute bottom-3 right-4 text-[10px] font-semibold uppercase tracking-wide opacity-70">
+                Código de verificação: {entry.code}
+              </p>
+            )}
+          </div>
         </div>
 
         {entry.code && (

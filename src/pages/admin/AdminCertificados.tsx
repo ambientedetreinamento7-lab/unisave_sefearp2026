@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AdminLayout } from './AdminLayout'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { applyCertificateVariables } from '../../lib/certificate'
-import { getIssuedCertificates } from '../../lib/api'
 import { formatCargaHoraria } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
-import type { IssuedCertificate, Track } from '../../types/database'
+import type { CertificateTemplate } from '../../types/database'
 
 const VARIABLES = [
   { token: '{NOME_COMPLETO}', label: 'Nome completo' },
@@ -21,11 +21,11 @@ const FONT_SIZES = [
   { value: '7', label: 'Título' },
 ]
 
-function previewVariables(html: string, track: Track) {
+function previewVariables(html: string) {
   return applyCertificateVariables(html, {
     nomeCompleto: 'Nome do Aluno',
-    nomeDoCurso: track.title,
-    cargaHorariaCurso: formatCargaHoraria(track.carga_horaria_total),
+    nomeDoCurso: 'Nome do Curso',
+    cargaHorariaCurso: formatCargaHoraria(40),
     dataConclusao: new Date().toLocaleDateString('pt-BR'),
   })
 }
@@ -134,18 +134,14 @@ function Divider() {
 }
 
 export function AdminCertificados() {
-  const [tracks, setTracks] = useState<Track[]>([])
-  const [issued, setIssued] = useState<IssuedCertificate[]>([])
+  const confirm = useConfirm()
+  const [templates, setTemplates] = useState<CertificateTemplate[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   async function reload() {
-    const [{ data }, issuedList] = await Promise.all([
-      supabase.from('tracks').select('*').order('title'),
-      getIssuedCertificates(),
-    ])
-    setTracks((data as Track[]) ?? [])
-    setIssued(issuedList)
+    const { data } = await supabase.from('certificate_templates').select('*').order('name')
+    setTemplates((data as CertificateTemplate[]) ?? [])
     setLoading(false)
   }
 
@@ -153,79 +149,80 @@ export function AdminCertificados() {
     reload()
   }, [])
 
+  async function createNew() {
+    const { data, error } = await supabase
+      .from('certificate_templates')
+      .insert({ name: 'Novo certificado' })
+      .select('*')
+      .single()
+    if (error) return
+    await reload()
+    setSelectedId(data.id)
+  }
+
+  async function deleteTemplate(id: string) {
+    if (
+      !(await confirm(
+        'Remover este certificado da biblioteca? Cursos que apontam para ele ficam sem certificado até você trocar.',
+        { danger: true, confirmLabel: 'Remover' },
+      ))
+    )
+      return
+    await supabase.from('certificate_templates').delete().eq('id', id)
+    if (selectedId === id) setSelectedId(null)
+    reload()
+  }
+
   if (loading) return <AdminLayout><p className="text-ink-soft">Carregando…</p></AdminLayout>
 
-  const selected = tracks.find((t) => t.id === selectedId) ?? null
+  const selected = templates.find((t) => t.id === selectedId) ?? null
 
   return (
     <AdminLayout>
-      <details className="card mb-4 p-4">
-        <summary className="cursor-pointer font-bold text-ink">
-          Certificados emitidos <span className="font-normal text-ink-soft">({issued.length})</span>
-        </summary>
-        <p className="mt-1 text-sm text-ink-soft">
-          Cada certificado tem um código único; o aluno ou terceiros podem conferir a autenticidade em{' '}
-          <code>/validar-certificado</code>, sem precisar de login.
-        </p>
-        <div className="mt-3 max-h-80 overflow-y-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="text-xs uppercase text-ink-soft">
-                <th className="pb-2">Aluno</th>
-                <th className="pb-2">Curso</th>
-                <th className="pb-2">Código</th>
-                <th className="pb-2">Emitido em</th>
-                <th className="pb-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {issued.map((c) => (
-                <tr key={c.id} className="border-t border-navy-light/60">
-                  <td className="py-2 font-medium text-ink">{c.student_name}</td>
-                  <td className="py-2 text-ink-soft">{c.track_title}</td>
-                  <td className="py-2 font-mono text-xs text-ink-soft">{c.code}</td>
-                  <td className="py-2 text-ink-soft">{new Date(c.issued_at).toLocaleDateString('pt-BR')}</td>
-                  <td className="py-2 text-right">
-                    <a
-                      href={`/validar-certificado?codigo=${c.code}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs font-semibold text-navy hover:underline"
-                    >
-                      Ver validação
-                    </a>
-                  </td>
-                </tr>
-              ))}
-              {issued.length === 0 && (
-                <tr><td colSpan={5} className="py-3 text-ink-soft">Nenhum certificado emitido ainda.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </details>
+      <p className="mb-4 text-sm text-ink-soft">
+        Crie um modelo de certificado aqui — com fundo e variáveis — e depois selecione qual usar em cada curso, em
+        "Editar curso". O mesmo modelo pode ser reaproveitado em vários cursos.
+      </p>
 
       <div className="grid gap-4 md:grid-cols-[280px_1fr]">
         <div className="card max-h-[70vh] overflow-y-auto p-3">
-          {tracks.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setSelectedId(t.id)}
-              className={`block w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
-                selectedId === t.id ? 'bg-navy text-white' : 'text-ink hover:bg-navy-light'
-              }`}
-            >
-              {t.title}
-            </button>
+          <button
+            onClick={createNew}
+            className="mb-2 block w-full rounded-lg bg-brand-red px-3 py-2 text-left text-sm font-bold text-white hover:bg-brand-red-dark"
+          >
+            + Novo certificado
+          </button>
+          {templates.map((t) => (
+            <div key={t.id} className="group flex items-center gap-1">
+              <button
+                onClick={() => setSelectedId(t.id)}
+                className={`block flex-1 truncate rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
+                  selectedId === t.id ? 'bg-navy text-white' : 'text-ink hover:bg-navy-light'
+                }`}
+              >
+                {t.name}
+              </button>
+              <button
+                onClick={() => deleteTemplate(t.id)}
+                title="Excluir"
+                className={`shrink-0 px-1.5 text-xs font-semibold hover:underline ${
+                  selectedId === t.id ? 'text-white/80' : 'text-brand-red'
+                }`}
+              >
+                ✕
+              </button>
+            </div>
           ))}
-          {tracks.length === 0 && <p className="p-3 text-sm text-ink-soft">Nenhum curso cadastrado ainda.</p>}
+          {templates.length === 0 && <p className="p-3 text-sm text-ink-soft">Nenhum certificado cadastrado ainda.</p>}
         </div>
 
         <div>
           {selected ? (
-            <CertificateEditor key={selected.id} track={selected} onSaved={reload} />
+            <CertificateEditor key={selected.id} template={selected} onSaved={reload} />
           ) : (
-            <div className="card p-8 text-center text-ink-soft">Selecione um curso à esquerda para configurar o certificado dele.</div>
+            <div className="card p-8 text-center text-ink-soft">
+              Selecione um certificado à esquerda, ou crie um novo, pra editar o modelo.
+            </div>
           )}
         </div>
       </div>
@@ -233,10 +230,10 @@ export function AdminCertificados() {
   )
 }
 
-function CertificateEditor({ track, onSaved }: { track: Track; onSaved: () => void }) {
-  const [enabled, setEnabled] = useState(track.certificate_enabled)
-  const [message, setMessage] = useState(track.certificate_message ?? '')
-  const [backgroundUrl, setBackgroundUrl] = useState(track.certificate_background_url)
+function CertificateEditor({ template, onSaved }: { template: CertificateTemplate; onSaved: () => void }) {
+  const [name, setName] = useState(template.name)
+  const [message, setMessage] = useState(template.message ?? '')
+  const [backgroundUrl, setBackgroundUrl] = useState(template.background_url)
   const [backgroundFile, setBackgroundFile] = useState<File | null>(null)
   const [preview, setPreview] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -248,7 +245,7 @@ function CertificateEditor({ track, onSaved }: { track: Track; onSaved: () => vo
     let finalBackgroundUrl = backgroundUrl
 
     if (backgroundFile) {
-      const path = `certificates/${track.id}-${Date.now()}-${backgroundFile.name}`
+      const path = `certificates/${template.id}-${Date.now()}-${backgroundFile.name}`
       const { error: uploadError } = await supabase.storage.from('covers').upload(path, backgroundFile, {
         upsert: true,
         contentType: backgroundFile.type || 'image/png',
@@ -263,13 +260,13 @@ function CertificateEditor({ track, onSaved }: { track: Track; onSaved: () => vo
     }
 
     const { error: saveError } = await supabase
-      .from('tracks')
+      .from('certificate_templates')
       .update({
-        certificate_enabled: enabled,
-        certificate_message: message || null,
-        certificate_background_url: finalBackgroundUrl,
+        name,
+        message: message || null,
+        background_url: finalBackgroundUrl,
       })
-      .eq('id', track.id)
+      .eq('id', template.id)
     if (saveError) {
       setError(saveError.message)
       setSaving(false)
@@ -283,14 +280,13 @@ function CertificateEditor({ track, onSaved }: { track: Track; onSaved: () => vo
   return (
     <div className="card space-y-4 p-6">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Curso</p>
-        <h3 className="text-lg font-bold text-ink">{track.title}</h3>
+        <label className="block text-xs font-semibold text-ink-soft">Nome do certificado</label>
+        <input
+          className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5 text-sm font-bold"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
       </div>
-
-      <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
-        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-        Publicado (emite certificado ao concluir 100% do curso)
-      </label>
 
       <div>
         <label className="block text-xs font-semibold text-ink-soft">Imagem de fundo do certificado</label>
@@ -314,7 +310,8 @@ function CertificateEditor({ track, onSaved }: { track: Track; onSaved: () => vo
         <p className="mt-1 text-xs text-ink-soft">
           Formate o texto com a barra de ferramentas (negrito, cor, alinhamento…) e use "+ Inserir variável" para{' '}
           <code>{'{NOME_COMPLETO}'}</code>, <code>{'{NOME_DO_CURSO}'}</code>, <code>{'{CARGA_HORARIA_CURSO}'}</code> e{' '}
-          <code>{'{DATA_CONCLUSAO}'}</code>.
+          <code>{'{DATA_CONCLUSAO}'}</code>. As variáveis são preenchidas com os dados de cada curso e aluno na hora
+          da emissão — o mesmo modelo funciona em qualquer curso que o usar.
         </p>
       </div>
 
@@ -325,13 +322,13 @@ function CertificateEditor({ track, onSaved }: { track: Track; onSaved: () => vo
 
       {preview && (
         <div
-          className="relative flex aspect-[1400/895] w-full items-center justify-center overflow-hidden rounded-xl border border-navy-light bg-cover bg-center p-6 text-center"
+          className="relative flex aspect-[1400/895] w-full items-center justify-center bg-cover bg-center p-6 text-center"
           style={backgroundUrl ? { backgroundImage: `url(${backgroundUrl})` } : undefined}
         >
           <div
-            className="max-w-lg text-sm font-medium text-ink"
+            className="max-w-lg text-base font-medium leading-relaxed text-ink"
             dangerouslySetInnerHTML={{
-              __html: previewVariables(message || 'Certificamos que {NOME_COMPLETO} concluiu o curso {NOME_DO_CURSO}.', track),
+              __html: previewVariables(message || 'Certificamos que {NOME_COMPLETO} concluiu o curso {NOME_DO_CURSO}.'),
             }}
           />
         </div>
@@ -341,7 +338,7 @@ function CertificateEditor({ track, onSaved }: { track: Track; onSaved: () => vo
 
       <button
         onClick={save}
-        disabled={saving}
+        disabled={saving || !name.trim()}
         className="rounded-xl bg-brand-red px-5 py-2.5 font-bold text-white hover:bg-brand-red-dark disabled:opacity-60"
       >
         {saving ? 'Salvando…' : 'Salvar'}
