@@ -1,4 +1,4 @@
-import { toPng } from 'html-to-image'
+import { toJpeg } from 'html-to-image'
 import { jsPDF } from 'jspdf'
 import { useEffect, useRef, useState } from 'react'
 import { AppHeader } from '../../components/AppHeader'
@@ -158,6 +158,44 @@ export function Certificados() {
   )
 }
 
+function CertificateFace({
+  template,
+  html,
+  code,
+}: {
+  template: CertificateTemplate | null
+  html: string
+  code: string | null
+}) {
+  return (
+    <div
+      className="relative flex aspect-[1400/895] w-full items-center justify-center bg-cover bg-center p-10 text-center"
+      style={
+        template?.background_url
+          ? { backgroundImage: `url(${template.background_url})`, backgroundColor: '#fff' }
+          : { background: 'linear-gradient(135deg,#1A3B6E,#373896)', color: '#fff' }
+      }
+    >
+      <div className="max-w-lg text-base font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
+      {code && (
+        <p className="absolute bottom-3 right-4 text-[10px] font-semibold uppercase tracking-wide opacity-70">
+          Código de verificação: {code}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function SyllabusBlock({ trackTitle, html }: { trackTitle: string; html: string }) {
+  return (
+    <div className="bg-white p-16 text-ink">
+      <p className="text-xs font-bold uppercase tracking-wide text-navy">Conteúdo Programático</p>
+      <h2 className="mt-1 text-2xl font-extrabold text-ink">{trackTitle}</h2>
+      <div className="mt-6 text-base leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
+    </div>
+  )
+}
+
 function CertificateModal({
   entry,
   studentName,
@@ -170,8 +208,11 @@ function CertificateModal({
   const verifyUrl = entry.code ? `${window.location.origin}/validar-certificado?codigo=${entry.code}` : null
   const certRef = useRef<HTMLDivElement>(null)
   const syllabusRef = useRef<HTMLDivElement>(null)
+  const combinedRef = useRef<HTMLDivElement>(null)
   const [downloading, setDownloading] = useState(false)
   const [shareError, setShareError] = useState('')
+
+  const samePage = entry.track.certificate_syllabus_same_page && !!entry.track.conteudo_programatico
 
   const html = applyCertificateVariables(
     entry.template?.message || 'Certificamos que {NOME_COMPLETO} concluiu o curso {NOME_DO_CURSO}.',
@@ -186,7 +227,7 @@ function CertificateModal({
   )
 
   // Carrega a imagem numa <img> só pra ler as dimensões reais em pixel do
-  // PNG gerado (toPng não devolve isso) — o jsPDF usa esse tamanho exato
+  // JPEG gerado (toJpeg não devolve isso) — o jsPDF usa esse tamanho exato
   // como tamanho da página (unit: 'px'), sem precisar converter pra mm.
   function loadImageSize(dataUrl: string): Promise<{ width: number; height: number }> {
     return new Promise((resolve, reject) => {
@@ -197,27 +238,44 @@ function CertificateModal({
     })
   }
 
+  // JPEG em vez de PNG: pro tipo de conteúdo aqui (fundo + texto, não
+  // wireframe/ícones) o PNG (sem perdas) gerava um PDF bem mais pesado do
+  // que precisa — JPEG com qualidade alta fica visualmente igual e reduz
+  // bastante o tamanho do arquivo final.
+  async function capture(node: HTMLElement) {
+    const dataUrl = await toJpeg(node, { pixelRatio: 3, backgroundColor: '#ffffff', quality: 0.92 })
+    const size = await loadImageSize(dataUrl)
+    return { dataUrl, size }
+  }
+
   async function renderPdfBlob(): Promise<Blob | null> {
     if (!certRef.current) return null
-    // pixelRatio alto o bastante pra bater com o tamanho recomendado do
-    // fundo (1400×895px) — o preview na tela é bem menor que isso (limitado
-    // pelo modal), então um pixelRatio baixo gerava uma imagem borrada
-    // tanto pra baixar quanto pra compartilhar.
-    const certDataUrl = await toPng(certRef.current, { pixelRatio: 3, backgroundColor: '#ffffff' })
-    const certSize = await loadImageSize(certDataUrl)
 
+    if (samePage && combinedRef.current) {
+      const combined = await capture(combinedRef.current)
+      const pdf = new jsPDF({
+        unit: 'px',
+        format: [combined.size.width, combined.size.height],
+        orientation: combined.size.width >= combined.size.height ? 'landscape' : 'portrait',
+        compress: true,
+      })
+      pdf.addImage(combined.dataUrl, 'JPEG', 0, 0, combined.size.width, combined.size.height)
+      return pdf.output('blob')
+    }
+
+    const cert = await capture(certRef.current)
     const pdf = new jsPDF({
       unit: 'px',
-      format: [certSize.width, certSize.height],
-      orientation: certSize.width >= certSize.height ? 'landscape' : 'portrait',
+      format: [cert.size.width, cert.size.height],
+      orientation: cert.size.width >= cert.size.height ? 'landscape' : 'portrait',
+      compress: true,
     })
-    pdf.addImage(certDataUrl, 'PNG', 0, 0, certSize.width, certSize.height)
+    pdf.addImage(cert.dataUrl, 'JPEG', 0, 0, cert.size.width, cert.size.height)
 
     if (entry.track.conteudo_programatico && syllabusRef.current) {
-      const syllabusDataUrl = await toPng(syllabusRef.current, { pixelRatio: 2, backgroundColor: '#ffffff' })
-      const syllabusSize = await loadImageSize(syllabusDataUrl)
-      pdf.addPage([syllabusSize.width, syllabusSize.height], syllabusSize.width >= syllabusSize.height ? 'landscape' : 'portrait')
-      pdf.addImage(syllabusDataUrl, 'PNG', 0, 0, syllabusSize.width, syllabusSize.height)
+      const syllabus = await capture(syllabusRef.current)
+      pdf.addPage([syllabus.size.width, syllabus.size.height], syllabus.size.width >= syllabus.size.height ? 'landscape' : 'portrait')
+      pdf.addImage(syllabus.dataUrl, 'JPEG', 0, 0, syllabus.size.width, syllabus.size.height)
     }
 
     return pdf.output('blob')
@@ -277,21 +335,8 @@ function CertificateModal({
             imagem baixada/compartilhada saía com borda arredondada de UI,
             como print de tela em vez de um certificado de verdade. */}
         <div className="mt-4 overflow-hidden rounded-xl border border-navy-light shadow-sm">
-          <div
-            ref={certRef}
-            className="relative flex aspect-[1400/895] w-full items-center justify-center bg-cover bg-center p-10 text-center"
-            style={
-              entry.template?.background_url
-                ? { backgroundImage: `url(${entry.template.background_url})`, backgroundColor: '#fff' }
-                : { background: 'linear-gradient(135deg,#1A3B6E,#373896)', color: '#fff' }
-            }
-          >
-            <div className="max-w-lg text-base font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
-            {entry.code && (
-              <p className="absolute bottom-3 right-4 text-[10px] font-semibold uppercase tracking-wide opacity-70">
-                Código de verificação: {entry.code}
-              </p>
-            )}
+          <div ref={certRef}>
+            <CertificateFace template={entry.template} html={html} code={entry.code} />
           </div>
         </div>
 
@@ -306,22 +351,28 @@ function CertificateModal({
 
         {entry.track.conteudo_programatico && (
           <p className="mt-2 text-xs text-ink-soft">
-            O PDF gerado inclui uma 2ª página com o conteúdo programático deste curso.
+            {samePage
+              ? 'O PDF gerado inclui o conteúdo programático deste curso logo abaixo do certificado, na mesma página.'
+              : 'O PDF gerado inclui uma 2ª página com o conteúdo programático deste curso.'}
           </p>
         )}
 
         {/* Fora da tela de propósito — só existe pro html-to-image conseguir
-            capturar a 2ª página do PDF (o conteúdo programático), sem
-            aparecer na pré-visualização do certificado em si. */}
-        {entry.track.conteudo_programatico && (
+            capturar o conteúdo programático (junto ou separado do
+            certificado, conforme configurado no curso), sem aparecer na
+            pré-visualização acima. */}
+        {entry.track.conteudo_programatico && !samePage && (
           <div className="fixed left-[-9999px] top-0" aria-hidden="true">
-            <div ref={syllabusRef} className="w-[1000px] bg-white p-16 text-ink">
-              <p className="text-xs font-bold uppercase tracking-wide text-navy">Conteúdo Programático</p>
-              <h2 className="mt-1 text-2xl font-extrabold text-ink">{entry.track.title}</h2>
-              <div
-                className="mt-6 text-base leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: entry.track.conteudo_programatico }}
-              />
+            <div ref={syllabusRef} className="w-[1000px]">
+              <SyllabusBlock trackTitle={entry.track.title} html={entry.track.conteudo_programatico} />
+            </div>
+          </div>
+        )}
+        {entry.track.conteudo_programatico && samePage && (
+          <div className="fixed left-[-9999px] top-0" aria-hidden="true">
+            <div ref={combinedRef} className="w-[1400px]">
+              <CertificateFace template={entry.template} html={html} code={entry.code} />
+              <SyllabusBlock trackTitle={entry.track.title} html={entry.track.conteudo_programatico} />
             </div>
           </div>
         )}

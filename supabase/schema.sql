@@ -92,6 +92,10 @@ create table tracks (
   -- entre cursos, essa info específica do curso não pode mais viver
   -- nele; entra como uma 2ª página do PDF na hora de emitir.
   conteudo_programatico text,
+  -- false (padrão) = conteúdo programático vira uma 2ª página separada
+  -- do PDF do certificado; true = tudo numa página só, empilhado
+  -- abaixo do certificado.
+  certificate_syllabus_same_page boolean not null default false,
   -- Unpublished tracks are hidden from every student-facing view (spec:
   -- publicar/despublicar cursos) but stay editable in the admin panel.
   published boolean not null default true,

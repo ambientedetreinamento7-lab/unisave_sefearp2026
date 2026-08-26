@@ -80,6 +80,7 @@ export interface Track {
   thumbnail_url: string | null
   certificate_template_id: string | null
   conteudo_programatico: string | null
+  certificate_syllabus_same_page: boolean
   published: boolean
   is_catalog: boolean
   sequential: boolean

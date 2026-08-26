@@ -60,6 +60,7 @@ export function AdminCursoDetalhe() {
   const [publicoAlvo, setPublicoAlvo] = useState('')
   const [preRequisitos, setPreRequisitos] = useState('')
   const [conteudoProgramatico, setConteudoProgramatico] = useState('')
+  const [certificateSyllabusSamePage, setCertificateSyllabusSamePage] = useState(false)
   const [cargaHoraria, setCargaHoraria] = useState('')
   const [certificateEnabled, setCertificateEnabled] = useState(false)
   const [certificateTemplateId, setCertificateTemplateId] = useState('')
@@ -112,6 +113,7 @@ export function AdminCursoDetalhe() {
           setPublicoAlvo(row.publico_alvo ?? '')
           setPreRequisitos(row.pre_requisitos ?? '')
           setConteudoProgramatico(row.conteudo_programatico ?? '')
+          setCertificateSyllabusSamePage(row.certificate_syllabus_same_page)
           setCargaHoraria(row.carga_horaria_total?.toString() ?? '')
           setCertificateEnabled(row.certificate_enabled)
           setCertificateTemplateId(row.certificate_template_id ?? '')
@@ -151,6 +153,7 @@ export function AdminCursoDetalhe() {
         publico_alvo: publicoAlvo || null,
         pre_requisitos: preRequisitos || null,
         conteudo_programatico: conteudoProgramatico || null,
+        certificate_syllabus_same_page: certificateSyllabusSamePage,
         carga_horaria_total: cargaHoraria ? Number(cargaHoraria) : null,
         certificate_enabled: certificateEnabled,
         certificate_template_id: certificateTemplateId || null,
@@ -282,11 +285,33 @@ export function AdminCursoDetalhe() {
           <div>
             <label className="block text-xs font-semibold text-ink-soft">Conteúdo programático</label>
             <p className="mt-0.5 text-xs text-ink-soft">
-              Aparece como uma segunda página junto do certificado deste curso (opcional).
+              Incluído junto do certificado deste curso na hora de baixar/compartilhar (opcional).
             </p>
             <div className="mt-1">
               <RichTextEditor value={conteudoProgramatico} onChange={setConteudoProgramatico} />
             </div>
+            {conteudoProgramatico.trim() && (
+              <div className="mt-2 space-y-1.5">
+                <label className="flex items-center gap-2 text-sm text-ink">
+                  <input
+                    type="radio"
+                    name="syllabusPlacement"
+                    checked={!certificateSyllabusSamePage}
+                    onChange={() => setCertificateSyllabusSamePage(false)}
+                  />
+                  Página separada do certificado (padrão)
+                </label>
+                <label className="flex items-center gap-2 text-sm text-ink">
+                  <input
+                    type="radio"
+                    name="syllabusPlacement"
+                    checked={certificateSyllabusSamePage}
+                    onChange={() => setCertificateSyllabusSamePage(true)}
+                  />
+                  Na mesma página, logo abaixo do certificado
+                </label>
+              </div>
+            )}
           </div>
 
           <label className="block text-xs font-semibold text-ink-soft">
