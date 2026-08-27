@@ -14,8 +14,8 @@ export function Termos() {
             <section>
               <h2 className="font-bold text-ink">1. Quem somos</h2>
               <p className="mt-1 text-ink-soft">
-                A plataforma UniSave | SEFEARP é operada por <strong className="text-ink">[RAZÃO SOCIAL]</strong>,
-                inscrita no CNPJ <strong className="text-ink">[CNPJ]</strong>. Ao criar uma conta ou usar a
+                A plataforma UniSave | SEFEARP é operada pela UniSave, Universidade Sagnago, pertecente ao Grupo Savegnago <strong className="text-ink">Savegnago-Supermercados Ltda</strong>,
+                inscrita no CNPJ <strong className="text-ink">71.322.150/0001-60</strong>. Ao criar uma conta ou usar a
                 plataforma, você concorda com estes Termos de Uso.
               </p>
             </section>
@@ -25,7 +25,7 @@ export function Termos() {
               <p className="mt-1 text-ink-soft">
                 A UniSave | SEFEARP é uma plataforma de treinamento e desenvolvimento profissional, com trilhas de
                 curso, quizzes de fixação, planos de desenvolvimento individual (PDI), certificados e uma comunidade
-                de discussão entre participantes.
+                de discussão entre participantes da IX SEFEA-RP - Semana empresarial da FEA-RP.A plataforma foi desenvolvida exclusivamente para o evento tendo como data de encerramento 180 dias após a data do seu último dia.
               </p>
             </section>
 
@@ -75,7 +75,7 @@ export function Termos() {
               <h2 className="font-bold text-ink">8. Contato</h2>
               <p className="mt-1 text-ink-soft">
                 Dúvidas sobre estes termos podem ser enviadas para{' '}
-                <strong className="text-ink">[E-MAIL DE CONTATO]</strong>.
+                <strong className="text-ink">unisave@savegnago.com.br</strong>.
               </p>
             </section>
           </div>
