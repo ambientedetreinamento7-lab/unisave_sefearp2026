@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { HeroBrandBar } from '../../components/HeroBrandBar'
+import { usePlatformSettings } from '../../context/PlatformSettingsContext'
 import { supabase } from '../../lib/supabase'
 
 export function Entrar() {
+  const { branding } = usePlatformSettings()
   const [mode, setMode] = useState<'magic' | 'senha'>('magic')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -41,8 +43,16 @@ export function Entrar() {
   }
 
   return (
-    <div className="hero-gradient flex min-h-screen items-center justify-center px-4 py-10">
-      <div className="w-full max-w-sm">
+    <div
+      className={`relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10 ${
+        branding.loginBackgroundImageUrl ? 'bg-cover bg-center' : 'hero-gradient'
+      }`}
+      style={branding.loginBackgroundImageUrl ? { backgroundImage: `url(${branding.loginBackgroundImageUrl})` } : undefined}
+    >
+      {branding.loginBackgroundImageUrl && (
+        <div className="hero-gradient absolute inset-0" style={{ opacity: branding.loginOverlayOpacity / 100 }} />
+      )}
+      <div className="relative z-10 w-full max-w-sm">
         <div className="mb-8 flex justify-center">
           <HeroBrandBar compact />
         </div>

@@ -40,6 +40,8 @@ const DEFAULT_BRANDING: BrandingSettings = {
   secondaryLogoUrl: null,
   primaryColor: null,
   accentColor: null,
+  loginBackgroundImageUrl: null,
+  loginOverlayOpacity: 70,
 }
 
 export async function getBrandingSettings(): Promise<BrandingSettings> {

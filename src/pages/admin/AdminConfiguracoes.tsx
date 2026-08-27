@@ -153,6 +153,8 @@ function BrandingSection() {
   const [settings, setSettings] = useState<BrandingSettings | null>(null)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [secondaryLogoFile, setSecondaryLogoFile] = useState<File | null>(null)
+  const [loginBgFile, setLoginBgFile] = useState<File | null>(null)
+  const [removeLoginBg, setRemoveLoginBg] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -166,11 +168,18 @@ function BrandingSection() {
     setSaved(false)
     const logoUrl = logoFile ? await uploadBrandingAsset(logoFile) : settings.logoUrl
     const secondaryLogoUrl = secondaryLogoFile ? await uploadBrandingAsset(secondaryLogoFile) : settings.secondaryLogoUrl
-    const next = { ...settings, logoUrl, secondaryLogoUrl }
+    const loginBackgroundImageUrl = loginBgFile
+      ? await uploadBrandingAsset(loginBgFile)
+      : removeLoginBg
+        ? null
+        : settings.loginBackgroundImageUrl
+    const next = { ...settings, logoUrl, secondaryLogoUrl, loginBackgroundImageUrl }
     await updateBrandingSettings(next)
     setSettings(next)
     setLogoFile(null)
     setSecondaryLogoFile(null)
+    setLoginBgFile(null)
+    setRemoveLoginBg(false)
     setSaving(false)
     setSaved(true)
   }
@@ -237,6 +246,51 @@ function BrandingSection() {
                 Restaurar cores padrão
               </button>
             )}
+          </div>
+
+          <div className="border-t border-navy-light pt-4">
+            <label className="block text-xs font-semibold text-ink-soft">Fundo da tela de login</label>
+            <p className="mt-0.5 text-xs text-ink-soft">
+              Sem imagem, a tela de login usa só o gradiente padrão. Com uma imagem, o gradiente vira uma camada de
+              cor por cima dela — ajuste a intensidade abaixo.
+            </p>
+            {settings.loginBackgroundImageUrl && !loginBgFile && !removeLoginBg && (
+              <div className="mt-2 flex items-center gap-2">
+                <img src={settings.loginBackgroundImageUrl} alt="" className="h-16 rounded-lg border border-navy-light object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setRemoveLoginBg(true)}
+                  className="text-xs font-semibold text-brand-red hover:underline"
+                >
+                  Remover
+                </button>
+              </div>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                setLoginBgFile(e.target.files?.[0] ?? null)
+                setRemoveLoginBg(false)
+              }}
+              className="mt-2 w-full text-sm"
+            />
+
+            {(settings.loginBackgroundImageUrl && !removeLoginBg) || loginBgFile ? (
+              <div className="mt-3">
+                <label className="block text-xs font-semibold text-ink-soft">
+                  Intensidade da cor sobre a imagem — {settings.loginOverlayOpacity}%
+                </label>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={settings.loginOverlayOpacity}
+                  onChange={(e) => setSettings({ ...settings, loginOverlayOpacity: Number(e.target.value) })}
+                  className="mt-1 w-full"
+                />
+              </div>
+            ) : null}
           </div>
         </div>
       )}

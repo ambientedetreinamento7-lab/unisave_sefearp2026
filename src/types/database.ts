@@ -173,6 +173,8 @@ export interface BrandingSettings {
   secondaryLogoUrl: string | null
   primaryColor: string | null
   accentColor: string | null
+  loginBackgroundImageUrl: string | null
+  loginOverlayOpacity: number
 }
 
 export interface SignupSettings {

@@ -17,7 +17,15 @@ interface PlatformSettingsValue {
 }
 
 const DEFAULTS: Omit<PlatformSettingsValue, 'loading'> = {
-  branding: { platformName: null, logoUrl: null, secondaryLogoUrl: null, primaryColor: null, accentColor: null },
+  branding: {
+    platformName: null,
+    logoUrl: null,
+    secondaryLogoUrl: null,
+    primaryColor: null,
+    accentColor: null,
+    loginBackgroundImageUrl: null,
+    loginOverlayOpacity: 70,
+  },
   legal: { termsUrl: null, privacyUrl: null, termsVersion: '1' },
   maintenance: { enabled: false, message: '' },
   session: { inactivityTimeoutMinutes: null },
