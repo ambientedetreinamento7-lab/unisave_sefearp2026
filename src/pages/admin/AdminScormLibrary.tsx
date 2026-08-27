@@ -34,7 +34,10 @@ export function AdminScormLibrary() {
   const [formItem, setFormItem] = useState<ScormLibraryItem | 'new' | null>(null)
 
   async function reload() {
-    const { data } = await supabase.from('scorm_library').select('*').order('name')
+    // Ordena por cadastro (não por nome) pra bater com o ID de exibição
+    // abaixo (SCO-001, SCO-002...), que é a posição na lista — não muda
+    // se o pacote for renomeado depois.
+    const { data } = await supabase.from('scorm_library').select('*').order('created_at')
     setItems((data as ScormLibraryItem[]) ?? [])
     setLoading(false)
   }
@@ -72,27 +75,44 @@ export function AdminScormLibrary() {
         </button>
       </div>
 
-      <div className="space-y-3">
-        {items.map((item) => (
-          <div key={item.id} className="card flex items-center justify-between gap-3 p-4">
-            <div>
-              <p className="font-semibold text-ink">{item.name}</p>
-              <p className="text-xs text-ink-soft">Arquivo de entrada: {item.manifest_path}</p>
-            </div>
-            <div className="flex shrink-0 gap-2">
-              <button
-                onClick={() => setFormItem(item)}
-                className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
-              >
-                Editar
-              </button>
-              <button onClick={() => deleteItem(item.id)} className="text-xs font-semibold text-brand-red hover:underline">
-                Excluir
-              </button>
-            </div>
-          </div>
-        ))}
-        {items.length === 0 && <p className="text-ink-soft">Nenhum pacote SCORM cadastrado ainda.</p>}
+      <div className="card overflow-x-auto p-0">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="text-xs uppercase text-ink-soft">
+              <th className="px-4 py-3">ID</th>
+              <th className="px-4 py-3">Nome</th>
+              <th className="px-4 py-3">Arquivo de entrada</th>
+              <th className="px-4 py-3 text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item, index) => (
+              <tr key={item.id} className="border-t border-navy-light/60">
+                <td className="px-4 py-3 font-mono text-xs text-ink-soft">
+                  SCO-{String(index + 1).padStart(3, '0')}
+                </td>
+                <td className="px-4 py-3 font-semibold text-ink">{item.name}</td>
+                <td className="px-4 py-3 text-ink-soft">{item.manifest_path}</td>
+                <td className="px-4 py-3">
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setFormItem(item)}
+                      className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
+                    >
+                      Editar
+                    </button>
+                    <button onClick={() => deleteItem(item.id)} className="text-xs font-semibold text-brand-red hover:underline">
+                      Excluir
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {items.length === 0 && (
+              <tr><td colSpan={4} className="px-4 py-3 text-ink-soft">Nenhum pacote SCORM cadastrado ainda.</td></tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
       {formItem && (
