@@ -76,6 +76,8 @@ export function AdminCursoDetalhe() {
   const [categoryId, setCategoryId] = useState('')
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
+  const [removeCover, setRemoveCover] = useState(false)
+  const [removeThumbnail, setRemoveThumbnail] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [savedNotice, setSavedNotice] = useState(false)
@@ -143,8 +145,12 @@ export function AdminCursoDetalhe() {
     setError('')
     setSavedNotice(false)
     try {
-      const coverUrl = coverFile ? await uploadCover(coverFile, 'tracks-cover') : track?.cover_url ?? null
-      const thumbnailUrl = thumbnailFile ? await uploadCover(thumbnailFile, 'tracks-thumbnail') : track?.thumbnail_url ?? null
+      const coverUrl = coverFile ? await uploadCover(coverFile, 'tracks-cover') : removeCover ? null : track?.cover_url ?? null
+      const thumbnailUrl = thumbnailFile
+        ? await uploadCover(thumbnailFile, 'tracks-thumbnail')
+        : removeThumbnail
+          ? null
+          : track?.thumbnail_url ?? null
 
       const payload = {
         title,
@@ -359,13 +365,51 @@ export function AdminCursoDetalhe() {
 
           <div>
             <label className="block text-xs font-semibold text-ink-soft">Capa (recomendado: 1326×495px)</label>
-            {track?.cover_url && !coverFile && <img src={track.cover_url} alt="" className="mt-1 h-16 rounded-lg border border-navy-light" />}
-            <input type="file" accept="image/*" onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)} className="mt-1 w-full text-sm" />
+            {track?.cover_url && !coverFile && !removeCover && (
+              <div className="mt-1 flex items-center gap-2">
+                <img src={track.cover_url} alt="" className="h-16 rounded-lg border border-navy-light" />
+                <button
+                  type="button"
+                  onClick={() => setRemoveCover(true)}
+                  className="text-xs font-semibold text-brand-red hover:underline"
+                >
+                  Remover
+                </button>
+              </div>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                setCoverFile(e.target.files?.[0] ?? null)
+                setRemoveCover(false)
+              }}
+              className="mt-1 w-full text-sm"
+            />
           </div>
           <div>
             <label className="block text-xs font-semibold text-ink-soft">Miniatura (recomendado: 895×495px)</label>
-            {track?.thumbnail_url && !thumbnailFile && <img src={track.thumbnail_url} alt="" className="mt-1 h-16 rounded-lg border border-navy-light" />}
-            <input type="file" accept="image/*" onChange={(e) => setThumbnailFile(e.target.files?.[0] ?? null)} className="mt-1 w-full text-sm" />
+            {track?.thumbnail_url && !thumbnailFile && !removeThumbnail && (
+              <div className="mt-1 flex items-center gap-2">
+                <img src={track.thumbnail_url} alt="" className="h-16 rounded-lg border border-navy-light" />
+                <button
+                  type="button"
+                  onClick={() => setRemoveThumbnail(true)}
+                  className="text-xs font-semibold text-brand-red hover:underline"
+                >
+                  Remover
+                </button>
+              </div>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                setThumbnailFile(e.target.files?.[0] ?? null)
+                setRemoveThumbnail(false)
+              }}
+              className="mt-1 w-full text-sm"
+            />
           </div>
 
           <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
@@ -536,6 +580,8 @@ function PillFormModal({
   const [reactionSurveys, setReactionSurveys] = useState<ReactionSurvey[]>([])
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
+  const [removeCover, setRemoveCover] = useState(false)
+  const [removeThumbnail, setRemoveThumbnail] = useState(false)
   const [pointsOverride, setPointsOverride] = useState(pill?.points_override != null ? String(pill.points_override) : '')
   const [categoryId, setCategoryId] = useState(pill?.category_id ?? '')
   const [required, setRequired] = useState(pill?.required ?? false)
@@ -561,8 +607,12 @@ function PillFormModal({
     setSaving(true)
     setError('')
     try {
-      const coverUrl = coverFile ? await uploadCover(coverFile, 'pills-cover') : pill?.cover_url ?? null
-      const thumbnailUrl = thumbnailFile ? await uploadCover(thumbnailFile, 'pills-thumbnail') : pill?.thumbnail_url ?? null
+      const coverUrl = coverFile ? await uploadCover(coverFile, 'pills-cover') : removeCover ? null : pill?.cover_url ?? null
+      const thumbnailUrl = thumbnailFile
+        ? await uploadCover(thumbnailFile, 'pills-thumbnail')
+        : removeThumbnail
+          ? null
+          : pill?.thumbnail_url ?? null
 
       const payload = {
         track_id: trackId,
@@ -663,13 +713,51 @@ function PillFormModal({
 
         <div>
           <label className="block text-xs font-semibold text-ink-soft">Capa (recomendado: 1326×495px)</label>
-          {pill?.cover_url && !coverFile && <img src={pill.cover_url} alt="" className="mt-1 h-16 rounded-lg border border-navy-light" />}
-          <input type="file" accept="image/*" onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)} className="mt-1 w-full text-sm" />
+          {pill?.cover_url && !coverFile && !removeCover && (
+            <div className="mt-1 flex items-center gap-2">
+              <img src={pill.cover_url} alt="" className="h-16 rounded-lg border border-navy-light" />
+              <button
+                type="button"
+                onClick={() => setRemoveCover(true)}
+                className="text-xs font-semibold text-brand-red hover:underline"
+              >
+                Remover
+              </button>
+            </div>
+          )}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              setCoverFile(e.target.files?.[0] ?? null)
+              setRemoveCover(false)
+            }}
+            className="mt-1 w-full text-sm"
+          />
         </div>
         <div>
           <label className="block text-xs font-semibold text-ink-soft">Miniatura (recomendado: 895×495px)</label>
-          {pill?.thumbnail_url && !thumbnailFile && <img src={pill.thumbnail_url} alt="" className="mt-1 h-16 rounded-lg border border-navy-light" />}
-          <input type="file" accept="image/*" onChange={(e) => setThumbnailFile(e.target.files?.[0] ?? null)} className="mt-1 w-full text-sm" />
+          {pill?.thumbnail_url && !thumbnailFile && !removeThumbnail && (
+            <div className="mt-1 flex items-center gap-2">
+              <img src={pill.thumbnail_url} alt="" className="h-16 rounded-lg border border-navy-light" />
+              <button
+                type="button"
+                onClick={() => setRemoveThumbnail(true)}
+                className="text-xs font-semibold text-brand-red hover:underline"
+              >
+                Remover
+              </button>
+            </div>
+          )}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              setThumbnailFile(e.target.files?.[0] ?? null)
+              setRemoveThumbnail(false)
+            }}
+            className="mt-1 w-full text-sm"
+          />
         </div>
 
         <div>

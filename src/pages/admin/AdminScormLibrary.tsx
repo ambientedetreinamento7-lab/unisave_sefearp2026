@@ -27,11 +27,15 @@ function guessContentType(filename: string) {
   return CONTENT_TYPE_BY_EXT[ext] ?? 'application/octet-stream'
 }
 
+type SortField = 'name' | 'created_at' | 'updated_at'
+
 export function AdminScormLibrary() {
   const confirm = useConfirm()
   const [items, setItems] = useState<ScormLibraryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [formItem, setFormItem] = useState<ScormLibraryItem | 'new' | null>(null)
+  const [sortField, setSortField] = useState<SortField>('created_at')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   async function reload() {
     // Ordena por cadastro (não por nome) pra bater com o ID de exibição
@@ -58,7 +62,32 @@ export function AdminScormLibrary() {
     reload()
   }
 
+  function toggleSort(field: SortField) {
+    if (field === sortField) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortField(field)
+      setSortDir('asc')
+    }
+  }
+
   if (loading) return <AdminLayout><p className="text-ink-soft">Carregando…</p></AdminLayout>
+
+  // ID de exibição (SCO-001, SCO-002...) é fixo pela ordem de cadastro,
+  // independente de como a tabela está ordenada no momento — senão o
+  // número de cada pacote ficaria pulando de lugar toda vez que o admin
+  // clicasse pra ordenar por outra coluna.
+  const idByItemId = new Map(
+    [...items]
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
+      .map((item, index) => [item.id, `SCO-${String(index + 1).padStart(3, '0')}`]),
+  )
+
+  const sortedItems = [...items].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1
+    if (sortField === 'name') return a.name.localeCompare(b.name) * dir
+    return a[sortField].localeCompare(b[sortField]) * dir
+  })
 
   return (
     <AdminLayout>
@@ -80,19 +109,21 @@ export function AdminScormLibrary() {
           <thead>
             <tr className="text-xs uppercase text-ink-soft">
               <th className="px-4 py-3">ID</th>
-              <th className="px-4 py-3">Nome</th>
+              <SortableHeader label="Nome" field="name" sortField={sortField} sortDir={sortDir} onClick={toggleSort} />
               <th className="px-4 py-3">Arquivo de entrada</th>
+              <SortableHeader label="Criado em" field="created_at" sortField={sortField} sortDir={sortDir} onClick={toggleSort} />
+              <SortableHeader label="Modificado em" field="updated_at" sortField={sortField} sortDir={sortDir} onClick={toggleSort} />
               <th className="px-4 py-3 text-right">Ações</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((item, index) => (
+            {sortedItems.map((item) => (
               <tr key={item.id} className="border-t border-navy-light/60">
-                <td className="px-4 py-3 font-mono text-xs text-ink-soft">
-                  SCO-{String(index + 1).padStart(3, '0')}
-                </td>
+                <td className="px-4 py-3 font-mono text-xs text-ink-soft">{idByItemId.get(item.id)}</td>
                 <td className="px-4 py-3 font-semibold text-ink">{item.name}</td>
                 <td className="px-4 py-3 text-ink-soft">{item.manifest_path}</td>
+                <td className="px-4 py-3 text-ink-soft">{new Date(item.created_at).toLocaleString('pt-BR')}</td>
+                <td className="px-4 py-3 text-ink-soft">{new Date(item.updated_at).toLocaleString('pt-BR')}</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-2">
                     <button
@@ -109,7 +140,7 @@ export function AdminScormLibrary() {
               </tr>
             ))}
             {items.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-3 text-ink-soft">Nenhum pacote SCORM cadastrado ainda.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-3 text-ink-soft">Nenhum pacote SCORM cadastrado ainda.</td></tr>
             )}
           </tbody>
         </table>
@@ -119,6 +150,33 @@ export function AdminScormLibrary() {
         <ScormFormModal item={formItem === 'new' ? null : formItem} onClose={() => setFormItem(null)} onSaved={() => { setFormItem(null); reload() }} />
       )}
     </AdminLayout>
+  )
+}
+
+function SortableHeader({
+  label,
+  field,
+  sortField,
+  sortDir,
+  onClick,
+}: {
+  label: string
+  field: SortField
+  sortField: SortField
+  sortDir: 'asc' | 'desc'
+  onClick: (field: SortField) => void
+}) {
+  const active = field === sortField
+  return (
+    <th className="px-4 py-3">
+      <button
+        onClick={() => onClick(field)}
+        className={`flex items-center gap-1 font-semibold uppercase tracking-wide hover:text-navy ${active ? 'text-navy' : ''}`}
+      >
+        {label}
+        <span className="text-[10px]">{active ? (sortDir === 'asc' ? '▲' : '▼') : ''}</span>
+      </button>
+    </th>
   )
 }
 

@@ -141,8 +141,25 @@ create table scorm_library (
   name text not null,
   package_url text not null,
   manifest_path text not null default 'index.html',
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
+
+-- Genérica, reaproveitável em qualquer tabela que precise de
+-- updated_at automático (spec: data de criação/modificação na
+-- Biblioteca de SCORMs) — sem depender de cada save no client lembrar
+-- de setar o campo manualmente.
+create or replace function set_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+create trigger scorm_library_set_updated_at
+  before update on scorm_library
+  for each row execute function set_updated_at();
 
 -- Biblioteca de Certificados (mesmo padrão de scorm_library acima): o
 -- admin cria um modelo de certificado (fundo + texto com variáveis) uma
