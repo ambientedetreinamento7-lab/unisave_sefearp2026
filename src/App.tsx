@@ -31,7 +31,9 @@ import { Ranking } from './pages/aluno/Ranking'
 import { Moderador } from './pages/moderador/Moderador'
 import { Entrar } from './pages/public/Entrar'
 import { Estande } from './pages/public/Estande'
+import { Privacidade } from './pages/public/Privacidade'
 import { Resultado } from './pages/public/Resultado'
+import { Termos } from './pages/public/Termos'
 import { ValidarCertificado } from './pages/public/ValidarCertificado'
 
 function App() {
@@ -45,6 +47,8 @@ function App() {
         <Route path="/resultado" element={<Resultado />} />
         <Route path="/entrar" element={<Entrar />} />
         <Route path="/validar-certificado" element={<ValidarCertificado />} />
+        <Route path="/termos" element={<Termos />} />
+        <Route path="/privacidade" element={<Privacidade />} />
 
         <Route
           path="/dashboard"

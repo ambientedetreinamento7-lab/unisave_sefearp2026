@@ -538,8 +538,24 @@ function LegalSection() {
     >
       {settings && (
         <div className="mt-4 space-y-3">
+          <p className="rounded-xl bg-lavender p-3 text-xs text-lavender-ink">
+            Clique em "Usar página do app" para apontar cada link para um Termo de Uso e uma Política de Privacidade
+            já redigidos dentro da plataforma (<code>/termos</code> e <code>/privacidade</code>). Antes de publicar,
+            edite os arquivos <code>src/pages/public/Termos.tsx</code> e{' '}
+            <code>src/pages/public/Privacidade.tsx</code> para substituir os campos entre colchetes (razão social,
+            CNPJ e e-mail de contato) pelos dados reais da empresa.
+          </p>
           <div>
-            <label className="block text-xs font-semibold text-ink-soft">Link dos Termos de Uso</label>
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-ink-soft">Link dos Termos de Uso</label>
+              <button
+                type="button"
+                onClick={() => setSettings({ ...settings, termsUrl: `${window.location.origin}/termos` })}
+                className="text-xs font-semibold text-navy hover:underline"
+              >
+                Usar página do app
+              </button>
+            </div>
             <input
               className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5 text-sm"
               placeholder="https://…"
@@ -548,7 +564,16 @@ function LegalSection() {
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-ink-soft">Link da Política de Privacidade</label>
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-ink-soft">Link da Política de Privacidade</label>
+              <button
+                type="button"
+                onClick={() => setSettings({ ...settings, privacyUrl: `${window.location.origin}/privacidade` })}
+                className="text-xs font-semibold text-navy hover:underline"
+              >
+                Usar página do app
+              </button>
+            </div>
             <input
               className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5 text-sm"
               placeholder="https://…"
