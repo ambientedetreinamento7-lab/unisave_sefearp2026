@@ -27,7 +27,7 @@ export function AdminTrilhas() {
   async function deleteTrack(id: string) {
     if (
       !(await confirm(
-        'Excluir esta trilha? O vínculo com os cursos dela é removido (os cursos em si só somem se não pertencerem a outra trilha).',
+        'Excluir este curso? O vínculo com as aulas dele é removido (as aulas em si só somem se não pertencerem a outro curso).',
         { danger: true, confirmLabel: 'Excluir' },
       ))
     )
@@ -137,7 +137,7 @@ export function AdminTrilhas() {
       </details>
 
       <details className="card mb-4 p-4">
-        <summary className="cursor-pointer font-bold text-ink">Seções da Minha Trilha</summary>
+        <summary className="cursor-pointer font-bold text-ink">Seções de Cursos</summary>
         <p className="mt-1 text-sm text-ink-soft">Ordem em que as seções aparecem pro aluno; desative as que não quer mostrar.</p>
         <div className="mt-3 space-y-1.5">
           {sections.map((s, i) => (
@@ -182,7 +182,7 @@ export function AdminTrilhas() {
           value={trackFilter}
           onChange={(e) => setTrackFilter(e.target.value)}
         >
-          <option value="all">Todas as trilhas</option>
+          <option value="all">Todos os cursos</option>
           {tracks.map((t) => (
             <option key={t.id} value={t.id}>{t.title}</option>
           ))}
@@ -243,7 +243,7 @@ export function AdminTrilhas() {
                     onClick={() => deleteTrack(track.id)}
                     className="rounded-lg border border-brand-red/30 px-3 py-1.5 text-xs font-semibold text-brand-red hover:border-brand-red"
                   >
-                    Excluir trilha
+                    Excluir curso
                   </button>
                 </div>
               </div>

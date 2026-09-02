@@ -47,7 +47,7 @@ export function Resultado() {
               {info.avatarLetter}
             </span>
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">Trilha recomendada</p>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">Curso recomendado</p>
               <p className="font-bold leading-snug text-ink">{info.trackTitle}</p>
             </div>
           </div>

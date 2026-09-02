@@ -9,7 +9,7 @@ import { Icon } from './Icon'
 import { NotificationBell } from './NotificationBell'
 
 const NAV_LINKS = [
-  { to: '/dashboard', label: 'Trilha' },
+  { to: '/dashboard', label: 'Cursos' },
   { to: '/meu-pdi', label: 'Meu PDI' },
   { to: '/comunidade', label: 'Comunidade' },
   { to: '/conquistas', label: 'Conquistas' },

@@ -37,13 +37,13 @@ const NAV_TOUR_STEPS: TourStep[] = [
   },
   {
     target: '#tour-nav-dashboard',
-    title: 'Trilha',
+    title: 'Cursos',
     body: 'Sua página inicial: cursos em andamento, recomendados, mais acessados e o catálogo completo pra explorar.',
   },
   {
     target: '#tour-dashboard-tabs',
-    title: 'Minha Trilha x Catálogo Completo',
-    body: '"Minha Trilha" mostra o que já faz sentido pra você (em andamento, recomendados, favoritos). "Explorar Catálogo Completo" lista todos os cursos disponíveis.',
+    title: 'Meus Cursos x Catálogo Completo',
+    body: '"Meus Cursos" mostra o que já faz sentido pra você (em andamento, recomendados, favoritos). "Explorar Catálogo Completo" lista todos os cursos disponíveis.',
   },
   {
     target: '#tour-nav-meu-pdi',
@@ -296,7 +296,7 @@ export function Dashboard() {
               <section className="card card-highlight mt-6 p-5 sm:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-brand-red">Trilha recomendada</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-brand-red">Curso recomendado</p>
                     <h2 className="text-base font-bold text-ink sm:text-lg">{track.title}</h2>
                   </div>
                   <span className="text-sm font-semibold text-ink-soft">
@@ -316,7 +316,7 @@ export function Dashboard() {
                   tab === 'trilha' ? 'bg-navy text-white' : 'text-ink-soft'
                 }`}
               >
-                Minha Trilha
+                Meus Cursos
               </button>
               <button
                 onClick={() => setTab('catalogo')}
