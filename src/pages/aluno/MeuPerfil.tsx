@@ -89,6 +89,19 @@ function AvatarCard({
     setUploading(false)
   }
 
+  async function handleRemove() {
+    setUploading(true)
+    setError('')
+    try {
+      const { error: updateError } = await supabase.from('profiles').update({ avatar_url: null }).eq('id', userId)
+      if (updateError) throw updateError
+      await onChanged()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível remover a foto.')
+    }
+    setUploading(false)
+  }
+
   return (
     <div className="card mt-6 flex items-center gap-4 p-5">
       <label className="group relative h-20 w-20 shrink-0 cursor-pointer">
@@ -117,6 +130,11 @@ function AvatarCard({
       <div>
         <p className="font-bold text-ink">{name}</p>
         <p className="text-sm text-ink-soft">{uploading ? 'Enviando…' : 'Clique na foto pra trocar'}</p>
+        {avatarUrl && !uploading && (
+          <button type="button" onClick={handleRemove} className="mt-0.5 text-xs font-semibold text-brand-red hover:underline">
+            Remover foto
+          </button>
+        )}
         {error && <p className="mt-1 text-xs text-brand-red">{error}</p>}
       </div>
     </div>

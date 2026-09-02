@@ -125,6 +125,7 @@ function CertificateEditor({ template, onSaved }: { template: CertificateTemplat
   const [message, setMessage] = useState(template.message ?? '')
   const [backgroundUrl, setBackgroundUrl] = useState(template.background_url)
   const [backgroundFile, setBackgroundFile] = useState<File | null>(null)
+  const [removeBackground, setRemoveBackground] = useState(false)
   const [preview, setPreview] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -147,6 +148,8 @@ function CertificateEditor({ template, onSaved }: { template: CertificateTemplat
       }
       const { data } = supabase.storage.from('covers').getPublicUrl(path)
       finalBackgroundUrl = data.publicUrl
+    } else if (removeBackground) {
+      finalBackgroundUrl = null
     }
 
     const { error: saveError } = await supabase
@@ -163,6 +166,8 @@ function CertificateEditor({ template, onSaved }: { template: CertificateTemplat
       return
     }
     setBackgroundUrl(finalBackgroundUrl)
+    setBackgroundFile(null)
+    setRemoveBackground(false)
     setSaving(false)
     onSaved()
   }
@@ -181,13 +186,25 @@ function CertificateEditor({ template, onSaved }: { template: CertificateTemplat
       <div>
         <label className="block text-xs font-semibold text-ink-soft">Imagem de fundo do certificado</label>
         <p className="mt-0.5 text-xs text-ink-soft">Tamanho recomendado: 1400×895px.</p>
-        {backgroundUrl && !backgroundFile && (
-          <img src={backgroundUrl} alt="Fundo do certificado" className="mt-2 max-h-32 rounded-lg border border-navy-light" />
+        {backgroundUrl && !backgroundFile && !removeBackground && (
+          <div className="mt-2 flex items-center gap-2">
+            <img src={backgroundUrl} alt="Fundo do certificado" className="max-h-32 rounded-lg border border-navy-light" />
+            <button
+              type="button"
+              onClick={() => setRemoveBackground(true)}
+              className="text-xs font-semibold text-brand-red hover:underline"
+            >
+              Remover
+            </button>
+          </div>
         )}
         <input
           type="file"
           accept="image/*"
-          onChange={(e) => setBackgroundFile(e.target.files?.[0] ?? null)}
+          onChange={(e) => {
+            setBackgroundFile(e.target.files?.[0] ?? null)
+            setRemoveBackground(false)
+          }}
           className="mt-2 w-full text-sm"
         />
       </div>

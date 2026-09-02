@@ -156,7 +156,9 @@ function TrialSection() {
 function BrandingSection() {
   const [settings, setSettings] = useState<BrandingSettings | null>(null)
   const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [removeLogo, setRemoveLogo] = useState(false)
   const [secondaryLogoFile, setSecondaryLogoFile] = useState<File | null>(null)
+  const [removeSecondaryLogo, setRemoveSecondaryLogo] = useState(false)
   const [loginBgFile, setLoginBgFile] = useState<File | null>(null)
   const [removeLoginBg, setRemoveLoginBg] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -170,8 +172,12 @@ function BrandingSection() {
     if (!settings) return
     setSaving(true)
     setSaved(false)
-    const logoUrl = logoFile ? await uploadBrandingAsset(logoFile) : settings.logoUrl
-    const secondaryLogoUrl = secondaryLogoFile ? await uploadBrandingAsset(secondaryLogoFile) : settings.secondaryLogoUrl
+    const logoUrl = logoFile ? await uploadBrandingAsset(logoFile) : removeLogo ? null : settings.logoUrl
+    const secondaryLogoUrl = secondaryLogoFile
+      ? await uploadBrandingAsset(secondaryLogoFile)
+      : removeSecondaryLogo
+        ? null
+        : settings.secondaryLogoUrl
     const loginBackgroundImageUrl = loginBgFile
       ? await uploadBrandingAsset(loginBgFile)
       : removeLoginBg
@@ -181,7 +187,9 @@ function BrandingSection() {
     await updateBrandingSettings(next)
     setSettings(next)
     setLogoFile(null)
+    setRemoveLogo(false)
     setSecondaryLogoFile(null)
+    setRemoveSecondaryLogo(false)
     setLoginBgFile(null)
     setRemoveLoginBg(false)
     setSaving(false)
@@ -211,16 +219,52 @@ function BrandingSection() {
 
           <div>
             <label className="block text-xs font-semibold text-ink-soft">Logo principal</label>
-            {settings.logoUrl && !logoFile && <img src={settings.logoUrl} alt="" className="mt-1 h-8 rounded border border-navy-light bg-navy p-1" />}
-            <input type="file" accept="image/*" onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)} className="mt-1 w-full text-sm" />
+            {settings.logoUrl && !logoFile && !removeLogo && (
+              <div className="mt-1 flex items-center gap-2">
+                <img src={settings.logoUrl} alt="" className="h-8 rounded border border-navy-light bg-navy p-1" />
+                <button
+                  type="button"
+                  onClick={() => setRemoveLogo(true)}
+                  className="text-xs font-semibold text-brand-red hover:underline"
+                >
+                  Remover
+                </button>
+              </div>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                setLogoFile(e.target.files?.[0] ?? null)
+                setRemoveLogo(false)
+              }}
+              className="mt-1 w-full text-sm"
+            />
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-ink-soft">Logo secundária</label>
-            {settings.secondaryLogoUrl && !secondaryLogoFile && (
-              <img src={settings.secondaryLogoUrl} alt="" className="mt-1 h-8 rounded border border-navy-light bg-navy p-1" />
+            {settings.secondaryLogoUrl && !secondaryLogoFile && !removeSecondaryLogo && (
+              <div className="mt-1 flex items-center gap-2">
+                <img src={settings.secondaryLogoUrl} alt="" className="h-8 rounded border border-navy-light bg-navy p-1" />
+                <button
+                  type="button"
+                  onClick={() => setRemoveSecondaryLogo(true)}
+                  className="text-xs font-semibold text-brand-red hover:underline"
+                >
+                  Remover
+                </button>
+              </div>
             )}
-            <input type="file" accept="image/*" onChange={(e) => setSecondaryLogoFile(e.target.files?.[0] ?? null)} className="mt-1 w-full text-sm" />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                setSecondaryLogoFile(e.target.files?.[0] ?? null)
+                setRemoveSecondaryLogo(false)
+              }}
+              className="mt-1 w-full text-sm"
+            />
           </div>
 
           <div className="flex gap-3">
