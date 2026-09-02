@@ -18,6 +18,8 @@ export function AdminTrilhas() {
   const [categoryForm, setCategoryForm] = useState<Category | 'new' | null>(null)
   const [search, setSearch] = useState('')
   const [trackFilter, setTrackFilter] = useState<string>('all')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'unpublished'>('all')
 
   async function togglePublished(track: Track) {
     await supabase.from('tracks').update({ published: !track.published }).eq('id', track.id)
@@ -91,6 +93,9 @@ export function AdminTrilhas() {
   const visibleTracks = useMemo(() => {
     return tracks.filter((track) => {
       if (trackFilter !== 'all' && track.id !== trackFilter) return false
+      if (categoryFilter !== 'all' && track.category_id !== categoryFilter) return false
+      if (statusFilter === 'published' && !track.published) return false
+      if (statusFilter === 'unpublished' && track.published) return false
       if (!search.trim()) return true
       const q = search.trim().toLowerCase()
       const trackMatches = track.title.toLowerCase().includes(q)
@@ -99,7 +104,7 @@ export function AdminTrilhas() {
       )
       return trackMatches || pillMatches
     })
-  }, [tracks, trackPills, pillsById, search, trackFilter])
+  }, [tracks, trackPills, pillsById, search, trackFilter, categoryFilter, statusFilter])
 
   function pillsFor(trackId: string): Pill[] {
     const q = search.trim().toLowerCase()
@@ -187,6 +192,25 @@ export function AdminTrilhas() {
             <option key={t.id} value={t.id}>{t.title}</option>
           ))}
         </select>
+        <select
+          className="rounded-xl border border-navy-light px-3 py-2.5 text-sm"
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+        >
+          <option value="all">Todas as categorias</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <select
+          className="rounded-xl border border-navy-light px-3 py-2.5 text-sm"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as 'all' | 'published' | 'unpublished')}
+        >
+          <option value="all">Publicados e despublicados</option>
+          <option value="published">Só publicados</option>
+          <option value="unpublished">Só despublicados</option>
+        </select>
         <Link to="/admin/scorms" className="rounded-xl border border-navy-light px-4 py-2.5 text-sm font-semibold text-navy hover:border-navy">
           Biblioteca de SCORMs
         </Link>
@@ -198,58 +222,54 @@ export function AdminTrilhas() {
         </Link>
       </div>
 
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {visibleTracks.map((track) => (
-          <div key={track.id} className="card overflow-hidden">
-            {track.cover_url && <img src={track.cover_url} alt="" className="h-32 w-full object-cover" />}
-            <div className="p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-ink">{track.title}</h3>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                        track.published ? 'bg-green-50 text-success' : 'bg-amber-50 text-amber-700'
-                      }`}
-                    >
-                      {track.published ? 'Publicado' : 'Despublicado'}
-                    </span>
-                    {track.is_catalog && (
-                      <span className="rounded-full bg-navy-light px-2 py-0.5 text-[11px] font-semibold text-navy">Biblioteca</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-ink-soft">
-                    {track.program_id
-                      ? `${programs.find((p) => p.id === track.program_id)?.name} · ${track.diagnostic_profile ?? 'sem perfil'}`
-                      : 'Programa/perfil não definidos'}
-                    {track.carga_horaria_total != null && <> · {formatCargaHoraria(track.carga_horaria_total)}</>}
-                    {track.certificate_enabled && <> · 🎓 emite certificado</>}
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                  <button
-                    onClick={() => togglePublished(track)}
-                    className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
-                  >
-                    {track.published ? 'Despublicar' : 'Publicar'}
-                  </button>
-                  <Link
-                    to={`/admin/trilhas/${track.id}`}
-                    className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
-                  >
-                    Editar
-                  </Link>
-                  <button
-                    onClick={() => deleteTrack(track.id)}
-                    className="rounded-lg border border-brand-red/30 px-3 py-1.5 text-xs font-semibold text-brand-red hover:border-brand-red"
-                  >
-                    Excluir curso
-                  </button>
-                </div>
+          <div key={track.id} className="card flex flex-col overflow-hidden">
+            {track.cover_url && <img src={track.cover_url} alt="" className="h-28 w-full object-cover" />}
+            <div className="flex flex-1 flex-col p-4">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <h3 className="font-bold text-ink">{track.title}</h3>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    track.published ? 'bg-green-50 text-success' : 'bg-amber-50 text-amber-700'
+                  }`}
+                >
+                  {track.published ? 'Publicado' : 'Despublicado'}
+                </span>
+                {track.is_catalog && (
+                  <span className="rounded-full bg-navy-light px-2 py-0.5 text-[11px] font-semibold text-navy">Biblioteca</span>
+                )}
               </div>
-              <p className="mt-3 text-xs text-ink-soft">
-                {pillsFor(track.id).length} {pillsFor(track.id).length === 1 ? 'aula' : 'aulas'} — gerencie em "Editar"
+              <p className="mt-1 text-xs text-ink-soft">
+                {track.program_id
+                  ? `${programs.find((p) => p.id === track.program_id)?.name} · ${track.diagnostic_profile ?? 'sem perfil'}`
+                  : 'Programa/perfil não definidos'}
+                {track.carga_horaria_total != null && <> · {formatCargaHoraria(track.carga_horaria_total)}</>}
+                {track.certificate_enabled && <> · 🎓 certificado</>}
               </p>
+              <p className="mt-1 text-xs text-ink-soft">
+                {pillsFor(track.id).length} {pillsFor(track.id).length === 1 ? 'aula' : 'aulas'}
+              </p>
+              <div className="mt-auto flex flex-wrap gap-2 pt-3">
+                <button
+                  onClick={() => togglePublished(track)}
+                  className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
+                >
+                  {track.published ? 'Despublicar' : 'Publicar'}
+                </button>
+                <Link
+                  to={`/admin/trilhas/${track.id}`}
+                  className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
+                >
+                  Editar
+                </Link>
+                <button
+                  onClick={() => deleteTrack(track.id)}
+                  className="rounded-lg border border-brand-red/30 px-3 py-1.5 text-xs font-semibold text-brand-red hover:border-brand-red"
+                >
+                  Excluir
+                </button>
+              </div>
             </div>
           </div>
         ))}
