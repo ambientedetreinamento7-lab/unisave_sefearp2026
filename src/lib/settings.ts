@@ -5,6 +5,7 @@ import type {
   LegalSettings,
   MaintenanceSettings,
   ModuleCompletionSettings,
+  SecuritySettings,
   SessionSettings,
   SignupSettings,
   TrialSettings,
@@ -104,6 +105,16 @@ export async function getLegalSettings(): Promise<LegalSettings> {
 
 export async function updateLegalSettings(settings: LegalSettings) {
   await supabase.from('app_settings').upsert({ key: 'legal', value: settings })
+}
+
+const DEFAULT_SECURITY: SecuritySettings = { magicLinkResetEnabled: true, birthDateResetEnabled: true }
+
+export async function getSecuritySettings(): Promise<SecuritySettings> {
+  return getAppSetting('security', DEFAULT_SECURITY)
+}
+
+export async function updateSecuritySettings(settings: SecuritySettings) {
+  await supabase.from('app_settings').upsert({ key: 'security', value: settings })
 }
 
 const DEFAULT_MAINTENANCE: MaintenanceSettings = {

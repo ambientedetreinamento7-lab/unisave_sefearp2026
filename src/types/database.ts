@@ -203,6 +203,11 @@ export interface LegalSettings {
   termsVersion: string
 }
 
+export interface SecuritySettings {
+  magicLinkResetEnabled: boolean
+  birthDateResetEnabled: boolean
+}
+
 export interface MaintenanceSettings {
   enabled: boolean
   message: string

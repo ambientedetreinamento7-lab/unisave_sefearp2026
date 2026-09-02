@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { HeroBrandBar } from '../../components/HeroBrandBar'
+import { usePlatformSettings } from '../../context/PlatformSettingsContext'
 import { supabase } from '../../lib/supabase'
 
 export function RecuperarSenha() {
   const navigate = useNavigate()
+  const { security } = usePlatformSettings()
   const [email, setEmail] = useState('')
   const [birthDate, setBirthDate] = useState('')
   const [password, setPassword] = useState('')
@@ -40,6 +42,30 @@ export function RecuperarSenha() {
       return
     }
     setDone(true)
+  }
+
+  if (!security.birthDateResetEnabled) {
+    return (
+      <div className="hero-gradient flex min-h-screen items-center justify-center px-4 py-10">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 flex justify-center">
+            <HeroBrandBar compact />
+          </div>
+          <div className="card p-6 text-center">
+            <h1 className="text-lg font-bold text-ink">Recuperação indisponível</h1>
+            <p className="mt-2 text-sm text-ink-soft">
+              Essa forma de recuperar a senha está desativada no momento. Use o link mágico na tela de login.
+            </p>
+            <Link
+              to="/entrar"
+              className="mt-5 block w-full rounded-xl bg-brand-red py-3 font-bold text-white transition hover:bg-brand-red-dark"
+            >
+              Voltar para o login
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (done) {

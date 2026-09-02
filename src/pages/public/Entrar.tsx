@@ -1,12 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { HeroBrandBar } from '../../components/HeroBrandBar'
 import { usePlatformSettings } from '../../context/PlatformSettingsContext'
 import { supabase } from '../../lib/supabase'
 
 export function Entrar() {
-  const { branding } = usePlatformSettings()
+  const { branding, security } = usePlatformSettings()
   const [mode, setMode] = useState<'magic' | 'senha'>('magic')
+
+  useEffect(() => {
+    if (!security.magicLinkResetEnabled) setMode('senha')
+  }, [security.magicLinkResetEnabled])
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [status, setStatus] = useState<'idle' | 'sent' | 'error'>('idle')
@@ -58,26 +62,28 @@ export function Entrar() {
         </div>
 
         <div className="card p-6">
-          <div className="mb-5 flex rounded-full bg-navy-light p-1 text-sm font-semibold">
-            <button
-              onClick={() => setMode('magic')}
-              className={`flex-1 rounded-full py-2 ${mode === 'magic' ? 'bg-navy text-white' : 'text-navy'}`}
-            >
-              Link mágico
-            </button>
-            <button
-              onClick={() => setMode('senha')}
-              className={`flex-1 rounded-full py-2 ${mode === 'senha' ? 'bg-navy text-white' : 'text-navy'}`}
-            >
-              Senha
-            </button>
-          </div>
-          {mode === 'magic' && (
+          {security.magicLinkResetEnabled && (
+            <div className="mb-5 flex rounded-full bg-navy-light p-1 text-sm font-semibold">
+              <button
+                onClick={() => setMode('magic')}
+                className={`flex-1 rounded-full py-2 ${mode === 'magic' ? 'bg-navy text-white' : 'text-navy'}`}
+              >
+                Link mágico
+              </button>
+              <button
+                onClick={() => setMode('senha')}
+                className={`flex-1 rounded-full py-2 ${mode === 'senha' ? 'bg-navy text-white' : 'text-navy'}`}
+              >
+                Senha
+              </button>
+            </div>
+          )}
+          {mode === 'magic' && security.magicLinkResetEnabled && (
             <p className="mb-3 text-xs text-ink-soft">
               Primeira vez ou esqueceu a senha? Use o link mágico — você define uma senha assim que entrar.
             </p>
           )}
-          {mode === 'senha' && (
+          {mode === 'senha' && security.birthDateResetEnabled && (
             <p className="mb-3 text-xs text-ink-soft">
               Esqueceu a senha?{' '}
               <Link to="/recuperar-senha" className="font-semibold text-navy">

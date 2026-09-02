@@ -6,6 +6,7 @@ import {
   getLegalSettings,
   getMaintenanceSettings,
   getModuleCompletionSettings,
+  getSecuritySettings,
   getSessionSettings,
   getSignupSettings,
   getTrialSettings,
@@ -14,6 +15,7 @@ import {
   updateLegalSettings,
   updateMaintenanceSettings,
   updateModuleCompletionSettings,
+  updateSecuritySettings,
   updateSessionSettings,
   updateSignupSettings,
   updateTrialSettings,
@@ -25,6 +27,7 @@ import type {
   LegalSettings,
   MaintenanceSettings,
   ModuleCompletionSettings,
+  SecuritySettings,
   SessionSettings,
   SignupSettings,
   TrialSettings,
@@ -50,6 +53,7 @@ export function AdminConfiguracoes() {
         <ModuleCompletionSection />
         <CommunitySection />
         <SessionSection />
+        <SecuritySection />
         <LegalSection />
         <MaintenanceSection />
       </div>
@@ -503,6 +507,78 @@ function SessionSection() {
               />
             </>
           )}
+        </div>
+      )}
+    </SectionShell>
+  )
+}
+
+function SecuritySection() {
+  const [settings, setSettings] = useState<SecuritySettings | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    getSecuritySettings().then(setSettings)
+  }, [])
+
+  async function save() {
+    if (!settings) return
+    if (!settings.magicLinkResetEnabled && !settings.birthDateResetEnabled) {
+      setError('Pelo menos uma opção de recuperação de senha precisa ficar habilitada.')
+      setSaved(false)
+      return
+    }
+    setError('')
+    setSaving(true)
+    setSaved(false)
+    await updateSecuritySettings(settings)
+    setSaving(false)
+    setSaved(true)
+  }
+
+  return (
+    <SectionShell
+      title="Segurança"
+      description="Escolha quais formas de recuperação de senha ficam disponíveis para os alunos em /entrar. Pelo menos uma precisa ficar ativa."
+      loading={!settings}
+      onSave={save}
+      saving={saving}
+      saved={saved}
+    >
+      {settings && (
+        <div className="mt-4 space-y-3">
+          <label className="flex items-start gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={settings.magicLinkResetEnabled}
+              onChange={(e) => setSettings({ ...settings, magicLinkResetEnabled: e.target.checked })}
+            />
+            <span>
+              Recuperação por link mágico
+              <span className="mt-0.5 block text-xs font-normal text-ink-soft">
+                É o mesmo mecanismo usado no primeiro acesso — desativar remove também a aba "Link mágico" da tela
+                de login.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={settings.birthDateResetEnabled}
+              onChange={(e) => setSettings({ ...settings, birthDateResetEnabled: e.target.checked })}
+            />
+            <span>
+              Recuperação por data de nascimento
+              <span className="mt-0.5 block text-xs font-normal text-ink-soft">
+                Tela /recuperar-senha — só funciona para alunos que já preencheram a data de nascimento no perfil.
+              </span>
+            </span>
+          </label>
+          {error && <p className="text-sm text-brand-red">{error}</p>}
         </div>
       )}
     </SectionShell>

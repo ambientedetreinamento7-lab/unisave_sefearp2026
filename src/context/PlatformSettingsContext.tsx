@@ -4,15 +4,23 @@ import {
   getBrandingSettings,
   getLegalSettings,
   getMaintenanceSettings,
+  getSecuritySettings,
   getSessionSettings,
 } from '../lib/settings'
-import type { BrandingSettings, LegalSettings, MaintenanceSettings, SessionSettings } from '../types/database'
+import type {
+  BrandingSettings,
+  LegalSettings,
+  MaintenanceSettings,
+  SecuritySettings,
+  SessionSettings,
+} from '../types/database'
 
 interface PlatformSettingsValue {
   branding: BrandingSettings
   legal: LegalSettings
   maintenance: MaintenanceSettings
   session: SessionSettings
+  security: SecuritySettings
   loading: boolean
 }
 
@@ -29,6 +37,7 @@ const DEFAULTS: Omit<PlatformSettingsValue, 'loading'> = {
   legal: { termsUrl: null, privacyUrl: null, termsVersion: '1' },
   maintenance: { enabled: false, message: '' },
   session: { inactivityTimeoutMinutes: null },
+  security: { magicLinkResetEnabled: true, birthDateResetEnabled: true },
 }
 
 const PlatformSettingsContext = createContext<PlatformSettingsValue | undefined>(undefined)
@@ -44,9 +53,15 @@ export function PlatformSettingsProvider({ children }: { children: ReactNode }) 
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    Promise.all([getBrandingSettings(), getLegalSettings(), getMaintenanceSettings(), getSessionSettings()]).then(
-      ([branding, legal, maintenance, session]) => {
-        setValue({ branding, legal, maintenance, session })
+    Promise.all([
+      getBrandingSettings(),
+      getLegalSettings(),
+      getMaintenanceSettings(),
+      getSessionSettings(),
+      getSecuritySettings(),
+    ]).then(
+      ([branding, legal, maintenance, session, security]) => {
+        setValue({ branding, legal, maintenance, session, security })
         setLoading(false)
         // Sobrescreve os tokens de cor em runtime (definidos em index.css)
         // só quando o admin configurou algo — sem isso, continua com a
