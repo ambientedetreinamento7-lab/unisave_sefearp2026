@@ -1169,6 +1169,10 @@ create policy "gamification levels writable by admin" on gamification_levels for
 create policy "read own points events" on user_points_events for select
   using (user_id = auth.uid() or current_role_is('admin'));
 create policy "insert own points events" on user_points_events for insert with check (user_id = auth.uid());
+-- Admin → Usuários: reset de pontos precisa apagar o ledger do aluno
+-- (nenhuma policy de delete existia aqui antes disso).
+create policy "admin deletes points events" on user_points_events for delete
+  using (current_role_is('admin'));
 
 grant execute on function public.close_poll(uuid) to authenticated;
 
