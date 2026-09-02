@@ -287,7 +287,17 @@ create table profiles (
   -- string livre (ex: "2026-01") comparada com app_settings['legal'] —
   -- trocar a versão em Configurações força reaceite de todo mundo.
   terms_accepted_version text,
-  terms_accepted_at timestamptz
+  terms_accepted_at timestamptz,
+  -- Pergunta de segurança pra recuperação de senha sem depender de e-mail
+  -- (spec: /recuperar-senha) — opcional, preenchido no quiz do /estande ou
+  -- em Meu Perfil. Sem essa data preenchida, o aluno só pode recuperar a
+  -- senha pelo link mágico.
+  birth_date date,
+  -- Contador de tentativas erradas em reset_password_with_birth_date, com
+  -- bloqueio temporário — o espaço de datas de nascimento é pequeno o
+  -- bastante pra precisar de proteção contra força bruta.
+  security_reset_attempts int not null default 0,
+  security_reset_locked_until timestamptz
 );
 
 create table user_progress (
@@ -919,7 +929,8 @@ create or replace function public.capture_estande_lead(
   p_program_id text,
   p_curriculum_period text,
   p_diagnostic_profile diagnostic_profile,
-  p_selected_track_id uuid
+  p_selected_track_id uuid,
+  p_birth_date date default null
 ) returns void
 language plpgsql
 security definer
@@ -928,11 +939,11 @@ as $$
 begin
   insert into profiles (
     name, email, phone_whatsapp, program_id, curriculum_period,
-    diagnostic_profile, selected_track_id, role
+    diagnostic_profile, selected_track_id, role, birth_date
   )
   values (
     p_name, p_email, p_phone, p_program_id, p_curriculum_period,
-    p_diagnostic_profile, p_selected_track_id, 'aluno'
+    p_diagnostic_profile, p_selected_track_id, 'aluno', p_birth_date
   )
   on conflict (email) do update set
     name = excluded.name,
@@ -940,14 +951,71 @@ begin
     program_id = excluded.program_id,
     curriculum_period = excluded.curriculum_period,
     diagnostic_profile = excluded.diagnostic_profile,
-    selected_track_id = excluded.selected_track_id
+    selected_track_id = excluded.selected_track_id,
+    birth_date = coalesce(excluded.birth_date, profiles.birth_date)
   where profiles.claimed = false;
 end;
 $$;
 
 grant execute on function public.capture_estande_lead(
-  text, text, text, text, text, diagnostic_profile, uuid
+  text, text, text, text, text, diagnostic_profile, uuid, date
 ) to anon;
+
+-- Recuperação de senha sem e-mail: confere e-mail + data de nascimento
+-- contra profiles e, se baterem (e a conta não estiver temporariamente
+-- travada por tentativas erradas), troca a senha direto em auth.users.
+-- Mensagem de erro é sempre a mesma (e-mail inexistente ou data errada)
+-- pra não revelar quais e-mails têm conta. security definer pq o caller é
+-- anônimo e auth.users não é acessível/alterável fora dessa role elevada.
+create or replace function public.reset_password_with_birth_date(
+  p_email text,
+  p_birth_date date,
+  p_new_password text
+) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_profile profiles%rowtype;
+begin
+  select * into v_profile from profiles
+  where email = p_email and claimed = true
+  for update;
+
+  if not found then
+    raise exception 'E-mail ou data de nascimento não conferem';
+  end if;
+
+  if v_profile.security_reset_locked_until is not null
+     and v_profile.security_reset_locked_until > now() then
+    raise exception 'Muitas tentativas incorretas. Tente novamente mais tarde.';
+  end if;
+
+  if v_profile.birth_date is null or v_profile.birth_date <> p_birth_date then
+    update profiles set
+      security_reset_attempts = security_reset_attempts + 1,
+      security_reset_locked_until = case
+        when security_reset_attempts + 1 >= 5 then now() + interval '15 minutes'
+        else security_reset_locked_until
+      end
+    where id = v_profile.id;
+    raise exception 'E-mail ou data de nascimento não conferem';
+  end if;
+
+  update auth.users
+  set encrypted_password = extensions.crypt(p_new_password, extensions.gen_salt('bf'))
+  where id = v_profile.id;
+
+  update profiles set
+    security_reset_attempts = 0,
+    security_reset_locked_until = null,
+    password_set = true
+  where id = v_profile.id;
+end;
+$$;
+
+grant execute on function public.reset_password_with_birth_date(text, date, text) to anon;
 
 create policy "self manage progress" on user_progress for all
   using (auth.uid() = user_id or current_role_is('moderador') or current_role_is('admin'))

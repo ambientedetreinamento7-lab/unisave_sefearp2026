@@ -32,6 +32,7 @@ import { Moderador } from './pages/moderador/Moderador'
 import { Entrar } from './pages/public/Entrar'
 import { Estande } from './pages/public/Estande'
 import { Privacidade } from './pages/public/Privacidade'
+import { RecuperarSenha } from './pages/public/RecuperarSenha'
 import { Resultado } from './pages/public/Resultado'
 import { Termos } from './pages/public/Termos'
 import { ValidarCertificado } from './pages/public/ValidarCertificado'
@@ -46,6 +47,7 @@ function App() {
         <Route path="/estande" element={<Estande />} />
         <Route path="/resultado" element={<Resultado />} />
         <Route path="/entrar" element={<Entrar />} />
+        <Route path="/recuperar-senha" element={<RecuperarSenha />} />
         <Route path="/validar-certificado" element={<ValidarCertificado />} />
         <Route path="/termos" element={<Termos />} />
         <Route path="/privacidade" element={<Privacidade />} />

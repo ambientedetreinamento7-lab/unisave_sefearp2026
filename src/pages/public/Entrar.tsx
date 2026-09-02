@@ -77,6 +77,15 @@ export function Entrar() {
               Primeira vez ou esqueceu a senha? Use o link mágico — você define uma senha assim que entrar.
             </p>
           )}
+          {mode === 'senha' && (
+            <p className="mb-3 text-xs text-ink-soft">
+              Esqueceu a senha?{' '}
+              <Link to="/recuperar-senha" className="font-semibold text-navy">
+                Recuperar com data de nascimento
+              </Link>
+              .
+            </p>
+          )}
 
           <input
             className="mb-3 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"

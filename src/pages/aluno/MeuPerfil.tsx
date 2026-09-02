@@ -42,6 +42,7 @@ export function MeuPerfil() {
           initialPhone={profile.phone_whatsapp}
           initialProgramId={profile.program_id}
           initialFase={profile.curriculum_period}
+          initialBirthDate={profile.birth_date}
           onChanged={refreshProfile}
         />
         {allowRankingOptOut && (
@@ -129,6 +130,7 @@ function DadosCard({
   initialPhone,
   initialProgramId,
   initialFase,
+  initialBirthDate,
   onChanged,
 }: {
   userId: string
@@ -137,6 +139,7 @@ function DadosCard({
   initialPhone: string | null
   initialProgramId: string | null
   initialFase: string | null
+  initialBirthDate: string | null
   onChanged: () => Promise<void>
 }) {
   const [programs, setPrograms] = useState<Program[]>([])
@@ -144,6 +147,7 @@ function DadosCard({
   const [phone, setPhone] = useState(initialPhone ?? '')
   const [programId, setProgramId] = useState(initialProgramId ?? '')
   const [fase, setFase] = useState(initialFase ?? '')
+  const [birthDate, setBirthDate] = useState(initialBirthDate ?? '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
@@ -166,6 +170,7 @@ function DadosCard({
         phone_whatsapp: phone.trim() || null,
         program_id: programId || null,
         curriculum_period: fase || null,
+        birth_date: birthDate || null,
       })
       .eq('id', userId)
     if (updateError) {
@@ -227,6 +232,17 @@ function DadosCard({
           <option key={f.value} value={f.value}>{f.label}</option>
         ))}
       </select>
+
+      <label className="mt-3 block text-xs font-semibold text-ink-soft">Data de nascimento</label>
+      <input
+        className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5 outline-none focus:border-navy"
+        type="date"
+        value={birthDate}
+        onChange={(e) => setBirthDate(e.target.value)}
+      />
+      <p className="mt-1 text-xs text-ink-soft">
+        Usada só para recuperar sua senha caso você perca o acesso ao seu e-mail.
+      </p>
 
       {error && <p className="mt-3 text-sm text-brand-red">{error}</p>}
       {saved && <p className="mt-3 text-sm text-success">Dados salvos!</p>}

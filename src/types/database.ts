@@ -36,6 +36,7 @@ export interface Profile {
   ranking_opt_out: boolean
   terms_accepted_version: string | null
   terms_accepted_at: string | null
+  birth_date: string | null
 }
 
 export interface PublicProfile {

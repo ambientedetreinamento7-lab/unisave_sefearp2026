@@ -25,6 +25,7 @@ export function Estande() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
+  const [birthDate, setBirthDate] = useState('')
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -88,6 +89,7 @@ export function Estande() {
         p_curriculum_period: fase,
         p_diagnostic_profile: diagnostic_profile,
         p_selected_track_id: trackRow?.id ?? null,
+        p_birth_date: birthDate || null,
       })
       if (captureError) throw captureError
 
@@ -205,6 +207,20 @@ export function Estande() {
                   value={whatsapp}
                   onChange={(e) => setWhatsapp(e.target.value)}
                 />
+                <div>
+                  <label className="block text-xs font-semibold text-ink-soft">
+                    Data de nascimento <span className="font-normal text-ink-soft/70">(opcional)</span>
+                  </label>
+                  <input
+                    className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
+                    type="date"
+                    value={birthDate}
+                    onChange={(e) => setBirthDate(e.target.value)}
+                  />
+                  <p className="mt-1 text-xs text-ink-soft">
+                    Usada só para recuperar sua senha depois, caso você não tenha acesso ao e-mail.
+                  </p>
+                </div>
               </div>
               {signup?.requireTermsAcceptance && (
                 <label className="mt-4 flex items-start gap-2 text-left text-xs text-ink-soft">
