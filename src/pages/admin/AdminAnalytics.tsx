@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { AdminLayout } from './AdminLayout'
-import { getIssuedCertificates } from '../../lib/api'
 import { getLevels, levelForPoints } from '../../lib/gamification'
 import { TIER_LABEL } from '../../lib/pdiTier'
 import { supabase } from '../../lib/supabase'
 import type {
   GamificationLevel,
-  IssuedCertificate,
   PdiPlan,
   PdiTier,
+  Pill,
   Profile,
   Program,
+  ReactionAnswer,
+  ReactionQuestion,
+  ReactionResponse,
+  ReactionSurvey,
   SkillCategory,
   SkillRating,
   Track,
@@ -57,6 +60,12 @@ export function AdminAnalytics() {
   const [skillGap, setSkillGap] = useState<
     { skill: string; autoavaliacao: number; moderador: number | null; gap: number | null }[]
   >([])
+  const [reactionByModule, setReactionByModule] = useState<
+    { pillId: string; modulo: string; respostas: number; nps: number | null; likertMedio: number | null }[]
+  >([])
+  const [openComments, setOpenComments] = useState<{ modulo: string; pergunta: string; comentario: string }[]>([])
+  const [npsGeral, setNpsGeral] = useState<number | null>(null)
+  const [likertGeral, setLikertGeral] = useState<number | null>(null)
   const [summary, setSummary] = useState({
     alunos: 0,
     comPlano: 0,
@@ -77,11 +86,6 @@ export function AdminAnalytics() {
       ultimoAcesso: string
     }[]
   >([])
-  const [issuedCertificates, setIssuedCertificates] = useState<IssuedCertificate[]>([])
-  const [certFilterName, setCertFilterName] = useState('')
-  const [certFilterTrackId, setCertFilterTrackId] = useState('')
-  const [certFilterFrom, setCertFilterFrom] = useState('')
-  const [certFilterTo, setCertFilterTo] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -97,7 +101,11 @@ export function AdminAnalytics() {
         { data: skillRatings },
         { count: certificadosEmitidos },
         levels,
-        issued,
+        { data: pills },
+        { data: reactionSurveys },
+        { data: reactionQuestions },
+        { data: reactionResponses },
+        { data: reactionAnswers },
       ] = await Promise.all([
         supabase.from('profiles').select('*').eq('role', 'aluno'),
         supabase.from('pdi_plans').select('*'),
@@ -109,9 +117,12 @@ export function AdminAnalytics() {
         supabase.from('skill_ratings').select('*'),
         supabase.from('issued_certificates').select('*', { count: 'exact', head: true }),
         getLevels(),
-        getIssuedCertificates(),
+        supabase.from('pills').select('id, title'),
+        supabase.from('reaction_surveys').select('*'),
+        supabase.from('reaction_questions').select('*'),
+        supabase.from('reaction_responses').select('*'),
+        supabase.from('reaction_answers').select('*'),
       ])
-      setIssuedCertificates(issued)
 
       const profilesArr = (profiles as Profile[]) ?? []
       const plansArr = (plans as PdiPlan[]) ?? []
@@ -194,6 +205,83 @@ export function AdminAnalytics() {
         }),
       )
 
+      // Reação/satisfação (Kirkpatrick nível 1) — o dado já é coletado pelo
+      // aluno em ReactionSurvey.tsx, mas nunca era agregado no analytics.
+      const pillsArr = (pills as Pick<Pill, 'id' | 'title'>[]) ?? []
+      const reactionSurveysArr = (reactionSurveys as ReactionSurvey[]) ?? []
+      const reactionQuestionsArr = (reactionQuestions as ReactionQuestion[]) ?? []
+      const reactionResponsesArr = (reactionResponses as ReactionResponse[]) ?? []
+      const reactionAnswersArr = (reactionAnswers as ReactionAnswer[]) ?? []
+
+      const pillTitleById = new Map(pillsArr.map((p) => [p.id, p.title]))
+      const surveyToPillId = new Map(reactionSurveysArr.map((s) => [s.id, s.pill_id]))
+      const responseToSurveyId = new Map(reactionResponsesArr.map((r) => [r.id, r.survey_id]))
+      const questionById = new Map(reactionQuestionsArr.map((q) => [q.id, q]))
+
+      const responsesBySurvey = new Map<string, Set<string>>()
+      for (const r of reactionResponsesArr) {
+        if (!responsesBySurvey.has(r.survey_id)) responsesBySurvey.set(r.survey_id, new Set())
+        responsesBySurvey.get(r.survey_id)!.add(r.id)
+      }
+
+      // value_number: 1-5 para likert5, 0-10 para nps.
+      const likertValuesBySurvey = new Map<string, number[]>()
+      const npsValuesBySurvey = new Map<string, number[]>()
+      const commentsList: { modulo: string; pergunta: string; comentario: string }[] = []
+
+      for (const answer of reactionAnswersArr) {
+        const question = questionById.get(answer.question_id)
+        if (!question) continue
+        const surveyId = responseToSurveyId.get(answer.response_id)
+        if (!surveyId) continue
+
+        if (question.question_type === 'likert5' && answer.value_number != null) {
+          if (!likertValuesBySurvey.has(surveyId)) likertValuesBySurvey.set(surveyId, [])
+          likertValuesBySurvey.get(surveyId)!.push(answer.value_number)
+        } else if (question.question_type === 'nps' && answer.value_number != null) {
+          if (!npsValuesBySurvey.has(surveyId)) npsValuesBySurvey.set(surveyId, [])
+          npsValuesBySurvey.get(surveyId)!.push(answer.value_number)
+        } else if (question.question_type === 'open_text' && answer.value_text?.trim()) {
+          const pillId = surveyToPillId.get(surveyId)
+          commentsList.push({
+            modulo: (pillId && pillTitleById.get(pillId)) ?? 'Módulo removido',
+            pergunta: question.question_text,
+            comentario: answer.value_text.trim(),
+          })
+        }
+      }
+
+      // NPS clássico: %promotores (9-10) - %detratores (0-6), em pontos percentuais.
+      function npsFrom(values: number[]): number | null {
+        if (!values.length) return null
+        const promoters = values.filter((v) => v >= 9).length
+        const detractors = values.filter((v) => v <= 6).length
+        return Math.round(((promoters - detractors) / values.length) * 100)
+      }
+      function avgFrom(values: number[]): number | null {
+        if (!values.length) return null
+        return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10
+      }
+
+      setReactionByModule(
+        reactionSurveysArr
+          .map((survey) => {
+            const respostas = responsesBySurvey.get(survey.id)?.size ?? 0
+            return {
+              pillId: survey.pill_id,
+              modulo: pillTitleById.get(survey.pill_id) ?? 'Módulo removido',
+              respostas,
+              nps: npsFrom(npsValuesBySurvey.get(survey.id) ?? []),
+              likertMedio: avgFrom(likertValuesBySurvey.get(survey.id) ?? []),
+            }
+          })
+          .filter((r) => r.respostas > 0)
+          .sort((a, b) => b.respostas - a.respostas),
+      )
+      setOpenComments(commentsList)
+      setNpsGeral(npsFrom(Array.from(npsValuesBySurvey.values()).flat()))
+      setLikertGeral(avgFrom(Array.from(likertValuesBySurvey.values()).flat()))
+
       const scores = progressArr.filter((p) => p.status === 'completed' && p.quiz_score != null).map((p) => p.quiz_score!)
       const notaMediaQuiz = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0
       const totalProgress = progressArr.length
@@ -239,23 +327,6 @@ export function AdminAnalytics() {
 
   if (loading) return <AdminLayout><p className="text-ink-soft">Carregando…</p></AdminLayout>
 
-  const certTrackOptions = Array.from(
-    new Map(issuedCertificates.map((c) => [c.track_id, c.track_title])).entries(),
-  ).sort((a, b) => a[1].localeCompare(b[1]))
-
-  const filteredCertificates = issuedCertificates.filter((c) => {
-    if (certFilterName && !c.student_name.toLowerCase().includes(certFilterName.toLowerCase())) return false
-    if (certFilterTrackId && c.track_id !== certFilterTrackId) return false
-    if (c.completed_at) {
-      const completedDate = c.completed_at.slice(0, 10)
-      if (certFilterFrom && completedDate < certFilterFrom) return false
-      if (certFilterTo && completedDate > certFilterTo) return false
-    } else if (certFilterFrom || certFilterTo) {
-      return false
-    }
-    return true
-  })
-
   return (
     <AdminLayout>
       <div className="mb-6 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
@@ -265,6 +336,8 @@ export function AdminAnalytics() {
         <StatCard label="Taxa de conclusão geral" value={`${summary.taxaConclusaoGeral}%`} />
         <StatCard label="Pontos médios" value={summary.pontosMedios} />
         <StatCard label="Certificados emitidos" value={summary.certificadosEmitidos} />
+        <StatCard label="NPS geral" value={npsGeral != null ? npsGeral : '—'} />
+        <StatCard label="Satisfação média (1-5)" value={likertGeral != null ? likertGeral : '—'} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -356,6 +429,66 @@ export function AdminAnalytics() {
           </div>
         </div>
 
+        <div className="card p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-ink">Reação e satisfação por módulo</h2>
+            <CsvButton
+              filename="reacao-por-modulo.csv"
+              headers={['Módulo', 'Respostas', 'NPS', 'Satisfação média (1-5)']}
+              rows={reactionByModule.map((r) => [r.modulo, r.respostas, r.nps ?? '', r.likertMedio ?? ''])}
+            />
+          </div>
+          <p className="mt-1 text-xs text-ink-soft">
+            NPS calculado como % promotores (9-10) menos % detratores (0-6). Só aparecem módulos com pesquisa de
+            reação cadastrada e ao menos 1 resposta.
+          </p>
+          <div className="mt-4 max-h-72 overflow-y-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-xs uppercase text-ink-soft">
+                  <th className="pb-2">Módulo</th>
+                  <th className="pb-2 text-right">Respostas</th>
+                  <th className="pb-2 text-right">NPS</th>
+                  <th className="pb-2 text-right">Satisfação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reactionByModule.map((r) => (
+                  <tr key={r.pillId} className="border-t border-navy-light/60">
+                    <td className="py-2 font-medium text-ink">{r.modulo}</td>
+                    <td className="py-2 text-right text-ink-soft">{r.respostas}</td>
+                    <td className="py-2 text-right font-semibold text-navy">{r.nps ?? '—'}</td>
+                    <td className="py-2 text-right text-ink-soft">{r.likertMedio ?? '—'}</td>
+                  </tr>
+                ))}
+                {reactionByModule.length === 0 && (
+                  <tr><td colSpan={4} className="py-3 text-ink-soft">Sem respostas de reação ainda.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-ink">Comentários abertos</h2>
+            <CsvButton
+              filename="comentarios-abertos.csv"
+              headers={['Módulo', 'Pergunta', 'Comentário']}
+              rows={openComments.map((c) => [c.modulo, c.pergunta, c.comentario])}
+            />
+          </div>
+          <div className="mt-4 max-h-72 space-y-3 overflow-y-auto">
+            {openComments.map((c, i) => (
+              <div key={i} className="rounded-lg border border-navy-light/60 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{c.modulo}</p>
+                <p className="mt-1 text-sm text-ink">{c.comentario}</p>
+              </div>
+            ))}
+            {openComments.length === 0 && <p className="text-sm text-ink-soft">Sem comentários ainda.</p>}
+          </div>
+        </div>
+
         <div className="card p-5 lg:col-span-2">
           <div className="flex items-center justify-between">
             <h2 className="font-bold text-ink">Balanço de competências — autoavaliação × moderador</h2>
@@ -428,97 +561,6 @@ export function AdminAnalytics() {
                 ))}
                 {students.length === 0 && (
                   <tr><td colSpan={7} className="py-3 text-ink-soft">Sem dados ainda.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="card p-5 lg:col-span-2">
-          <div className="flex items-center justify-between">
-            <h2 className="font-bold text-ink">Certificados emitidos</h2>
-            <CsvButton
-              filename="certificados-emitidos.csv"
-              headers={['Aluno', 'Curso', 'Código', 'Concluído em', 'Emitido em']}
-              rows={filteredCertificates.map((c) => [
-                c.student_name,
-                c.track_title,
-                c.code,
-                c.completed_at ? new Date(c.completed_at).toLocaleDateString('pt-BR') : '—',
-                new Date(c.issued_at).toLocaleDateString('pt-BR'),
-              ])}
-            />
-          </div>
-
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <input
-              className="rounded-lg border border-navy-light px-3 py-2 text-sm"
-              placeholder="Buscar aluno…"
-              value={certFilterName}
-              onChange={(e) => setCertFilterName(e.target.value)}
-            />
-            <select
-              className="rounded-lg border border-navy-light px-3 py-2 text-sm"
-              value={certFilterTrackId}
-              onChange={(e) => setCertFilterTrackId(e.target.value)}
-            >
-              <option value="">Todos os cursos</option>
-              {certTrackOptions.map(([trackId, title]) => (
-                <option key={trackId} value={trackId}>{title}</option>
-              ))}
-            </select>
-            <input
-              type="date"
-              className="rounded-lg border border-navy-light px-3 py-2 text-sm"
-              value={certFilterFrom}
-              onChange={(e) => setCertFilterFrom(e.target.value)}
-              title="Concluído a partir de"
-            />
-            <input
-              type="date"
-              className="rounded-lg border border-navy-light px-3 py-2 text-sm"
-              value={certFilterTo}
-              onChange={(e) => setCertFilterTo(e.target.value)}
-              title="Concluído até"
-            />
-          </div>
-
-          <div className="mt-4 max-h-96 overflow-y-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="text-xs uppercase text-ink-soft">
-                  <th className="pb-2">Aluno</th>
-                  <th className="pb-2">Curso</th>
-                  <th className="pb-2">Código</th>
-                  <th className="pb-2">Concluído em</th>
-                  <th className="pb-2">Emitido em</th>
-                  <th className="pb-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredCertificates.map((c) => (
-                  <tr key={c.id} className="border-t border-navy-light/60">
-                    <td className="py-2 font-medium text-ink">{c.student_name}</td>
-                    <td className="py-2 text-ink-soft">{c.track_title}</td>
-                    <td className="py-2 font-mono text-xs text-ink-soft">{c.code}</td>
-                    <td className="py-2 text-ink-soft">
-                      {c.completed_at ? new Date(c.completed_at).toLocaleDateString('pt-BR') : '—'}
-                    </td>
-                    <td className="py-2 text-ink-soft">{new Date(c.issued_at).toLocaleDateString('pt-BR')}</td>
-                    <td className="py-2 text-right">
-                      <a
-                        href={`/validar-certificado?codigo=${c.code}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs font-semibold text-navy hover:underline"
-                      >
-                        Ver certificado
-                      </a>
-                    </td>
-                  </tr>
-                ))}
-                {filteredCertificates.length === 0 && (
-                  <tr><td colSpan={6} className="py-3 text-ink-soft">Nenhum certificado encontrado com esses filtros.</td></tr>
                 )}
               </tbody>
             </table>
