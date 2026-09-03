@@ -29,6 +29,7 @@ import { MeuPerfil } from './pages/aluno/MeuPerfil'
 import { PerfilPublico } from './pages/aluno/PerfilPublico'
 import { Ranking } from './pages/aluno/Ranking'
 import { Moderador } from './pages/moderador/Moderador'
+import { AtivarConta } from './pages/public/AtivarConta'
 import { Entrar } from './pages/public/Entrar'
 import { Estande } from './pages/public/Estande'
 import { Privacidade } from './pages/public/Privacidade'
@@ -47,6 +48,7 @@ function App() {
         <Route path="/estande" element={<Estande />} />
         <Route path="/resultado" element={<Resultado />} />
         <Route path="/entrar" element={<Entrar />} />
+        <Route path="/ativar-conta" element={<AtivarConta />} />
         <Route path="/recuperar-senha" element={<RecuperarSenha />} />
         <Route path="/validar-certificado" element={<ValidarCertificado />} />
         <Route path="/termos" element={<Termos />} />

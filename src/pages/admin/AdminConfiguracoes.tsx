@@ -401,6 +401,44 @@ function SignupSection() {
           {settings.requireTermsAcceptance && (
             <p className="text-xs text-ink-soft">Configure o link dos Termos de Uso na seção "Legal / LGPD" abaixo.</p>
           )}
+
+          <div className="border-t border-navy-light pt-3">
+            <label className="block text-xs font-semibold text-ink-soft">Como novos cadastros são ativados</label>
+            <div className="mt-2 space-y-2">
+              <label className="flex items-start gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
+                <input
+                  type="radio"
+                  name="activationMethod"
+                  className="mt-0.5"
+                  checked={settings.activationMethod === 'magic_link'}
+                  onChange={() => setSettings({ ...settings, activationMethod: 'magic_link' })}
+                />
+                <span>
+                  Link mágico por e-mail
+                  <span className="mt-0.5 block text-xs font-normal text-ink-soft">
+                    O aluno recebe um e-mail e define a senha assim que clica no link (comportamento atual).
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
+                <input
+                  type="radio"
+                  name="activationMethod"
+                  className="mt-0.5"
+                  checked={settings.activationMethod === 'default_password'}
+                  onChange={() => setSettings({ ...settings, activationMethod: 'default_password' })}
+                />
+                <span>
+                  Senha padrão (Mudar@123)
+                  <span className="mt-0.5 block text-xs font-normal text-ink-soft">
+                    A conta já é criada com a senha "Mudar@123" e o aluno vai direto para uma tela de ativação, sem
+                    depender de e-mail. Requer que a opção "Confirm email" esteja desligada no painel do Supabase
+                    (Authentication → Settings) — senão o login com a senha padrão não funciona.
+                  </span>
+                </span>
+              </label>
+            </div>
+          </div>
         </div>
       )}
     </SectionShell>

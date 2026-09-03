@@ -56,6 +56,21 @@ export function AdminUsuarios() {
     setBusy(false)
   }
 
+  async function resetPassword(ids: string[]) {
+    const label = ids.length === 1 ? 'este aluno' : `${ids.length} alunos selecionados`
+    if (
+      !(await confirm(
+        `Resetar a senha de ${label} para "Mudar@123"? No próximo login, será obrigatório definir uma nova senha antes de continuar. Essa ação não pode ser desfeita.`,
+        { danger: true, confirmLabel: 'Resetar senha' },
+      ))
+    )
+      return
+    setBusy(true)
+    await Promise.all(ids.map((id) => supabase.rpc('admin_reset_password_to_default', { p_user_id: id })))
+    setUsers((prev) => prev.map((u) => (ids.includes(u.id) ? { ...u, password_set: false } : u)))
+    setBusy(false)
+  }
+
   function toggleSelected(id: string) {
     setSelected((prev) => {
       const next = new Set(prev)
@@ -91,6 +106,13 @@ export function AdminUsuarios() {
             className="rounded-lg border border-brand-red/30 bg-surface px-3 py-1.5 text-xs font-semibold text-brand-red hover:border-brand-red disabled:opacity-50"
           >
             Resetar pontos
+          </button>
+          <button
+            onClick={() => resetPassword(selectedIds)}
+            disabled={busy}
+            className="rounded-lg border border-brand-red/30 bg-surface px-3 py-1.5 text-xs font-semibold text-brand-red hover:border-brand-red disabled:opacity-50"
+          >
+            Resetar senha
           </button>
         </div>
       )}
@@ -148,6 +170,13 @@ export function AdminUsuarios() {
                       className="rounded-lg border border-brand-red/30 px-2.5 py-1 text-xs font-semibold text-brand-red hover:border-brand-red disabled:opacity-50"
                     >
                       Resetar pontos
+                    </button>
+                    <button
+                      onClick={() => resetPassword([u.id])}
+                      disabled={busy}
+                      className="rounded-lg border border-brand-red/30 px-2.5 py-1 text-xs font-semibold text-brand-red hover:border-brand-red disabled:opacity-50"
+                    >
+                      Resetar senha
                     </button>
                   </div>
                 </td>

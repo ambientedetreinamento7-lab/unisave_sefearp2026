@@ -57,6 +57,7 @@ const DEFAULT_SIGNUP: SignupSettings = {
   open: true,
   closedMessage: 'Os cadastros estão temporariamente encerrados. Volte em breve.',
   requireTermsAcceptance: false,
+  activationMethod: 'magic_link',
 }
 
 export async function getSignupSettings(): Promise<SignupSettings> {

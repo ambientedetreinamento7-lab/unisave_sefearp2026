@@ -93,13 +93,23 @@ export function Estande() {
       })
       if (captureError) throw captureError
 
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: `${window.location.origin}/dashboard` },
-      })
-      if (otpError) throw otpError
+      if (signup?.activationMethod === 'default_password') {
+        // Cria a conta já com a senha padrão, pra não depender de e-mail —
+        // se o visitante reenviar o quiz com o mesmo e-mail antes de
+        // ativar, a conta já existe e o erro é esperado, ignora.
+        const { error: signUpError } = await supabase.auth.signUp({ email, password: 'Mudar@123' })
+        if (signUpError && !/already registered/i.test(signUpError.message)) throw signUpError
 
-      navigate('/resultado', { state: { profile: diagnostic_profile, program, name, email } })
+        navigate('/ativar-conta', { state: { email } })
+      } else {
+        const { error: otpError } = await supabase.auth.signInWithOtp({
+          email,
+          options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+        })
+        if (otpError) throw otpError
+
+        navigate('/resultado', { state: { profile: diagnostic_profile, program, name, email } })
+      }
     } catch (err) {
       console.error('Falha ao enviar o quiz PDI Express:', err)
       setError(err instanceof Error ? err.message : 'Não foi possível enviar. Tente novamente.')

@@ -182,6 +182,7 @@ export interface SignupSettings {
   open: boolean
   closedMessage: string
   requireTermsAcceptance: boolean
+  activationMethod: 'magic_link' | 'default_password'
 }
 
 export interface ModuleCompletionSettings {

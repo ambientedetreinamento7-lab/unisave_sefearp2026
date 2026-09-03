@@ -1017,6 +1017,33 @@ $$;
 
 grant execute on function public.reset_password_with_birth_date(text, date, text) to anon;
 
+-- Admin → Usuários: reset de senha pra um valor padrão fixo, pra quando
+-- o aluno perde acesso e não pode usar nenhum dos fluxos de autoatendimento
+-- acima. Mesma técnica de reset_password_with_birth_date (troca direto
+-- em auth.users via pgcrypto), mas a guarda aqui é "quem está chamando é
+-- admin", não um segredo do próprio aluno — só quem já está autenticado
+-- como admin pode executar.
+create or replace function public.admin_reset_password_to_default(p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not current_role_is('admin') then
+    raise exception 'Apenas administradores podem executar esta ação';
+  end if;
+
+  update auth.users
+  set encrypted_password = extensions.crypt('Mudar@123', extensions.gen_salt('bf'))
+  where id = p_user_id;
+
+  update profiles set password_set = false where id = p_user_id;
+end;
+$$;
+
+grant execute on function public.admin_reset_password_to_default(uuid) to authenticated;
+
 create policy "self manage progress" on user_progress for all
   using (auth.uid() = user_id or current_role_is('moderador') or current_role_is('admin'))
   with check (auth.uid() = user_id);
