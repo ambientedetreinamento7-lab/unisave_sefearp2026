@@ -72,6 +72,7 @@ export interface Track {
   program_id: string | null
   diagnostic_profile: DiagnosticProfile | null
   category_id: string | null
+  skill_category_id: string | null
   objetivo_geral: string | null
   publico_alvo: string | null
   pre_requisitos: string | null

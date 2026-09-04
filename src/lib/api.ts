@@ -805,6 +805,13 @@ export async function getAllTracks(): Promise<Track[]> {
   return (data as Track[]) ?? []
 }
 
+/** Cursos publicados que desenvolvem uma competência específica — usado
+ * pra sugerir cursos ao clicar num item de competência ("0/4") em Meu PDI. */
+export async function getTracksBySkillCategory(skillCategoryId: string): Promise<Track[]> {
+  const { data } = await supabase.from('tracks').select('*').eq('skill_category_id', skillCategoryId).eq('published', true)
+  return (data as Track[]) ?? []
+}
+
 /**
  * Recalcula a faixa de desempenho (spec: metodologia de PDI 70-20-10) a
  * partir do Balanço de Competências e grava em todos os planos do aluno.

@@ -17,6 +17,7 @@ import {
   getPlanItems,
   getSkillCategories,
   getSkillRatings,
+  getTracksBySkillCategory,
   getUserPlans,
   recomputeAndSaveTier,
   removePlan,
@@ -210,34 +211,29 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
   const [labels, setLabels] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
 
+  async function loadItems() {
+    const planItems = await getPlanItems(plan.id)
+    setItems(planItems)
+
+    const pillIds = planItems.filter((i) => i.item_type === 'pill').map((i) => i.ref_id)
+    const skillIds = planItems.filter((i) => i.item_type === 'skill_category').map((i) => i.ref_id)
+
+    const labelMap: Record<string, string> = {}
+    if (pillIds.length) {
+      const { data } = await supabase.from('pills').select('id,title').in('id', pillIds)
+      for (const row of (data as Pick<Pill, 'id' | 'title'>[]) ?? []) labelMap[row.id] = row.title
+    }
+    if (skillIds.length) {
+      const { data } = await supabase.from('skill_categories').select('id,name').in('id', skillIds)
+      for (const row of (data as Pick<SkillCategory, 'id' | 'name'>[]) ?? []) labelMap[row.id] = row.name
+    }
+    setLabels(labelMap)
+    setLoading(false)
+  }
+
   useEffect(() => {
-    let cancelled = false
-    async function load() {
-      const planItems = await getPlanItems(plan.id)
-      if (cancelled) return
-      setItems(planItems)
-
-      const pillIds = planItems.filter((i) => i.item_type === 'pill').map((i) => i.ref_id)
-      const skillIds = planItems.filter((i) => i.item_type === 'skill_category').map((i) => i.ref_id)
-
-      const labelMap: Record<string, string> = {}
-      if (pillIds.length) {
-        const { data } = await supabase.from('pills').select('id,title').in('id', pillIds)
-        for (const row of (data as Pick<Pill, 'id' | 'title'>[]) ?? []) labelMap[row.id] = row.title
-      }
-      if (skillIds.length) {
-        const { data } = await supabase.from('skill_categories').select('id,name').in('id', skillIds)
-        for (const row of (data as Pick<SkillCategory, 'id' | 'name'>[]) ?? []) labelMap[row.id] = row.name
-      }
-      if (!cancelled) {
-        setLabels(labelMap)
-        setLoading(false)
-      }
-    }
-    load()
-    return () => {
-      cancelled = true
-    }
+    loadItems()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan.id])
 
   const pct = useMemo(() => {
@@ -322,7 +318,7 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
                 <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{BUCKET_LABEL[bucket]}</p>
                 <div className="mt-1 divide-y divide-navy-light/60">
                   {grouped[bucket].map((item) => (
-                    <ItemRow key={item.id} item={item} label={labels[item.ref_id] ?? item.ref_id} />
+                    <ItemRow key={item.id} item={item} label={labels[item.ref_id] ?? item.ref_id} planId={plan.id} onAdded={loadItems} />
                   ))}
                 </div>
               </div>
@@ -331,7 +327,7 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
         {!loading && ungrouped.length > 0 && (
           <div className="divide-y divide-navy-light/60">
             {ungrouped.map((item) => (
-              <ItemRow key={item.id} item={item} label={labels[item.ref_id] ?? item.ref_id} />
+              <ItemRow key={item.id} item={item} label={labels[item.ref_id] ?? item.ref_id} planId={plan.id} onAdded={loadItems} />
             ))}
           </div>
         )}
@@ -345,14 +341,87 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
   )
 }
 
-function ItemRow({ item, label }: { item: PdiPlanItem; label: string }) {
+function ItemRow({
+  item,
+  label,
+  planId,
+  onAdded,
+}: {
+  item: PdiPlanItem
+  label: string
+  planId: string
+  onAdded: () => Promise<void>
+}) {
+  const isSkill = item.item_type === 'skill_category'
+  const [open, setOpen] = useState(false)
+  const [loadingTracks, setLoadingTracks] = useState(false)
+  const [suggested, setSuggested] = useState<Track[] | null>(null)
+  const [addingId, setAddingId] = useState<string | null>(null)
+
+  async function toggle() {
+    if (!isSkill) return
+    if (open) {
+      setOpen(false)
+      return
+    }
+    setOpen(true)
+    if (suggested === null) {
+      setLoadingTracks(true)
+      setSuggested(await getTracksBySkillCategory(item.ref_id))
+      setLoadingTracks(false)
+    }
+  }
+
+  async function handleAdd(track: Track) {
+    setAddingId(track.id)
+    await addTrackToPlan(planId, track.id)
+    await onAdded()
+    setAddingId(null)
+  }
+
   return (
-    <div className="flex items-center gap-3 py-2.5">
-      <StatusCircle status={item.status} />
-      <span className="flex-1 text-sm font-medium text-navy">{label}</span>
-      <span className="text-xs text-ink-soft">
-        {item.progress_current} / {item.progress_total}
-      </span>
+    <div className="py-2.5">
+      <div
+        className={`flex items-center gap-3 ${isSkill ? 'cursor-pointer' : ''}`}
+        onClick={toggle}
+        role={isSkill ? 'button' : undefined}
+      >
+        <StatusCircle status={item.status} />
+        <span className="flex-1 text-sm font-medium text-navy">{label}</span>
+        <span className="text-xs text-ink-soft">
+          {item.progress_current} / {item.progress_total}
+        </span>
+        {isSkill && <span className="text-xs text-ink-soft">{open ? '▲' : '▼'}</span>}
+      </div>
+
+      {isSkill && open && (
+        <div className="ml-7 mt-2 rounded-xl bg-bg p-3">
+          {loadingTracks && <p className="text-xs text-ink-soft">Buscando cursos…</p>}
+          {!loadingTracks && suggested && suggested.length === 0 && (
+            <p className="text-xs text-ink-soft">Nenhum curso vinculado a esta competência ainda.</p>
+          )}
+          {!loadingTracks && suggested && suggested.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Cursos sugeridos</p>
+              {suggested.map((track) => (
+                <div key={track.id} className="flex items-center gap-3 rounded-lg bg-surface p-2">
+                  {track.thumbnail_url && (
+                    <img src={track.thumbnail_url} alt="" className="h-10 w-16 shrink-0 rounded object-cover" />
+                  )}
+                  <span className="flex-1 text-sm font-medium text-ink">{track.title}</span>
+                  <button
+                    onClick={() => handleAdd(track)}
+                    disabled={addingId === track.id}
+                    className="shrink-0 rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-dark disabled:opacity-60"
+                  >
+                    {addingId === track.id ? 'Adicionando…' : '+ Adicionar ao PDI'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

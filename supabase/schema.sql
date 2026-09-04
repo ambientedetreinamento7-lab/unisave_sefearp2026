@@ -189,6 +189,13 @@ create table categories (
 alter table tracks add column category_id uuid references categories(id) on delete set null;
 create index on tracks (category_id);
 
+-- Competência do PDI que este curso desenvolve (spec: Meu PDI sugerir
+-- cursos ao clicar numa competência "0/4") — nulo até o admin escolher
+-- uma, e só faz sentido depois de escolher o programa do curso, já que
+-- skill_categories é escopado por program_id.
+alter table tracks add column skill_category_id uuid references skill_categories(id) on delete set null;
+create index on tracks (skill_category_id);
+
 create table pills (
   id uuid primary key default gen_random_uuid(),
   track_id uuid not null references tracks(id) on delete cascade,

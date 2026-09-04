@@ -6,7 +6,7 @@ import { RichTextEditor } from '../../components/RichTextEditor'
 import { getReactionSurveys, linkPillToTrack, unlinkPillFromTrack } from '../../lib/api'
 import { formatCargaHoraria } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
-import type { Category, CertificateTemplate, ContentType, DiagnosticProfile, Pill, Program, ReactionSurvey, ScormLibraryItem, Track, TrackPill } from '../../types/database'
+import type { Category, CertificateTemplate, ContentType, DiagnosticProfile, Pill, Program, ReactionSurvey, ScormLibraryItem, SkillCategory, Track, TrackPill } from '../../types/database'
 
 async function uploadCover(file: File, folder: string): Promise<string> {
   const path = `${folder}/${crypto.randomUUID()}-${file.name}`
@@ -74,6 +74,8 @@ export function AdminCursoDetalhe() {
   const [programId, setProgramId] = useState('')
   const [profile, setProfile] = useState<DiagnosticProfile | ''>('')
   const [categoryId, setCategoryId] = useState('')
+  const [skillCategoryId, setSkillCategoryId] = useState('')
+  const [skillCategories, setSkillCategories] = useState<SkillCategory[]>([])
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [removeCover, setRemoveCover] = useState(false)
@@ -94,15 +96,17 @@ export function AdminCursoDetalhe() {
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const [{ data: prog }, { data: cat }, { data: certs }] = await Promise.all([
+      const [{ data: prog }, { data: cat }, { data: certs }, { data: skills }] = await Promise.all([
         supabase.from('programs').select('*'),
         supabase.from('categories').select('*').order('order_index'),
         supabase.from('certificate_templates').select('*').order('name'),
+        supabase.from('skill_categories').select('*').order('name'),
       ])
       if (cancelled) return
       setPrograms((prog as Program[]) ?? [])
       setCategories((cat as Category[]) ?? [])
       setCertificateTemplates((certs as CertificateTemplate[]) ?? [])
+      setSkillCategories((skills as SkillCategory[]) ?? [])
       if (!isNew && id) {
         const { data: t } = await supabase.from('tracks').select('*').eq('id', id).single()
         if (cancelled) return
@@ -128,6 +132,7 @@ export function AdminCursoDetalhe() {
           setProgramId(row.program_id ?? '')
           setProfile(row.diagnostic_profile ?? '')
           setCategoryId(row.category_id ?? '')
+          setSkillCategoryId(row.skill_category_id ?? '')
         }
         await reloadAulas(id)
       }
@@ -172,6 +177,7 @@ export function AdminCursoDetalhe() {
         program_id: programId || null,
         diagnostic_profile: profile || null,
         category_id: categoryId || null,
+        skill_category_id: skillCategoryId || null,
         cover_url: coverUrl,
         thumbnail_url: thumbnailUrl,
       }
@@ -344,10 +350,38 @@ export function AdminCursoDetalhe() {
           <label className="block text-xs font-semibold text-ink-soft">
             Programa <span className="font-normal normal-case text-ink-soft/70">(opcional — pode vincular depois)</span>
           </label>
-          <select className="w-full rounded-xl border border-navy-light px-4 py-3" value={programId} onChange={(e) => setProgramId(e.target.value)}>
+          <select
+            className="w-full rounded-xl border border-navy-light px-4 py-3"
+            value={programId}
+            onChange={(e) => {
+              setProgramId(e.target.value)
+              setSkillCategoryId('')
+            }}
+          >
             <option value="">Não definido</option>
             {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
+
+          <label className="block text-xs font-semibold text-ink-soft">
+            Competência do PDI{' '}
+            <span className="font-normal normal-case text-ink-soft/70">
+              (opcional — sugerido pro aluno ao clicar na competência em Meu PDI)
+            </span>
+          </label>
+          {programId ? (
+            <select
+              className="w-full rounded-xl border border-navy-light px-4 py-3"
+              value={skillCategoryId}
+              onChange={(e) => setSkillCategoryId(e.target.value)}
+            >
+              <option value="">Nenhuma</option>
+              {skillCategories
+                .filter((s) => s.program_id === programId)
+                .map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          ) : (
+            <p className="text-xs text-ink-soft">Escolha um programa acima para poder vincular uma competência.</p>
+          )}
 
           <label className="block text-xs font-semibold text-ink-soft">
             Perfil <span className="font-normal normal-case text-ink-soft/70">(opcional — pode vincular depois)</span>
