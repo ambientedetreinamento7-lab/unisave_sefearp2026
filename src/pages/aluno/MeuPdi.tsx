@@ -18,6 +18,7 @@ import {
   getSkillCategories,
   getSkillRatings,
   getTracksBySkillCategory,
+  getTrackWithPills,
   getUserPlans,
   recomputeAndSaveTier,
   removePlan,
@@ -318,7 +319,14 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
                 <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{BUCKET_LABEL[bucket]}</p>
                 <div className="mt-1 divide-y divide-navy-light/60">
                   {grouped[bucket].map((item) => (
-                    <ItemRow key={item.id} item={item} label={labels[item.ref_id] ?? item.ref_id} planId={plan.id} onAdded={loadItems} />
+                    <ItemRow
+                      key={item.id}
+                      item={item}
+                      label={labels[item.ref_id] ?? item.ref_id}
+                      planId={plan.id}
+                      planItems={items}
+                      onAdded={loadItems}
+                    />
                   ))}
                 </div>
               </div>
@@ -327,7 +335,14 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
         {!loading && ungrouped.length > 0 && (
           <div className="divide-y divide-navy-light/60">
             {ungrouped.map((item) => (
-              <ItemRow key={item.id} item={item} label={labels[item.ref_id] ?? item.ref_id} planId={plan.id} onAdded={loadItems} />
+              <ItemRow
+                key={item.id}
+                item={item}
+                label={labels[item.ref_id] ?? item.ref_id}
+                planId={plan.id}
+                planItems={items}
+                onAdded={loadItems}
+              />
             ))}
           </div>
         )}
@@ -341,22 +356,46 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
   )
 }
 
+const TRACK_STATUS_LABEL: Record<'completed' | 'in_progress' | 'not_started', string> = {
+  completed: 'Concluído',
+  in_progress: 'Em andamento',
+  not_started: 'Ainda não iniciado',
+}
+
+const TRACK_STATUS_COLOR: Record<'completed' | 'in_progress' | 'not_started', string> = {
+  completed: 'bg-success',
+  in_progress: 'bg-navy',
+  not_started: 'bg-gray-300 text-ink-soft',
+}
+
 function ItemRow({
   item,
   label,
   planId,
+  planItems,
   onAdded,
 }: {
   item: PdiPlanItem
   label: string
   planId: string
+  planItems: PdiPlanItem[]
   onAdded: () => Promise<void>
 }) {
   const isSkill = item.item_type === 'skill_category'
   const [open, setOpen] = useState(false)
   const [loadingTracks, setLoadingTracks] = useState(false)
   const [suggested, setSuggested] = useState<Track[] | null>(null)
+  const [trackPillsMap, setTrackPillsMap] = useState<Map<string, Pill[]>>(new Map())
   const [addingId, setAddingId] = useState<string | null>(null)
+
+  // Pill items já presentes no plano — usado pra saber se um curso sugerido
+  // já foi adicionado (e então mostrar o andamento dele em vez do botão
+  // "+ Adicionar", que ficaria enganoso repetido pro mesmo curso).
+  const addedPillMap = useMemo(() => {
+    const map = new Map<string, PdiPlanItem>()
+    for (const i of planItems) if (i.item_type === 'pill') map.set(i.ref_id, i)
+    return map
+  }, [planItems])
 
   async function toggle() {
     if (!isSkill) return
@@ -367,7 +406,12 @@ function ItemRow({
     setOpen(true)
     if (suggested === null) {
       setLoadingTracks(true)
-      setSuggested(await getTracksBySkillCategory(item.ref_id))
+      const tracks = await getTracksBySkillCategory(item.ref_id)
+      const withPills = await Promise.all(tracks.map((t) => getTrackWithPills(t.id)))
+      const map = new Map<string, Pill[]>()
+      tracks.forEach((t, idx) => map.set(t.id, withPills[idx].pills))
+      setTrackPillsMap(map)
+      setSuggested(tracks)
       setLoadingTracks(false)
     }
   }
@@ -403,21 +447,53 @@ function ItemRow({
           {!loadingTracks && suggested && suggested.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Cursos sugeridos</p>
-              {suggested.map((track) => (
-                <div key={track.id} className="flex items-center gap-3 rounded-lg bg-surface p-2">
-                  {track.thumbnail_url && (
-                    <img src={track.thumbnail_url} alt="" className="h-10 w-16 shrink-0 rounded object-cover" />
-                  )}
-                  <span className="flex-1 text-sm font-medium text-ink">{track.title}</span>
-                  <button
-                    onClick={() => handleAdd(track)}
-                    disabled={addingId === track.id}
-                    className="shrink-0 rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-dark disabled:opacity-60"
-                  >
-                    {addingId === track.id ? 'Adicionando…' : '+ Adicionar ao PDI'}
-                  </button>
-                </div>
-              ))}
+              {suggested.map((track) => {
+                const pills = trackPillsMap.get(track.id) ?? []
+                const matchedItems = pills
+                  .map((p) => addedPillMap.get(p.id))
+                  .filter((i): i is PdiPlanItem => !!i)
+                const alreadyAdded = matchedItems.length > 0
+                const total = pills.length
+                const completedCount = matchedItems.filter((i) => i.status === 'concluido').length
+                const startedCount = matchedItems.filter((i) => i.status !== 'nao_iniciado').length
+                const pct = total ? Math.round((completedCount / total) * 100) : 0
+                const status: 'completed' | 'in_progress' | 'not_started' =
+                  total > 0 && completedCount === total ? 'completed' : startedCount > 0 ? 'in_progress' : 'not_started'
+
+                return (
+                  <div key={track.id} className="flex items-center gap-3 rounded-lg bg-surface p-2">
+                    {track.thumbnail_url && (
+                      <img src={track.thumbnail_url} alt="" className="h-10 w-16 shrink-0 rounded object-cover" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-ink">{track.title}</span>
+                      {alreadyAdded && (
+                        <div className="mt-1">
+                          <div className="flex items-center justify-between text-[11px] font-semibold text-ink-soft">
+                            <span>{pct}% concluído</span>
+                          </div>
+                          <ProgressBar value={pct} />
+                        </div>
+                      )}
+                    </div>
+                    {alreadyAdded ? (
+                      <span
+                        className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold text-white ${TRACK_STATUS_COLOR[status]}`}
+                      >
+                        {TRACK_STATUS_LABEL[status]}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleAdd(track)}
+                        disabled={addingId === track.id}
+                        className="shrink-0 rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-dark disabled:opacity-60"
+                      >
+                        {addingId === track.id ? 'Adicionando…' : '+ Adicionar ao PDI'}
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
