@@ -655,6 +655,28 @@ export async function getPlanItems(planId: string): Promise<PdiPlanItem[]> {
   return (data as PdiPlanItem[]) ?? []
 }
 
+/**
+ * Cursos (pills) que o aluno já adicionou a qualquer um dos seus planos de
+ * PDI — usado na seção "Meu PDI" do Dashboard. Ignora silenciosamente itens
+ * de item_type='skill_category' (e o não usado 'trilha'), já que ref_id
+ * nesses casos não é um pills.id.
+ */
+export async function getPdiCoursePills(userId: string): Promise<Pill[]> {
+  const plans = await getUserPlans(userId)
+  if (plans.length === 0) return []
+
+  const { data: items } = await supabase
+    .from('pdi_plan_items')
+    .select('ref_id')
+    .in('plan_id', plans.map((p) => p.id))
+    .eq('item_type', 'pill')
+  const pillIds = [...new Set(((items as { ref_id: string }[]) ?? []).map((i) => i.ref_id))]
+  if (pillIds.length === 0) return []
+
+  const { data: pills } = await supabase.from('pills').select('*').in('id', pillIds)
+  return (pills as Pill[]) ?? []
+}
+
 export async function createPlan(
   userId: string,
   title: string,

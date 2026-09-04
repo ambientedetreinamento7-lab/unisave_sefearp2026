@@ -18,6 +18,7 @@ import {
   getInProgressPills,
   getMostAccessedPills,
   getMultiModuleTracks,
+  getPdiCoursePills,
   getRecentlyAddedPills,
   getRecommendedPills,
   getRequiredPills,
@@ -107,6 +108,7 @@ export function Dashboard() {
   const [sectionPills, setSectionPills] = useState<Record<string, Pill[]>>({})
   const [multiModuleTracks, setMultiModuleTracks] = useState<Map<string, { track: Track; pills: Pill[] }>>(new Map())
   const [bannerTracks, setBannerTracks] = useState<{ track: Track; pills: Pill[] }[]>([])
+  const [pdiPills, setPdiPills] = useState<Pill[]>([])
 
   useEffect(() => {
     if (!profile) return
@@ -138,12 +140,13 @@ export function Dashboard() {
       }
       recommendedPills = await getRecommendedPills(profile!.program_id, profile!.diagnostic_profile, progressMap)
 
-      const [inProgress, recent, favorites, mostAccessed, required] = await Promise.all([
+      const [inProgress, recent, favorites, mostAccessed, required, pdiCourses] = await Promise.all([
         getInProgressPills(profile!.id),
         getRecentlyAddedPills(10),
         getFavoritePills(profile!.id),
         getMostAccessedPills(10),
         getRequiredPills(),
+        getPdiCoursePills(profile!.id),
       ])
       if (cancelled) return
       const sectionPillsResult = {
@@ -155,12 +158,15 @@ export function Dashboard() {
         obrigatorios: required,
       }
       setSectionPills(sectionPillsResult)
+      setPdiPills(pdiCourses)
 
       // "Curso com Módulos" (trilha sequencial com 2+ pílulas) deve aparecer
       // como 1 card por curso em vez de 1 card por módulo — diferente de
       // uma trilha curada comum, cujas pílulas continuam sendo browsáveis
       // individualmente (não é sequencial).
-      const allTrackIds = [...pills, ...Object.values(sectionPillsResult).flat()].map((p) => p.track_id)
+      const allTrackIds = [...pills, ...Object.values(sectionPillsResult).flat(), ...pdiCourses].map(
+        (p) => p.track_id,
+      )
       const tracksMap = await getMultiModuleTracks(allTrackIds)
       if (!cancelled) setMultiModuleTracks(tracksMap)
 
@@ -330,6 +336,16 @@ export function Dashboard() {
 
             {tab === 'trilha' && (
               <div className="mt-5 space-y-8">
+                {pdiPills.length > 0 && (
+                  <CourseRow
+                    title="Meu PDI"
+                    pills={pdiPills}
+                    progress={progress}
+                    favoriteIds={favoriteIds}
+                    onToggleFavorite={handleToggleFavorite}
+                    multiModuleTracks={multiModuleTracks}
+                  />
+                )}
                 {sections
                   .filter((s) => s.enabled && (sectionPills[s.key]?.length ?? 0) > 0)
                   .map((s) => (
@@ -343,11 +359,12 @@ export function Dashboard() {
                       multiModuleTracks={multiModuleTracks}
                     />
                   ))}
-                {sections.filter((s) => s.enabled && (sectionPills[s.key]?.length ?? 0) > 0).length === 0 && (
-                  <p className="text-ink-soft">
-                    Nada por aqui ainda — explore o catálogo completo pra começar a montar sua trilha.
-                  </p>
-                )}
+                {pdiPills.length === 0 &&
+                  sections.filter((s) => s.enabled && (sectionPills[s.key]?.length ?? 0) > 0).length === 0 && (
+                    <p className="text-ink-soft">
+                      Nada por aqui ainda — explore o catálogo completo pra começar a montar sua trilha.
+                    </p>
+                  )}
               </div>
             )}
 
