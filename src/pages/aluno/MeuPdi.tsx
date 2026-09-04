@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { useConfirm } from '../../components/ConfirmDialog'
 import { ProgressBar } from '../../components/ProgressBar'
@@ -20,6 +21,7 @@ import {
   getTracksBySkillCategory,
   getTrackWithPills,
   getUserPlans,
+  getUserProgressMap,
   recomputeAndSaveTier,
   removePlan,
   upsertSelfRating,
@@ -27,7 +29,18 @@ import {
 import { getProgramJourney, JORNADA_CADENCE, TIER_META } from '../../lib/pdiJourneys'
 import { TIER_LABEL, TIER_RANGE } from '../../lib/pdiTier'
 import { supabase } from '../../lib/supabase'
-import type { DiagnosticProfile, PdiJornadaBucket, PdiPlan, PdiPlanItem, PdiTier, Pill, SkillCategory, SkillRating, Track } from '../../types/database'
+import type {
+  DiagnosticProfile,
+  PdiJornadaBucket,
+  PdiPlan,
+  PdiPlanItem,
+  PdiTier,
+  Pill,
+  SkillCategory,
+  SkillRating,
+  Track,
+  UserProgress,
+} from '../../types/database'
 
 const TIER_BADGE_CLASS: Record<PdiTier, string> = {
   abaixo: 'bg-amber-50 text-amber-700',
@@ -210,11 +223,13 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
   const confirm = useConfirm()
   const [items, setItems] = useState<PdiPlanItem[]>([])
   const [labels, setLabels] = useState<Record<string, string>>({})
+  const [progress, setProgress] = useState<Record<string, UserProgress>>({})
   const [loading, setLoading] = useState(true)
 
   async function loadItems() {
-    const planItems = await getPlanItems(plan.id)
+    const [planItems, progressMap] = await Promise.all([getPlanItems(plan.id), getUserProgressMap(plan.user_id)])
     setItems(planItems)
+    setProgress(progressMap)
 
     const pillIds = planItems.filter((i) => i.item_type === 'pill').map((i) => i.ref_id)
     const skillIds = planItems.filter((i) => i.item_type === 'skill_category').map((i) => i.ref_id)
@@ -325,6 +340,7 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
                       label={labels[item.ref_id] ?? item.ref_id}
                       planId={plan.id}
                       planItems={items}
+                      progress={progress}
                       onAdded={loadItems}
                     />
                   ))}
@@ -341,6 +357,7 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
                 label={labels[item.ref_id] ?? item.ref_id}
                 planId={plan.id}
                 planItems={items}
+                progress={progress}
                 onAdded={loadItems}
               />
             ))}
@@ -373,12 +390,14 @@ function ItemRow({
   label,
   planId,
   planItems,
+  progress,
   onAdded,
 }: {
   item: PdiPlanItem
   label: string
   planId: string
   planItems: PdiPlanItem[]
+  progress: Record<string, UserProgress>
   onAdded: () => Promise<void>
 }) {
   const isSkill = item.item_type === 'skill_category'
@@ -449,19 +468,21 @@ function ItemRow({
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Cursos sugeridos</p>
               {suggested.map((track) => {
                 const pills = trackPillsMap.get(track.id) ?? []
-                const matchedItems = pills
-                  .map((p) => addedPillMap.get(p.id))
-                  .filter((i): i is PdiPlanItem => !!i)
-                const alreadyAdded = matchedItems.length > 0
+                const alreadyAdded = pills.some((p) => addedPillMap.has(p.id))
                 const total = pills.length
-                const completedCount = matchedItems.filter((i) => i.status === 'concluido').length
-                const startedCount = matchedItems.filter((i) => i.status !== 'nao_iniciado').length
+                // O andamento real vem do progresso de consumo do curso
+                // (user_progress), igual ao card do Dashboard — não do
+                // status do item do PDI, que só reflete a conclusão total.
+                const completedCount = pills.filter((p) => progress[p.id]?.status === 'completed').length
+                const startedCount = pills.filter((p) => progress[p.id]?.status !== undefined).length
                 const pct = total ? Math.round((completedCount / total) * 100) : 0
                 const status: 'completed' | 'in_progress' | 'not_started' =
                   total > 0 && completedCount === total ? 'completed' : startedCount > 0 ? 'in_progress' : 'not_started'
+                const linkPillId =
+                  (pills.find((p) => progress[p.id]?.status !== 'completed') ?? pills[0])?.id ?? null
 
-                return (
-                  <div key={track.id} className="flex items-center gap-3 rounded-lg bg-surface p-2">
+                const content = (
+                  <>
                     {track.thumbnail_url && (
                       <img src={track.thumbnail_url} alt="" className="h-10 w-16 shrink-0 rounded object-cover" />
                     )}
@@ -484,13 +505,31 @@ function ItemRow({
                       </span>
                     ) : (
                       <button
-                        onClick={() => handleAdd(track)}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleAdd(track)
+                        }}
                         disabled={addingId === track.id}
                         className="shrink-0 rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-dark disabled:opacity-60"
                       >
                         {addingId === track.id ? 'Adicionando…' : '+ Adicionar ao PDI'}
                       </button>
                     )}
+                  </>
+                )
+
+                return linkPillId ? (
+                  <Link
+                    key={track.id}
+                    to={`/curso/${linkPillId}`}
+                    className="flex items-center gap-3 rounded-lg bg-surface p-2 transition hover:bg-navy-light/40"
+                  >
+                    {content}
+                  </Link>
+                ) : (
+                  <div key={track.id} className="flex items-center gap-3 rounded-lg bg-surface p-2">
+                    {content}
                   </div>
                 )
               })}
