@@ -1297,6 +1297,23 @@ select
 from programs p
 cross join (values ('autogestao'), ('tech_ia'), ('lideranca')) as profiles_seed(dp);
 
+-- Vincula cada uma dessas 12 trilhas semente à competência do PDI
+-- correspondente ao seu perfil diagnóstico (spec: Meu PDI sugerir cursos
+-- ao clicar numa competência) — mesmo mapeamento usado no quiz do
+-- /estande: autogestão → "Gestão do Tempo e Autogestão", tech/IA →
+-- "Análise de Dados e Tecnologia", liderança → "Comunicação e
+-- Liderança". "Ética e Responsabilidade Socioambiental" fica sem trilha
+-- padrão — não há um perfil do quiz que mapeie pra ela.
+update tracks set skill_category_id = sc.id
+from skill_categories sc
+where sc.program_id = tracks.program_id
+  and sc.name = case tracks.diagnostic_profile
+    when 'autogestao' then 'Gestão do Tempo e Autogestão'
+    when 'tech_ia' then 'Análise de Dados e Tecnologia'
+    when 'lideranca' then 'Comunicação e Liderança'
+  end
+  and tracks.skill_category_id is null;
+
 -- ============================================================
 -- SEED DATA — Biblioteca de cursos oficiais (spec item 1)
 -- ============================================================

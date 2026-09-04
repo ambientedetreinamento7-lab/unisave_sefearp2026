@@ -805,10 +805,22 @@ export async function getAllTracks(): Promise<Track[]> {
   return (data as Track[]) ?? []
 }
 
-/** Cursos publicados que desenvolvem uma competência específica — usado
- * pra sugerir cursos ao clicar num item de competência ("0/4") em Meu PDI. */
+/**
+ * Cursos publicados que desenvolvem uma competência — usado pra sugerir
+ * cursos ao clicar num item de competência ("0/4") em Meu PDI. Casa por
+ * nome da competência (não só o id exato) porque skill_categories tem
+ * uma linha por programa com o mesmo nome (ex.: "Comunicação e
+ * Liderança" existe uma vez pra cada um dos 4 programas) — um curso
+ * geral da biblioteca vinculado à linha de um programa deve aparecer
+ * igual pros alunos dos outros 3, já que o tema é o mesmo.
+ */
 export async function getTracksBySkillCategory(skillCategoryId: string): Promise<Track[]> {
-  const { data } = await supabase.from('tracks').select('*').eq('skill_category_id', skillCategoryId).eq('published', true)
+  const { data: skill } = await supabase.from('skill_categories').select('name').eq('id', skillCategoryId).maybeSingle()
+  if (!skill) return []
+  const { data: sameName } = await supabase.from('skill_categories').select('id').eq('name', skill.name)
+  const ids = ((sameName as { id: string }[] | null) ?? []).map((s) => s.id)
+  if (ids.length === 0) return []
+  const { data } = await supabase.from('tracks').select('*').in('skill_category_id', ids).eq('published', true)
   return (data as Track[]) ?? []
 }
 
