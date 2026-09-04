@@ -8,6 +8,8 @@ import type {
   DashboardSection,
   DiagnosticProfile,
   IssuedCertificate,
+  PdiItemStatus,
+  PdiItemType,
   PdiJornadaBucket,
   PdiPlan,
   PdiPlanItem,
@@ -401,37 +403,89 @@ export async function completePill(
 }
 
 /**
- * Propaga a conclusão de um curso pros itens do PDI que apontam pra ele
- * (item_type='pill', ref_id=pillId), em qualquer plano do próprio aluno —
- * hoje esse é o único jeito de progress_current/status de um item saírem
- * do estado inicial, já que não existe outro gatilho de sincronização.
+ * Propaga a conclusão de um curso pros itens do PDI que apontam pra ele, em
+ * qualquer plano do próprio aluno — hoje esse é o único jeito de
+ * progress_current/status de um item saírem do estado inicial, já que não
+ * existe outro gatilho de sincronização. Cobre dois casos: um curso avulso
+ * adicionado direto (item_type='pill', ref_id=pillId) e um curso inteiro
+ * adicionado como trilha (item_type='trilha', ref_id=track_id da pílula).
  */
 async function syncPillCompletionToPdi(userId: string, pillId: string, pillTitle: string) {
   const { data: plans } = await supabase.from('pdi_plans').select('id, title').eq('user_id', userId)
   const planRows = (plans as { id: string; title: string }[]) ?? []
   if (planRows.length === 0) return
+  const planIds = planRows.map((p) => p.id)
 
-  const { data: items } = await supabase
+  const { data: pillItems } = await supabase
     .from('pdi_plan_items')
     .select('*')
-    .in('plan_id', planRows.map((p) => p.id))
+    .in('plan_id', planIds)
     .eq('item_type', 'pill')
     .eq('ref_id', pillId)
-  const pendingItems = ((items as PdiPlanItem[]) ?? []).filter((i) => i.status !== 'concluido')
-  if (pendingItems.length === 0) return
+  const pendingPillItems = ((pillItems as PdiPlanItem[]) ?? []).filter((i) => i.status !== 'concluido')
+  if (pendingPillItems.length) {
+    await Promise.all(
+      pendingPillItems.map((item) =>
+        supabase.from('pdi_plan_items').update({ status: 'concluido', progress_current: item.progress_total }).eq('id', item.id),
+      ),
+    )
+  }
 
-  await Promise.all(
-    pendingItems.map((item) =>
-      supabase.from('pdi_plan_items').update({ status: 'concluido', progress_current: item.progress_total }).eq('id', item.id),
-    ),
-  )
+  const { data: pillRow } = await supabase.from('pills').select('track_id').eq('id', pillId).maybeSingle()
+  const trackId = (pillRow as { track_id: string } | null)?.track_id ?? null
+  const trackPlanIds = trackId ? await syncTrackProgressToPdi(userId, trackId, planIds) : []
 
-  const affectedPlanIds = [...new Set(pendingItems.map((i) => i.plan_id))]
+  const affectedPlanIds = [...new Set([...pendingPillItems.map((i) => i.plan_id), ...trackPlanIds])]
+  if (affectedPlanIds.length === 0) return
   for (const planId of affectedPlanIds) {
     await recomputePlanProgress(planId)
     const plan = planRows.find((p) => p.id === planId)
     await notifyPdiProgress(userId, `"${pillTitle}" concluído no plano "${plan?.title ?? ''}"`)
   }
+}
+
+/**
+ * Recalcula progress_current/progress_total/status de qualquer item
+ * item_type='trilha' (ref_id=trackId) nos planos dados, a partir do
+ * progresso real de consumo (user_progress) das pílulas do curso — inclui
+ * a "Avaliação de Reação" na contagem do total, já que ela é só mais uma
+ * pílula do curso, não um item de PDI à parte. Retorna os plan_ids
+ * afetados, pra recomputar o progress_pct do plano.
+ */
+async function syncTrackProgressToPdi(userId: string, trackId: string, planIds: string[]): Promise<string[]> {
+  const { data: trackItems } = await supabase
+    .from('pdi_plan_items')
+    .select('*')
+    .in('plan_id', planIds)
+    .eq('item_type', 'trilha')
+    .eq('ref_id', trackId)
+  const rows = (trackItems as PdiPlanItem[]) ?? []
+  if (rows.length === 0) return []
+
+  const { pills } = await getTrackWithPills(trackId)
+  const { data: progressRows } = await supabase
+    .from('user_progress')
+    .select('pill_id, status')
+    .eq('user_id', userId)
+    .in('pill_id', pills.map((p) => p.id))
+  const completedIds = new Set(
+    ((progressRows as { pill_id: string; status: string }[]) ?? [])
+      .filter((r) => r.status === 'completed')
+      .map((r) => r.pill_id),
+  )
+  const total = Math.max(1, pills.length)
+  const completedCount = pills.filter((p) => completedIds.has(p.id)).length
+  const status: PdiItemStatus = completedCount >= total ? 'concluido' : completedCount > 0 ? 'em_andamento' : 'nao_iniciado'
+
+  await Promise.all(
+    rows.map((item) =>
+      supabase
+        .from('pdi_plan_items')
+        .update({ progress_current: completedCount, progress_total: total, status })
+        .eq('id', item.id),
+    ),
+  )
+  return rows.map((r) => r.plan_id)
 }
 
 async function recomputePlanProgress(planId: string) {
@@ -667,14 +721,23 @@ export async function getPdiCoursePills(userId: string): Promise<Pill[]> {
 
   const { data: items } = await supabase
     .from('pdi_plan_items')
-    .select('ref_id')
+    .select('item_type, ref_id')
     .in('plan_id', plans.map((p) => p.id))
-    .eq('item_type', 'pill')
-  const pillIds = [...new Set(((items as { ref_id: string }[]) ?? []).map((i) => i.ref_id))]
-  if (pillIds.length === 0) return []
+    .in('item_type', ['pill', 'trilha'])
+  const rows = (items as { item_type: PdiItemType; ref_id: string }[]) ?? []
+  const pillIds = [...new Set(rows.filter((r) => r.item_type === 'pill').map((r) => r.ref_id))]
+  const trackIds = [...new Set(rows.filter((r) => r.item_type === 'trilha').map((r) => r.ref_id))]
+  if (pillIds.length === 0 && trackIds.length === 0) return []
 
-  const { data: pills } = await supabase.from('pills').select('*').in('id', pillIds)
-  return (pills as Pill[]) ?? []
+  const [{ data: directPills }, tracksWithPills] = await Promise.all([
+    pillIds.length ? supabase.from('pills').select('*').in('id', pillIds) : Promise.resolve({ data: [] }),
+    Promise.all(trackIds.map((id) => getTrackWithPills(id))),
+  ])
+
+  const byId = new Map<string, Pill>()
+  for (const p of (directPills as Pill[] | null) ?? []) byId.set(p.id, p)
+  for (const { pills } of tracksWithPills) for (const p of pills) byId.set(p.id, p)
+  return [...byId.values()]
 }
 
 export async function createPlan(
@@ -717,39 +780,41 @@ export async function removePlan(planId: string) {
 }
 
 /**
- * Adds a whole track to a plan by expanding it into one `pill` item per
- * pill in the track (spec 9.4) — never a single generic `trilha` item —
- * so each pill's progress stays individually trackable inside the plan.
+ * Adds a whole track to a plan as a single `trilha` item (ref_id=trackId)
+ * instead of one `pill` item per pill in the track — um curso inteiro deve
+ * contar como 1 item do PDI, não 1 por aula (e nem 1 pra "Avaliação de
+ * Reação" à parte, já que ela é só mais uma pílula do curso). O andamento
+ * desse item é mantido em dia por syncTrackProgressToPdi conforme o aluno
+ * conclui as pílulas do curso.
  */
 export async function addTrackToPlan(planId: string, trackId: string) {
-  const { pills } = await getTrackWithPills(trackId)
-  const { data: existingItems } = await supabase
+  const { data: existing } = await supabase
     .from('pdi_plan_items')
-    .select('ref_id')
+    .select('id')
     .eq('plan_id', planId)
-    .eq('item_type', 'pill')
-  const existingIds = new Set(((existingItems as { ref_id: string }[]) ?? []).map((i) => i.ref_id))
+    .eq('item_type', 'trilha')
+    .eq('ref_id', trackId)
+    .maybeSingle()
+  if (existing) return
+
+  const { pills } = await getTrackWithPills(trackId)
 
   const { count } = await supabase
     .from('pdi_plan_items')
     .select('id', { count: 'exact', head: true })
     .eq('plan_id', planId)
-  let orderIndex = count ?? 0
+  const orderIndex = count ?? 0
 
-  const newItems = pills
-    .filter((p) => !existingIds.has(p.id))
-    .map((p) => ({
-      plan_id: planId,
-      item_type: 'pill' as const,
-      ref_id: p.id,
-      progress_current: 0,
-      progress_total: 1,
-      status: 'nao_iniciado' as const,
-      order_index: orderIndex,
-      jornada_bucket: bucketForIndex(orderIndex++),
-    }))
-
-  if (newItems.length) await supabase.from('pdi_plan_items').insert(newItems)
+  await supabase.from('pdi_plan_items').insert({
+    plan_id: planId,
+    item_type: 'trilha' as const,
+    ref_id: trackId,
+    progress_current: 0,
+    progress_total: Math.max(1, pills.length),
+    status: 'nao_iniciado' as const,
+    order_index: orderIndex,
+    jornada_bucket: bucketForIndex(orderIndex),
+  })
 }
 
 /** Adds a single avulso curso (from the Biblioteca de Cursos) to a plan. */

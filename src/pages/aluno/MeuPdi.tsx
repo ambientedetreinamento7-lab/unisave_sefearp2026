@@ -233,6 +233,7 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
 
     const pillIds = planItems.filter((i) => i.item_type === 'pill').map((i) => i.ref_id)
     const skillIds = planItems.filter((i) => i.item_type === 'skill_category').map((i) => i.ref_id)
+    const trackIds = planItems.filter((i) => i.item_type === 'trilha').map((i) => i.ref_id)
 
     const labelMap: Record<string, string> = {}
     if (pillIds.length) {
@@ -242,6 +243,10 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
     if (skillIds.length) {
       const { data } = await supabase.from('skill_categories').select('id,name').in('id', skillIds)
       for (const row of (data as Pick<SkillCategory, 'id' | 'name'>[]) ?? []) labelMap[row.id] = row.name
+    }
+    if (trackIds.length) {
+      const { data } = await supabase.from('tracks').select('id,title').in('id', trackIds)
+      for (const row of (data as Pick<Track, 'id' | 'title'>[]) ?? []) labelMap[row.id] = row.title
     }
     setLabels(labelMap)
     setLoading(false)
@@ -407,13 +412,13 @@ function ItemRow({
   const [trackPillsMap, setTrackPillsMap] = useState<Map<string, Pill[]>>(new Map())
   const [addingId, setAddingId] = useState<string | null>(null)
 
-  // Pill items já presentes no plano — usado pra saber se um curso sugerido
-  // já foi adicionado (e então mostrar o andamento dele em vez do botão
-  // "+ Adicionar", que ficaria enganoso repetido pro mesmo curso).
-  const addedPillMap = useMemo(() => {
-    const map = new Map<string, PdiPlanItem>()
-    for (const i of planItems) if (i.item_type === 'pill') map.set(i.ref_id, i)
-    return map
+  // Cursos (trilha) já adicionados ao plano — usado pra saber se um curso
+  // sugerido já foi adicionado (e então mostrar o andamento dele em vez do
+  // botão "+ Adicionar", que ficaria enganoso repetido pro mesmo curso).
+  const addedTrackIds = useMemo(() => {
+    const set = new Set<string>()
+    for (const i of planItems) if (i.item_type === 'trilha') set.add(i.ref_id)
+    return set
   }, [planItems])
 
   async function toggle() {
@@ -468,7 +473,7 @@ function ItemRow({
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Cursos sugeridos</p>
               {suggested.map((track) => {
                 const pills = trackPillsMap.get(track.id) ?? []
-                const alreadyAdded = pills.some((p) => addedPillMap.has(p.id))
+                const alreadyAdded = addedTrackIds.has(track.id)
                 const total = pills.length
                 // O andamento real vem do progresso de consumo do curso
                 // (user_progress), igual ao card do Dashboard — não do
