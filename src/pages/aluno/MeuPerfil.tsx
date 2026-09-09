@@ -4,6 +4,7 @@ import { Icon } from '../../components/Icon'
 import { NivelCard } from '../../components/NivelCard'
 import { useAuth } from '../../context/AuthContext'
 import { colorForName, initials } from '../../lib/avatar'
+import { sanitizeFileName } from '../../lib/format'
 import { awardPoints } from '../../lib/gamification'
 import { getCommunitySettings } from '../../lib/settings'
 import { supabase } from '../../lib/supabase'
@@ -73,7 +74,7 @@ function AvatarCard({
     setUploading(true)
     setError('')
     try {
-      const path = `${userId}/avatar-${Date.now()}-${file.name}`
+      const path = `${userId}/avatar-${Date.now()}-${sanitizeFileName(file.name)}`
       const { error: uploadError } = await supabase.storage
         .from('social')
         .upload(path, file, { upsert: true, contentType: file.type || 'image/jpeg' })

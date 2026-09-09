@@ -1,4 +1,5 @@
 import { awardPoints } from './gamification'
+import { sanitizeFileName } from './format'
 import { notifyReaction } from './notifications'
 import { getCommunitySettings } from './settings'
 import { supabase } from './supabase'
@@ -160,7 +161,7 @@ export async function createPost(input: {
   if (input.images.length) {
     const media = await Promise.all(
       input.images.map(async (file, idx) => {
-        const path = `${input.authorId}/${post.id}-${idx}-${crypto.randomUUID()}-${file.name}`
+        const path = `${input.authorId}/${post.id}-${idx}-${crypto.randomUUID()}-${sanitizeFileName(file.name)}`
         const { error: uploadError } = await supabase.storage
           .from('social')
           .upload(path, file, { upsert: true, contentType: file.type || 'image/jpeg' })
@@ -393,7 +394,7 @@ export async function createImageStory(input: {
   authorProgramId: string | null
   image: File
 }): Promise<void> {
-  const path = `${input.authorId}/story-${Date.now()}-${crypto.randomUUID()}-${input.image.name}`
+  const path = `${input.authorId}/story-${Date.now()}-${crypto.randomUUID()}-${sanitizeFileName(input.image.name)}`
   const { error: uploadError } = await supabase.storage
     .from('social')
     .upload(path, input.image, { upsert: true, contentType: input.image.type || 'image/jpeg' })

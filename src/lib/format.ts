@@ -1,3 +1,11 @@
+/** Storage keys do Supabase (S3-compatible) rejeitam espaço, acento e
+ * outros caracteres fora de [a-zA-Z0-9._-] com "Invalid key" — sanitiza o
+ * nome original do arquivo antes de compor o path de upload. */
+export function sanitizeFileName(name: string): string {
+  const withoutAccents = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  return withoutAccents.replace(/[^a-zA-Z0-9._-]/g, '-')
+}
+
 /** tracks.carga_horaria_total é armazenado em minutos — formata pra
  * "1h30min" (ou só "45min"/"2h" quando um dos dois lados é zero). */
 export function formatCargaHoraria(minutes: number | null): string {

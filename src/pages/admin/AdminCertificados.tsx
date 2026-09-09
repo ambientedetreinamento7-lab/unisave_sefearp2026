@@ -3,7 +3,7 @@ import { AdminLayout } from './AdminLayout'
 import { useConfirm } from '../../components/ConfirmDialog'
 import { RichTextEditor } from '../../components/RichTextEditor'
 import { applyCertificateVariables } from '../../lib/certificate'
-import { formatCargaHoraria } from '../../lib/format'
+import { formatCargaHoraria, sanitizeFileName } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import type { CertificateTemplate } from '../../types/database'
 
@@ -136,7 +136,7 @@ function CertificateEditor({ template, onSaved }: { template: CertificateTemplat
     let finalBackgroundUrl = backgroundUrl
 
     if (backgroundFile) {
-      const path = `certificates/${template.id}-${Date.now()}-${backgroundFile.name}`
+      const path = `certificates/${template.id}-${Date.now()}-${sanitizeFileName(backgroundFile.name)}`
       const { error: uploadError } = await supabase.storage.from('covers').upload(path, backgroundFile, {
         upsert: true,
         contentType: backgroundFile.type || 'image/png',

@@ -20,6 +20,7 @@ import {
   updateSignupSettings,
   updateTrialSettings,
 } from '../../lib/settings'
+import { sanitizeFileName } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import type {
   BrandingSettings,
@@ -34,7 +35,7 @@ import type {
 } from '../../types/database'
 
 async function uploadBrandingAsset(file: File): Promise<string> {
-  const path = `branding/${crypto.randomUUID()}-${file.name}`
+  const path = `branding/${crypto.randomUUID()}-${sanitizeFileName(file.name)}`
   const { error } = await supabase.storage.from('covers').upload(path, file, {
     upsert: true,
     contentType: file.type || 'image/png',

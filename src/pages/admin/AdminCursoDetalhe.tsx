@@ -4,12 +4,12 @@ import { AdminLayout } from './AdminLayout'
 import { useConfirm } from '../../components/ConfirmDialog'
 import { RichTextEditor } from '../../components/RichTextEditor'
 import { getReactionSurveys, linkPillToTrack, unlinkPillFromTrack } from '../../lib/api'
-import { formatCargaHoraria } from '../../lib/format'
+import { formatCargaHoraria, sanitizeFileName } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import type { Category, CertificateTemplate, ContentType, DiagnosticProfile, Pill, Program, ReactionSurvey, ScormLibraryItem, SkillCategory, Track, TrackPill } from '../../types/database'
 
 async function uploadCover(file: File, folder: string): Promise<string> {
-  const path = `${folder}/${crypto.randomUUID()}-${file.name}`
+  const path = `${folder}/${crypto.randomUUID()}-${sanitizeFileName(file.name)}`
   const { error } = await supabase.storage.from('covers').upload(path, file, {
     upsert: true,
     contentType: file.type || 'image/png',
