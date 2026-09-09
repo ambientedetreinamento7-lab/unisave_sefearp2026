@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { HeroBrandBar } from '../../components/HeroBrandBar'
+import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
 
 const DEFAULT_PASSWORD = 'Mudar@123'
@@ -8,6 +9,7 @@ const DEFAULT_PASSWORD = 'Mudar@123'
 export function AtivarConta() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { refreshProfile } = useAuth()
   const stateEmail = (location.state as { email?: string } | null)?.email ?? ''
   const [email, setEmail] = useState(stateEmail)
   const [password, setPassword] = useState('')
@@ -49,6 +51,13 @@ export function AtivarConta() {
     }
 
     await supabase.from('profiles').update({ password_set: true }).eq('id', signInData.session.user.id)
+    // Sem isso, o profile do AuthContext podia ainda estar com o snapshot
+    // carregado pelo signInWithPassword/updateUser logo acima (disparado
+    // via onAuthStateChange, correndo em paralelo) — antes do update de
+    // password_set=true terminar no banco. RouteGuard então lia
+    // password_set=false e mandava de volta pra /definir-senha em vez de
+    // seguir pro fluxo normal, deixando a tela travada até um refresh.
+    await refreshProfile()
     setSaving(false)
     navigate('/dashboard', { replace: true })
   }
