@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { BirthDateSelect } from '../../components/BirthDateSelect'
 import { HeroBrandBar } from '../../components/HeroBrandBar'
 import { Icon } from '../../components/Icon'
 import { usePlatformSettings } from '../../context/PlatformSettingsContext'
 import { PROGRAMS, QUIZ_QUESTIONS, computeProfile, type ProgramSlug } from '../../lib/quiz'
+import { isRateLimitError, withRetry } from '../../lib/retry'
 import { getSignupSettings } from '../../lib/settings'
 import { supabase } from '../../lib/supabase'
 import type { SignupSettings } from '../../types/database'
@@ -81,38 +83,51 @@ export function Estande() {
       // client-side upsert: Postgres evaluates the UPDATE RLS policy even for a
       // brand-new row on INSERT ... ON CONFLICT DO UPDATE, which made the plain
       // upsert fail with 42501 regardless of how the policy was written.
-      const { error: captureError } = await supabase.rpc('capture_estande_lead', {
-        p_name: name,
-        p_email: email,
-        p_phone: whatsapp || null,
-        p_program_id: programRow?.id ?? program,
-        p_curriculum_period: fase,
-        p_diagnostic_profile: diagnostic_profile,
-        p_selected_track_id: trackRow?.id ?? null,
-        p_birth_date: birthDate || null,
+      // withRetry: no dia do evento, um pico de cadastros simultâneos pode
+      // esbarrar num rate limit momentâneo do Supabase — a RPC é idempotente
+      // (on conflict ... where claimed = false), então repetir é seguro.
+      await withRetry(async () => {
+        const { error: captureError } = await supabase.rpc('capture_estande_lead', {
+          p_name: name,
+          p_email: email,
+          p_phone: whatsapp || null,
+          p_program_id: programRow?.id ?? program,
+          p_curriculum_period: fase,
+          p_diagnostic_profile: diagnostic_profile,
+          p_selected_track_id: trackRow?.id ?? null,
+          p_birth_date: birthDate || null,
+        })
+        if (captureError) throw captureError
       })
-      if (captureError) throw captureError
 
       if (signup?.activationMethod === 'default_password') {
         // Cria a conta já com a senha padrão, pra não depender de e-mail —
         // se o visitante reenviar o quiz com o mesmo e-mail antes de
         // ativar, a conta já existe e o erro é esperado, ignora.
-        const { error: signUpError } = await supabase.auth.signUp({ email, password: 'Mudar@123' })
-        if (signUpError && !/already registered/i.test(signUpError.message)) throw signUpError
+        await withRetry(async () => {
+          const { error: signUpError } = await supabase.auth.signUp({ email, password: 'Mudar@123' })
+          if (signUpError && !/already registered/i.test(signUpError.message)) throw signUpError
+        })
 
         navigate('/ativar-conta', { state: { email } })
       } else {
-        const { error: otpError } = await supabase.auth.signInWithOtp({
-          email,
-          options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+        await withRetry(async () => {
+          const { error: otpError } = await supabase.auth.signInWithOtp({
+            email,
+            options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+          })
+          if (otpError) throw otpError
         })
-        if (otpError) throw otpError
 
         navigate('/resultado', { state: { profile: diagnostic_profile, program, name, email } })
       }
     } catch (err) {
       console.error('Falha ao enviar o quiz PDI Express:', err)
-      setError(err instanceof Error ? err.message : 'Não foi possível enviar. Tente novamente.')
+      if (isRateLimitError(err)) {
+        setError('Muita gente se cadastrando ao mesmo tempo agora — aguarde alguns segundos e tente de novo.')
+      } else {
+        setError(err instanceof Error ? err.message : 'Não foi possível enviar. Tente novamente.')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -221,12 +236,9 @@ export function Estande() {
                   <label className="block text-xs font-semibold text-ink-soft">
                     Data de nascimento <span className="font-normal text-ink-soft/70">(opcional)</span>
                   </label>
-                  <input
-                    className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
-                    type="date"
-                    value={birthDate}
-                    onChange={(e) => setBirthDate(e.target.value)}
-                  />
+                  <div className="mt-1">
+                    <BirthDateSelect value={birthDate} onChange={setBirthDate} />
+                  </div>
                   <p className="mt-1 text-xs text-ink-soft">
                     Usada só para recuperar sua senha depois, caso você não tenha acesso ao e-mail.
                   </p>

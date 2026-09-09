@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AppHeader } from '../../components/AppHeader'
+import { BirthDateSelect } from '../../components/BirthDateSelect'
 import { Icon } from '../../components/Icon'
 import { NivelCard } from '../../components/NivelCard'
 import { useAuth } from '../../context/AuthContext'
@@ -253,12 +254,13 @@ function DadosCard({
       </select>
 
       <label className="mt-3 block text-xs font-semibold text-ink-soft">Data de nascimento</label>
-      <input
-        className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5 outline-none focus:border-navy"
-        type="date"
-        value={birthDate}
-        onChange={(e) => setBirthDate(e.target.value)}
-      />
+      <div className="mt-1">
+        <BirthDateSelect
+          value={birthDate}
+          onChange={setBirthDate}
+          selectClassName="w-full rounded-xl border border-navy-light px-2 py-2.5 outline-none focus:border-navy"
+        />
+      </div>
       <p className="mt-1 text-xs text-ink-soft">
         Usada só para recuperar sua senha caso você perca o acesso ao seu e-mail.
       </p>
