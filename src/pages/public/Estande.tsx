@@ -175,7 +175,14 @@ export function Estande() {
           </div>
         </div>
 
-        <div className="card mt-6 p-6 sm:p-8">
+        <p className="mt-4 text-center text-sm text-white/70">
+          Já fez o teste?{' '}
+          <Link to="/entrar" className="font-semibold text-white hover:underline">
+            Entrar
+          </Link>
+        </p>
+
+        <div className="card mt-4 p-6 sm:p-8">
           {step === 0 && (
             <StepBlock title="Qual é o seu curso?" subtitle="Seu PDI nasce da taxonomia oficial do curso (PPP / perfil de egresso).">
               <div className="flex flex-col gap-3">
@@ -286,13 +293,6 @@ export function Estande() {
             </button>
           )}
         </div>
-
-        <p className="mt-6 text-center text-sm text-white/70">
-          Já fez o teste?{' '}
-          <Link to="/entrar" className="font-semibold text-white hover:underline">
-            Entrar
-          </Link>
-        </p>
       </div>
     </div>
   )
