@@ -58,3 +58,18 @@ export function RouteGuard({ children, allow }: { children: ReactNode; allow?: U
 
   return <>{children}</>
 }
+
+// Bloqueia as páginas públicas (Estande, Resultado, Ativar Conta, etc.)
+// durante o modo manutenção. /entrar fica de fora de propósito: sem ele
+// o admin não teria como logar pra desligar a manutenção depois.
+export function PublicMaintenanceGate({ children }: { children: ReactNode }) {
+  const { maintenance, loading } = usePlatformSettings()
+
+  if (loading) return null
+
+  if (maintenance.enabled) {
+    return <MaintenancePage message={maintenance.message} />
+  }
+
+  return <>{children}</>
+}

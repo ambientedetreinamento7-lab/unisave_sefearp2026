@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ConfirmProvider } from './components/ConfirmDialog'
-import { RouteGuard } from './components/RouteGuard'
+import { PublicMaintenanceGate, RouteGuard } from './components/RouteGuard'
 import { AuthProvider } from './context/AuthContext'
 import { PlatformSettingsProvider } from './context/PlatformSettingsContext'
 import { AceitarTermos } from './pages/aluno/AceitarTermos'
@@ -45,14 +45,63 @@ function App() {
       <ConfirmProvider>
       <Routes>
         <Route path="/" element={<Navigate to="/estande" replace />} />
-        <Route path="/estande" element={<Estande />} />
-        <Route path="/resultado" element={<Resultado />} />
+        <Route
+          path="/estande"
+          element={
+            <PublicMaintenanceGate>
+              <Estande />
+            </PublicMaintenanceGate>
+          }
+        />
+        <Route
+          path="/resultado"
+          element={
+            <PublicMaintenanceGate>
+              <Resultado />
+            </PublicMaintenanceGate>
+          }
+        />
         <Route path="/entrar" element={<Entrar />} />
-        <Route path="/ativar-conta" element={<AtivarConta />} />
-        <Route path="/recuperar-senha" element={<RecuperarSenha />} />
-        <Route path="/validar-certificado" element={<ValidarCertificado />} />
-        <Route path="/termos" element={<Termos />} />
-        <Route path="/privacidade" element={<Privacidade />} />
+        <Route
+          path="/ativar-conta"
+          element={
+            <PublicMaintenanceGate>
+              <AtivarConta />
+            </PublicMaintenanceGate>
+          }
+        />
+        <Route
+          path="/recuperar-senha"
+          element={
+            <PublicMaintenanceGate>
+              <RecuperarSenha />
+            </PublicMaintenanceGate>
+          }
+        />
+        <Route
+          path="/validar-certificado"
+          element={
+            <PublicMaintenanceGate>
+              <ValidarCertificado />
+            </PublicMaintenanceGate>
+          }
+        />
+        <Route
+          path="/termos"
+          element={
+            <PublicMaintenanceGate>
+              <Termos />
+            </PublicMaintenanceGate>
+          }
+        />
+        <Route
+          path="/privacidade"
+          element={
+            <PublicMaintenanceGate>
+              <Privacidade />
+            </PublicMaintenanceGate>
+          }
+        />
 
         <Route
           path="/dashboard"
