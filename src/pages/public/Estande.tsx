@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { BirthDateSelect } from '../../components/BirthDateSelect'
 import { HeroBrandBar } from '../../components/HeroBrandBar'
 import { Icon } from '../../components/Icon'
@@ -286,6 +286,13 @@ export function Estande() {
             </button>
           )}
         </div>
+
+        <p className="mt-6 text-center text-sm text-white/70">
+          Já fez o teste?{' '}
+          <Link to="/entrar" className="font-semibold text-white hover:underline">
+            Entrar
+          </Link>
+        </p>
       </div>
     </div>
   )
