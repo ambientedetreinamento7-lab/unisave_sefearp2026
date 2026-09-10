@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { usePlatformSettings } from '../context/PlatformSettingsContext'
 import { useInactivityLogout } from '../lib/useInactivityLogout'
 import type { UserRole } from '../types/database'
+import { MaintenancePage } from './MaintenancePage'
 
 export function RouteGuard({ children, allow }: { children: ReactNode; allow?: UserRole[] }) {
   const { session, profile, loading, signOut } = useAuth()
@@ -30,15 +31,7 @@ export function RouteGuard({ children, allow }: { children: ReactNode; allow?: U
   // Modo manutenção (spec: Configurações → Modo manutenção) — admin
   // sempre passa, pra conseguir desligar de novo.
   if (maintenance.enabled && profile?.role !== 'admin') {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-bg px-4">
-        <div className="card max-w-md p-8 text-center">
-          <span className="text-3xl">🛠️</span>
-          <h1 className="mt-3 text-lg font-bold text-ink">Plataforma em manutenção</h1>
-          <p className="mt-2 text-sm text-ink-soft">{maintenance.message}</p>
-        </div>
-      </div>
-    )
+    return <MaintenancePage message={maintenance.message} />
   }
 
   // Alunos definem senha na primeira vez, pra não depender de link mágico

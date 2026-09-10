@@ -430,7 +430,7 @@ export function CoursePlayer() {
       <AppHeader />
 
       <main
-        className={`mx-auto w-full max-w-6xl gap-6 px-4 py-8 ${
+        className={`mx-auto w-full max-w-7xl gap-6 px-4 py-8 ${
           modules.length > 1 ? 'lg:grid lg:grid-cols-[280px_1fr] lg:items-start' : 'max-w-4xl'
         }`}
       >

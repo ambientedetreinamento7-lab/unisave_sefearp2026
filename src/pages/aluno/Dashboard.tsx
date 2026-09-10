@@ -279,7 +279,7 @@ export function Dashboard() {
     <div className="min-h-screen bg-bg pb-16">
       <AppHeader />
 
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:py-8">
         <div className="lg:grid lg:grid-cols-[1fr_320px] lg:items-start lg:gap-8">
           <div className="min-w-0">
             <h1 className="text-xl font-extrabold text-ink sm:text-2xl">
@@ -376,7 +376,7 @@ export function Dashboard() {
                   value={catalogSearch}
                   onChange={(e) => setCatalogSearch(e.target.value)}
                 />
-                <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                <div className="scroll-x-soft mt-3 flex gap-2 overflow-x-auto pb-3">
                   <button
                     onClick={() => setSelectedCategoryId(null)}
                     className={`shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
@@ -654,7 +654,7 @@ function CourseRow({
   return (
     <section>
       <h2 className="text-lg font-bold text-ink">{title}</h2>
-      <div className="mt-3 flex gap-4 overflow-x-auto pb-1">
+      <div className="scroll-x-soft mt-3 flex gap-4 overflow-x-auto pb-3">
         {cards.map((item) => (
           <div key={item.kind === 'pill' ? item.pill.id : item.track.id} className="w-64 shrink-0">
             <CourseCard

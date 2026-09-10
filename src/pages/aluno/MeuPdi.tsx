@@ -113,7 +113,7 @@ export function MeuPdi() {
   return (
     <div className="min-h-screen bg-bg pb-16">
       <AppHeader />
-      <main className="mx-auto max-w-3xl px-4 py-8">
+      <main className="mx-auto max-w-4xl px-4 py-8">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-2xl font-extrabold text-ink">Meu PDI</h1>
           <button

@@ -81,7 +81,7 @@ export function Comunidade() {
   return (
     <div className="min-h-screen bg-bg pb-16">
       <AppHeader />
-      <main className="mx-auto max-w-2xl px-4 py-8">
+      <main className="mx-auto max-w-3xl px-4 py-8">
         <h1 className="text-2xl font-extrabold text-ink">Comunidade</h1>
         <p className="mt-1 text-ink-soft">Compartilhe o andamento do seu curso com os colegas.</p>
 
@@ -567,7 +567,7 @@ function PostCard({
         </div>
       )}
       {post.media.length > 1 && (
-        <div className="mt-3 flex snap-x gap-2 overflow-x-auto rounded-xl">
+        <div className="scroll-x-soft mt-3 flex snap-x gap-2 overflow-x-auto rounded-xl">
           {post.media.map((m) => (
             <div key={m.id} className="h-64 w-64 shrink-0 snap-start overflow-hidden rounded-xl border border-navy-light bg-bg">
               <img src={m.url} alt="" className="h-full w-full object-cover" />
@@ -738,7 +738,7 @@ function StoriesRow({
   const otherGroups = groups.filter((g) => g.authorId !== userId)
 
   return (
-    <div className="mt-6 flex gap-3 overflow-x-auto pb-1">
+    <div className="scroll-x-soft mt-6 flex gap-3 overflow-x-auto pb-3">
       <button onClick={() => setCreating(true)} className="flex shrink-0 flex-col items-center gap-1.5">
         <span className="relative flex h-14 w-14 items-center justify-center rounded-full border-2 border-dashed border-navy-light text-navy">
           <Icon name="video" size={18} />

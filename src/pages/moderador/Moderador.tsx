@@ -58,7 +58,7 @@ export function Moderador() {
   return (
     <div className="min-h-screen bg-bg pb-16">
       <AppHeader />
-      <main className="mx-auto max-w-4xl px-4 py-8">
+      <main className="mx-auto max-w-5xl px-4 py-8">
         <h1 className="text-2xl font-extrabold text-ink">Painel do Moderador</h1>
         {loading && <p className="mt-6 text-ink-soft">Carregando…</p>}
 

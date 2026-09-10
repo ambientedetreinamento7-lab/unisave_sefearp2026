@@ -97,7 +97,7 @@ export function Certificados() {
   return (
     <div className="min-h-screen bg-bg pb-16">
       <AppHeader />
-      <main className="mx-auto max-w-4xl px-4 py-8">
+      <main className="mx-auto max-w-5xl px-4 py-8">
         <h1 className="text-2xl font-extrabold text-ink">Certificados</h1>
         <p className="mt-1 text-ink-soft">Seus certificados de conclusão — visualize e compartilhe nas redes sociais.</p>
 
