@@ -1,11 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { usePlatformSettings } from '../context/PlatformSettingsContext'
+import { getDeferredInstallPrompt, promptInstall, subscribeInstallPrompt } from '../lib/pwaInstallPrompt'
 import { Icon } from './Icon'
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
-}
 
 function isStandalone() {
   return (
@@ -18,40 +14,15 @@ function isStandalone() {
  * Botão "Instalar app" com o tema da plataforma — complementa o ícone
  * nativo que o Chrome/Edge já mostram sozinhos, deixando mais óbvio pro
  * aluno que dá pra instalar (spec: Configurações → App instalável). Só
- * aparece quando o navegador de fato ofereceu instalar (beforeinstallprompt)
- * e o admin não desligou a instalabilidade.
+ * aparece quando o navegador de fato ofereceu instalar (beforeinstallprompt,
+ * capturado globalmente em lib/pwaInstallPrompt.ts) e o admin não desligou
+ * a instalabilidade.
  */
 export function InstallAppButton({ variant = 'dark' }: { variant?: 'dark' | 'light' }) {
   const { pwa } = usePlatformSettings()
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
+  const deferredPrompt = useSyncExternalStore(subscribeInstallPrompt, getDeferredInstallPrompt)
 
-  useEffect(() => {
-    if (isStandalone()) return
-
-    function onBeforeInstallPrompt(e: Event) {
-      e.preventDefault()
-      setDeferredPrompt(e as BeforeInstallPromptEvent)
-    }
-    function onInstalled() {
-      setDeferredPrompt(null)
-    }
-
-    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt)
-    window.addEventListener('appinstalled', onInstalled)
-    return () => {
-      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt)
-      window.removeEventListener('appinstalled', onInstalled)
-    }
-  }, [])
-
-  if (!deferredPrompt || !pwa.installableEnabled) return null
-
-  async function install() {
-    if (!deferredPrompt) return
-    await deferredPrompt.prompt()
-    await deferredPrompt.userChoice
-    setDeferredPrompt(null)
-  }
+  if (!deferredPrompt || !pwa.installableEnabled || isStandalone()) return null
 
   const classes =
     variant === 'dark'
@@ -60,7 +31,7 @@ export function InstallAppButton({ variant = 'dark' }: { variant?: 'dark' | 'lig
 
   return (
     <button
-      onClick={install}
+      onClick={promptInstall}
       className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${classes}`}
     >
       <Icon name="download" size={14} />
