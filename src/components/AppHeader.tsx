@@ -6,6 +6,7 @@ import { useTheme } from '../context/ThemeContext'
 import { colorForName, initials } from '../lib/avatar'
 import { getTrialSettings } from '../lib/settings'
 import { Icon } from './Icon'
+import { InstallAppButton } from './InstallAppButton'
 import { NotificationBell } from './NotificationBell'
 
 const NAV_LINKS = [
@@ -76,6 +77,8 @@ export function AppHeader() {
 
         {/* Desktop controls */}
         <div className="ml-auto hidden items-center gap-2 sm:flex">
+          <InstallAppButton />
+
           <button
             id="tour-theme-toggle"
             onClick={toggleTheme}
@@ -299,6 +302,7 @@ export function AppHeader() {
           </div>
 
           <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
+            <InstallAppButton />
             <button
               onClick={toggleTheme}
               className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/25 py-2 text-sm font-semibold text-white/90 hover:bg-white/10"

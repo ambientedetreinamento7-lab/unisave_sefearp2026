@@ -4,6 +4,7 @@ import {
   getBrandingSettings,
   getLegalSettings,
   getMaintenanceSettings,
+  getPwaSettings,
   getSecuritySettings,
   getSessionSettings,
 } from '../lib/settings'
@@ -11,6 +12,7 @@ import type {
   BrandingSettings,
   LegalSettings,
   MaintenanceSettings,
+  PwaSettings,
   SecuritySettings,
   SessionSettings,
 } from '../types/database'
@@ -21,6 +23,7 @@ interface PlatformSettingsValue {
   maintenance: MaintenanceSettings
   session: SessionSettings
   security: SecuritySettings
+  pwa: PwaSettings
   loading: boolean
 }
 
@@ -38,6 +41,7 @@ const DEFAULTS: Omit<PlatformSettingsValue, 'loading'> = {
   maintenance: { enabled: false, message: '' },
   session: { inactivityTimeoutMinutes: null },
   security: { magicLinkResetEnabled: true, birthDateResetEnabled: true },
+  pwa: { installableEnabled: false },
 }
 
 const PlatformSettingsContext = createContext<PlatformSettingsValue | undefined>(undefined)
@@ -59,9 +63,10 @@ export function PlatformSettingsProvider({ children }: { children: ReactNode }) 
       getMaintenanceSettings(),
       getSessionSettings(),
       getSecuritySettings(),
+      getPwaSettings(),
     ]).then(
-      ([branding, legal, maintenance, session, security]) => {
-        setValue({ branding, legal, maintenance, session, security })
+      ([branding, legal, maintenance, session, security, pwa]) => {
+        setValue({ branding, legal, maintenance, session, security, pwa })
         setLoading(false)
         // Sobrescreve os tokens de cor em runtime (definidos em index.css)
         // só quando o admin configurou algo — sem isso, continua com a

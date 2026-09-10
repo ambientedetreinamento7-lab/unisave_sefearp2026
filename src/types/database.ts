@@ -215,6 +215,10 @@ export interface MaintenanceSettings {
   message: string
 }
 
+export interface PwaSettings {
+  installableEnabled: boolean
+}
+
 export interface IssuedCertificate {
   id: string
   code: string

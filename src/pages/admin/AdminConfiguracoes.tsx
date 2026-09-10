@@ -6,6 +6,7 @@ import {
   getLegalSettings,
   getMaintenanceSettings,
   getModuleCompletionSettings,
+  getPwaSettings,
   getSecuritySettings,
   getSessionSettings,
   getSignupSettings,
@@ -15,6 +16,7 @@ import {
   updateLegalSettings,
   updateMaintenanceSettings,
   updateModuleCompletionSettings,
+  updatePwaSettings,
   updateSecuritySettings,
   updateSessionSettings,
   updateSignupSettings,
@@ -28,6 +30,7 @@ import type {
   LegalSettings,
   MaintenanceSettings,
   ModuleCompletionSettings,
+  PwaSettings,
   SecuritySettings,
   SessionSettings,
   SignupSettings,
@@ -57,6 +60,7 @@ export function AdminConfiguracoes() {
         <SecuritySection />
         <LegalSection />
         <MaintenanceSection />
+        <PwaSection />
       </div>
     </AdminLayout>
   )
@@ -796,6 +800,49 @@ function MaintenanceSection() {
               onChange={(e) => setSettings({ ...settings, message: e.target.value })}
             />
           </div>
+        </div>
+      )}
+    </SectionShell>
+  )
+}
+
+function PwaSection() {
+  const [settings, setSettings] = useState<PwaSettings | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    getPwaSettings().then(setSettings)
+  }, [])
+
+  async function save() {
+    if (!settings) return
+    setSaving(true)
+    setSaved(false)
+    await updatePwaSettings(settings)
+    setSaving(false)
+    setSaved(true)
+  }
+
+  return (
+    <SectionShell
+      title="App instalável (PWA)"
+      description="Permite que visitantes instalem o UniSave como aplicativo no celular/computador (Chrome, Edge, Android). Desativar só impede novas instalações — quem já instalou continua usando normalmente. No iPhone/iPad (Safari), 'Adicionar à Tela de Início' sempre fica disponível pelo menu do navegador, independente desta configuração."
+      loading={!settings}
+      onSave={save}
+      saving={saving}
+      saved={saved}
+    >
+      {settings && (
+        <div className="mt-4">
+          <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
+            <input
+              type="checkbox"
+              checked={settings.installableEnabled}
+              onChange={(e) => setSettings({ ...settings, installableEnabled: e.target.checked })}
+            />
+            Permitir instalação do app
+          </label>
         </div>
       )}
     </SectionShell>

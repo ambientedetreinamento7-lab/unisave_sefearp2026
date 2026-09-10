@@ -5,6 +5,7 @@ import type {
   LegalSettings,
   MaintenanceSettings,
   ModuleCompletionSettings,
+  PwaSettings,
   SecuritySettings,
   SessionSettings,
   SignupSettings,
@@ -129,4 +130,14 @@ export async function getMaintenanceSettings(): Promise<MaintenanceSettings> {
 
 export async function updateMaintenanceSettings(settings: MaintenanceSettings) {
   await supabase.from('app_settings').upsert({ key: 'maintenance', value: settings })
+}
+
+const DEFAULT_PWA: PwaSettings = { installableEnabled: false }
+
+export async function getPwaSettings(): Promise<PwaSettings> {
+  return getAppSetting('pwa', DEFAULT_PWA)
+}
+
+export async function updatePwaSettings(settings: PwaSettings) {
+  await supabase.from('app_settings').upsert({ key: 'pwa', value: settings })
 }

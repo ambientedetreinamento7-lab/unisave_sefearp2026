@@ -30,6 +30,7 @@ export type IconName =
   | "alert-triangle"
   | "help-circle"
   | "bell"
+  | "download"
 
 const PATHS: Record<IconName, React.ReactNode> = {
   book: (
@@ -290,6 +291,16 @@ const PATHS: Record<IconName, React.ReactNode> = {
   bell: (
     <path
       d="M12 3.5a5 5 0 0 0-5 5v2.6c0 .7-.2 1.4-.6 2L5 15.5h14l-1.4-2.4a3.9 3.9 0 0 1-.6-2V8.5a5 5 0 0 0-5-5ZM10 18.5a2 2 0 0 0 4 0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  download: (
+    <path
+      d="M12 3.5v11m0 0 4-4m-4 4-4-4M4.5 16.5v2a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.7"

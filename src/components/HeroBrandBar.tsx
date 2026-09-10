@@ -1,4 +1,5 @@
 import { usePlatformSettings } from '../context/PlatformSettingsContext'
+import { InstallAppButton } from './InstallAppButton'
 
 // All three are white/knockout marks meant to sit directly on the dark hero
 // gradient (confirmed against the real files in public/logos/) — no card
@@ -14,7 +15,12 @@ export function HeroBrandBar({ compact = false }: { compact?: boolean }) {
         <img src={branding.secondaryLogoUrl ?? '/logos/sefea.png'} alt="sefea Ribeirão Preto" className="h-7 w-auto sm:h-8" />
       </div>
 
-      {!compact && <img src="/logos/grupo-savegnago.png" alt="Grupo Savegnago" className="h-8 w-auto sm:h-9" />}
+      {!compact && (
+        <div className="flex items-center gap-3">
+          <InstallAppButton />
+          <img src="/logos/grupo-savegnago.png" alt="Grupo Savegnago" className="h-8 w-auto sm:h-9" />
+        </div>
+      )}
     </div>
   )
 }

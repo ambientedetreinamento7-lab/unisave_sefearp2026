@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ConfirmProvider } from './components/ConfirmDialog'
+import { PwaController } from './components/PwaController'
 import { PublicMaintenanceGate, RouteGuard } from './components/RouteGuard'
 import { AuthProvider } from './context/AuthContext'
 import { PlatformSettingsProvider } from './context/PlatformSettingsContext'
@@ -41,6 +42,7 @@ import { ValidarCertificado } from './pages/public/ValidarCertificado'
 function App() {
   return (
     <PlatformSettingsProvider>
+    <PwaController />
     <AuthProvider>
       <ConfirmProvider>
       <Routes>
