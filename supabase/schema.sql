@@ -777,6 +777,35 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function sync_profile_with_auth();
 
+-- Exclusão direta em auth.users (ex.: pela aba Authentication do
+-- Supabase, sem passar pelo admin_delete_user abaixo) não tinha efeito
+-- nenhum na plataforma: profiles.id não é FK de auth.users (é seu próprio
+-- uuid, só reconciliado pelo trigger acima), então a linha de profiles —
+-- e tudo que penduria nela via "on delete cascade" — ficava órfã pra
+-- sempre, e o usuário continuava aparecendo em ranking, comunidade, etc.
+create or replace function handle_auth_user_deleted()
+returns trigger language plpgsql security definer
+set search_path = public
+as $$
+begin
+  delete from profiles where id = old.id;
+  return old;
+end;
+$$;
+
+create trigger on_auth_user_deleted
+  after delete on auth.users
+  for each row execute function handle_auth_user_deleted();
+
+-- Limpa os profiles já órfãos de exclusões feitas direto no Supabase antes
+-- do trigger acima existir. claimed = true garante que só mexe em contas
+-- que já tiveram um auth.users de verdade — não apaga leads do /estande
+-- ainda não ativados (claimed = false), que nunca tiveram um id de auth
+-- correspondente em primeiro lugar.
+delete from profiles
+where claimed = true
+  and id not in (select id from auth.users);
+
 -- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
@@ -1050,6 +1079,35 @@ end;
 $$;
 
 grant execute on function public.admin_reset_password_to_default(uuid) to authenticated;
+
+-- Admin → Usuários: exclusão total de conta (spec: "usuários devem ser
+-- excluídos totalmente"). Apaga tanto auth.users quanto profiles — só
+-- apagar profiles deixaria o login ainda funcionando (auth.users vivo, só
+-- sem perfil); só apagar auth.users é o que já acontecia manualmente pela
+-- aba Authentication do Supabase e não tinha efeito na plataforma (por
+-- isso o trigger on_auth_user_deleted acima existe, como rede de
+-- segurança pra esse caminho também). O "on delete cascade" de profiles
+-- cuida de progresso, PDI, posts, certificados etc.
+create or replace function public.admin_delete_user(p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not current_role_is('admin') then
+    raise exception 'Apenas administradores podem executar esta ação';
+  end if;
+  if p_user_id = auth.uid() then
+    raise exception 'Você não pode excluir a própria conta por aqui';
+  end if;
+
+  delete from auth.users where id = p_user_id;
+  delete from profiles where id = p_user_id;
+end;
+$$;
+
+grant execute on function public.admin_delete_user(uuid) to authenticated;
 
 create policy "self manage progress" on user_progress for all
   using (auth.uid() = user_id or current_role_is('moderador') or current_role_is('admin'))

@@ -71,6 +71,26 @@ export function AdminUsuarios() {
     setBusy(false)
   }
 
+  async function deleteUsers(ids: string[]) {
+    const label = ids.length === 1 ? 'este usuário' : `${ids.length} usuários selecionados`
+    if (
+      !(await confirm(
+        `Excluir ${label} definitivamente? A conta de acesso e todos os dados (progresso, PDI, posts, certificados, pontos) são apagados de vez. Essa ação não pode ser desfeita.`,
+        { danger: true, confirmLabel: 'Excluir' },
+      ))
+    )
+      return
+    setBusy(true)
+    await Promise.all(ids.map((id) => supabase.rpc('admin_delete_user', { p_user_id: id })))
+    setUsers((prev) => prev.filter((u) => !ids.includes(u.id)))
+    setSelected((prev) => {
+      const next = new Set(prev)
+      for (const id of ids) next.delete(id)
+      return next
+    })
+    setBusy(false)
+  }
+
   function toggleSelected(id: string) {
     setSelected((prev) => {
       const next = new Set(prev)
@@ -113,6 +133,13 @@ export function AdminUsuarios() {
             className="rounded-lg border border-brand-red/30 bg-surface px-3 py-1.5 text-xs font-semibold text-brand-red hover:border-brand-red disabled:opacity-50"
           >
             Resetar senha
+          </button>
+          <button
+            onClick={() => deleteUsers(selectedIds)}
+            disabled={busy}
+            className="rounded-lg bg-brand-red px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-red-dark disabled:opacity-50"
+          >
+            Excluir usuário
           </button>
         </div>
       )}
@@ -177,6 +204,13 @@ export function AdminUsuarios() {
                       className="rounded-lg border border-brand-red/30 px-2.5 py-1 text-xs font-semibold text-brand-red hover:border-brand-red disabled:opacity-50"
                     >
                       Resetar senha
+                    </button>
+                    <button
+                      onClick={() => deleteUsers([u.id])}
+                      disabled={busy}
+                      className="rounded-lg bg-brand-red px-2.5 py-1 text-xs font-bold text-white hover:bg-brand-red-dark disabled:opacity-50"
+                    >
+                      Excluir
                     </button>
                   </div>
                 </td>
