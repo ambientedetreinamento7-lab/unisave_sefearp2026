@@ -43,7 +43,7 @@ export function AppHeader() {
 
   return (
     <header className="bg-navy text-white">
-      <div className="mx-auto flex max-w-5xl items-center gap-x-6 gap-y-3 px-5 py-3">
+      <div className="mx-auto flex max-w-7xl items-center gap-x-4 gap-y-3 px-5 py-3">
         <Link to="/dashboard" className="flex items-center gap-2 shrink-0">
           <img src={branding.logoUrl ?? '/logos/UniSave.png'} alt={branding.platformName ?? 'UniSave'} className="h-6 w-auto" />
           <div className="h-5 w-px bg-white/25" />
@@ -51,21 +51,21 @@ export function AppHeader() {
         </Link>
 
         {profile && (
-          <div className="hidden leading-tight sm:block">
-            <p className="max-w-[14rem] truncate text-sm font-bold uppercase tracking-wide">{profile.name}</p>
+          <div className="hidden shrink-0 leading-tight xl:block">
+            <p className="max-w-[12rem] truncate text-sm font-bold uppercase tracking-wide">{profile.name}</p>
             {trialLabel && <p className="text-xs text-white/60">{trialLabel}</p>}
           </div>
         )}
 
         {/* Desktop nav */}
-        <nav className="hidden flex-1 flex-wrap items-center gap-1.5 sm:flex">
+        <nav className="hidden min-w-0 flex-1 flex-nowrap items-center gap-1 sm:flex">
           {NAV_LINKS.map((l) => (
             <NavLink
               key={l.to}
               id={`tour-nav-${l.to.replace('/', '')}`}
               to={l.to}
               className={({ isActive }) =>
-                `rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                `shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                   isActive ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'
                 }`
               }
@@ -76,7 +76,7 @@ export function AppHeader() {
         </nav>
 
         {/* Desktop controls */}
-        <div className="ml-auto hidden items-center gap-2 sm:flex">
+        <div className="ml-auto hidden shrink-0 items-center gap-1.5 sm:flex">
           <InstallAppButton />
 
           <button
@@ -96,10 +96,11 @@ export function AppHeader() {
             <div className="relative">
               <button
                 onClick={() => setMenuOpen((v) => !v)}
-                className="flex items-center gap-1 rounded-full border border-white/25 px-3 py-1.5 text-xs font-semibold text-white/90 hover:bg-white/10"
+                title="Alternar visão"
+                className="flex items-center gap-1 rounded-full border border-white/25 px-2.5 py-1.5 text-xs font-semibold text-white/90 hover:bg-white/10 xl:px-3"
               >
                 <Icon name="shield" size={13} />
-                Alternar visão
+                <span className="hidden xl:inline">Alternar visão</span>
                 <Icon name="chevron-down" size={13} />
               </button>
 
@@ -197,22 +198,27 @@ export function AppHeader() {
           )}
         </div>
 
-        {/* Mobile hamburger */}
-        <button
-          onClick={() => setMobileOpen((v) => !v)}
-          aria-label={mobileOpen ? 'Fechar menu' : 'Abrir menu'}
-          className="ml-auto flex h-9 w-9 items-center justify-center rounded-full border border-white/25 text-white sm:hidden"
-        >
-          {mobileOpen ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          )}
-        </button>
+        {/* Instalar app + hamburguer (mobile) — o botão de instalar fica
+            visível direto na barra, não escondido dentro do menu, senão
+            quem não abre o menu nunca vê que dá pra instalar o app. */}
+        <div className="ml-auto flex items-center gap-2 sm:hidden">
+          <InstallAppButton variant="dark" />
+          <button
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-label={mobileOpen ? 'Fechar menu' : 'Abrir menu'}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/25 text-white"
+          >
+            {mobileOpen ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Mobile panel */}
@@ -302,7 +308,6 @@ export function AppHeader() {
           </div>
 
           <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
-            <InstallAppButton />
             <button
               onClick={toggleTheme}
               className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/25 py-2 text-sm font-semibold text-white/90 hover:bg-white/10"
