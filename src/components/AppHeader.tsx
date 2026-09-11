@@ -7,6 +7,7 @@ import { colorForName, initials } from '../lib/avatar'
 import { getTrialSettings } from '../lib/settings'
 import { Icon } from './Icon'
 import { InstallAppButton } from './InstallAppButton'
+import { InstallHelpModal } from './InstallHelpModal'
 import { NotificationBell } from './NotificationBell'
 
 const NAV_LINKS = [
@@ -30,6 +31,7 @@ export function AppHeader() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [installHelpOpen, setInstallHelpOpen] = useState(false)
   const [trial, setTrial] = useState<{ enabled: boolean; days: number } | null>(null)
 
   useEffect(() => {
@@ -186,6 +188,15 @@ export function AppHeader() {
                       Tutorial de navegação
                     </Link>
                     <button
+                      onClick={() => {
+                        setAvatarMenuOpen(false)
+                        setInstallHelpOpen(true)
+                      }}
+                      className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium hover:bg-navy-light"
+                    >
+                      Como instalar o app
+                    </button>
+                    <button
                       onClick={signOut}
                       className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-brand-red hover:bg-navy-light"
                     >
@@ -305,6 +316,15 @@ export function AppHeader() {
             >
               Tutorial de navegação
             </Link>
+            <button
+              onClick={() => {
+                setMobileOpen(false)
+                setInstallHelpOpen(true)
+              }}
+              className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-white/80 hover:bg-white/10"
+            >
+              Como instalar o app
+            </button>
           </div>
 
           <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
@@ -326,6 +346,8 @@ export function AppHeader() {
           </div>
         </div>
       )}
+
+      {installHelpOpen && <InstallHelpModal onClose={() => setInstallHelpOpen(false)} />}
     </header>
   )
 }
