@@ -92,7 +92,11 @@ export function ScormPlayer({
       ref={iframeRef}
       src={entryUrl}
       title="Conteúdo SCORM"
-      className="h-full w-full rounded-xl border-0"
+      // touch-pan-y: sem isso, arrastar o dedo verticalmente sobre o
+      // iframe (que ocupa a maior parte da tela no mobile) fica preso
+      // dentro dele em vez de rolar a página — deixa o gesto vertical
+      // "vazar" pra rolagem da página, mesmo começando em cima do SCORM.
+      className="h-full w-full touch-pan-y rounded-xl border-0"
       // Some SCORM packages (e.g. cloud-hosted players like Lizza/SmartLMS)
       // nest a second iframe to stream remote content and use fullscreen /
       // external links — sandbox flags propagate to that nested frame, so

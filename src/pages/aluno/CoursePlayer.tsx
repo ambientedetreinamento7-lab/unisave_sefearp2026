@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from 'r
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { Icon } from '../../components/Icon'
+import { InfoTooltip } from '../../components/InfoTooltip'
 import { ScormPlayer } from '../../components/ScormPlayer'
 import { useAuth } from '../../context/AuthContext'
 import { completePill, getBlockingPill, getTrackWithPills, getUserProgressMap, markPillInProgress } from '../../lib/api'
@@ -477,18 +478,21 @@ export function CoursePlayer() {
         }`}
       >
         {modules.length > 1 && (
-          <aside className="card order-2 mb-6 h-fit max-h-64 overflow-y-auto p-4 lg:order-1 lg:sticky lg:top-6 lg:mb-0 lg:max-h-[75vh]">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-navy">Módulos do curso</p>
-                <p className="mt-0.5 text-[11px] text-ink-soft">
-                  {courseCompletedCount}/{modules.length} concluído{courseCompletedCount === 1 ? '' : 's'}
-                </p>
+          <aside className="order-2 mb-6 h-fit space-y-4 lg:order-1 lg:sticky lg:top-6 lg:mb-0">
+            <div className="card p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-navy">Módulos do curso</p>
+                  <p className="mt-0.5 text-[11px] text-ink-soft">
+                    {courseCompletedCount}/{modules.length} concluído{courseCompletedCount === 1 ? '' : 's'}
+                  </p>
+                </div>
+                <ModuleProgressRing pct={coursePct} />
               </div>
-              <ModuleProgressRing pct={coursePct} />
+              {courseDescription && <p className="mt-3 text-xs leading-relaxed text-ink-soft">{courseDescription}</p>}
             </div>
-            {courseDescription && <p className="mt-3 text-xs leading-relaxed text-ink-soft">{courseDescription}</p>}
-            <div className="mt-3 space-y-1.5">
+
+            <div className="card max-h-64 space-y-1.5 overflow-y-auto p-4 lg:max-h-[60vh]">
               {moduleStates.map(({ pill: m, completed, locked }) => {
                 const isCurrent = m.id === pill.id
                 const content = (
@@ -612,8 +616,10 @@ export function CoursePlayer() {
             <>
               <div
                 ref={playerRef}
-                className={`card relative mt-5 overflow-hidden shadow-[0_1px_2px_rgba(20,30,60,0.05),0_30px_70px_-24px_rgba(55,56,150,0.4)] ${
-                  pill.content_type === 'scorm' ? 'h-[80vh] min-h-[560px]' : 'aspect-video'
+                className={`card relative mt-5 touch-pan-y overflow-hidden shadow-[0_1px_2px_rgba(20,30,60,0.05),0_30px_70px_-24px_rgba(55,56,150,0.4)] ${
+                  pill.content_type === 'scorm'
+                    ? 'h-[55vh] min-h-[380px] sm:h-[70vh] sm:min-h-[480px] lg:h-[80vh] lg:min-h-[560px]'
+                    : 'aspect-video'
                 } ${isFullscreen ? 'h-screen w-screen rounded-none' : ''}`}
               >
                 <button
@@ -637,11 +643,14 @@ export function CoursePlayer() {
                 )}
                 {pill.content_type === 'video' && pill.content_url && (
                   videoEmbedInfo ? (
+                    // touch-pan-y: sem isso, arrastar o dedo pra rolar a
+                    // página trava dentro do iframe em vez de rolar —
+                    // deixa o gesto vertical vazar pra rolagem da página.
                     <iframe
                       ref={embedIframeRef}
                       src={videoEmbedInfo.embedUrl}
                       title={pill.title}
-                      className="h-full w-full border-0"
+                      className="h-full w-full touch-pan-y border-0"
                       allow="autoplay; fullscreen; picture-in-picture"
                     />
                   ) : (
@@ -652,7 +661,7 @@ export function CoursePlayer() {
                       onTimeUpdate={handleVideoTimeUpdate}
                       onSeeking={isStrictVideoTracking ? handleVideoSeeking : undefined}
                       onEnded={handleVideoEnded}
-                      className="h-full w-full"
+                      className="h-full w-full touch-pan-y"
                       src={pill.content_url}
                     />
                   )
@@ -661,7 +670,7 @@ export function CoursePlayer() {
                   <iframe
                     src={pill.content_url}
                     title={pill.title}
-                    className="h-full w-full border-0"
+                    className="h-full w-full touch-pan-y border-0"
                     allow="autoplay; fullscreen"
                   />
                 )}
@@ -704,27 +713,21 @@ export function CoursePlayer() {
               )}
 
               {pill.content_type === 'scorm' && (
-                <div className="mt-5 space-y-1 text-sm text-ink-soft">
-                  <p>
-                    {isCompleted
-                      ? 'Módulo SCORM concluído ✓'
-                      : 'O progresso deste módulo SCORM é registrado automaticamente pelo pacote.'}
-                  </p>
+                <div className="mt-5 flex items-center gap-1.5 text-sm text-ink-soft">
+                  <span>{isCompleted ? 'Módulo SCORM concluído ✓' : 'Progresso registrado automaticamente'}</span>
                   {!isCompleted && (
-                    <p>
-                      Se você já terminou o conteúdo e o módulo continua aparecendo como "Em andamento",
-                      atualize a página (F5) — às vezes a confirmação de conclusão só aparece depois disso.
-                    </p>
+                    <InfoTooltip text='Se você já terminou o conteúdo e o módulo continua aparecendo como "Em andamento", atualize a página (F5) — às vezes a confirmação de conclusão só aparece depois disso.' />
                   )}
                 </div>
               )}
 
               {isStrictVideoTracking && (
-                <p className="mt-5 text-sm text-ink-soft">
-                  {isCompleted
-                    ? 'Módulo concluído ✓'
-                    : 'Assista o vídeo até o final, sem pular trechos, para concluir este módulo automaticamente.'}
-                </p>
+                <div className="mt-5 flex items-center gap-1.5 text-sm text-ink-soft">
+                  <span>{isCompleted ? 'Módulo concluído ✓' : 'Assista até o final para concluir'}</span>
+                  {!isCompleted && (
+                    <InfoTooltip text="Assista o vídeo até o final, sem pular trechos, para concluir este módulo automaticamente." />
+                  )}
+                </div>
               )}
             </>
           )}
