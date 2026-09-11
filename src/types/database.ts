@@ -445,6 +445,7 @@ export interface GamificationLevel {
   name: string
   min_points: number
   badge_icon: string
+  description: string | null
 }
 
 export interface UserPointsEvent {

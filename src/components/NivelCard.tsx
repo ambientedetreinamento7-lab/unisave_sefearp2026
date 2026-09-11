@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { colorForName, initials } from '../lib/avatar'
 import { getLevels, levelForPoints, nextLevel } from '../lib/gamification'
 import type { GamificationLevel } from '../types/database'
+import { BadgeDetailModal } from './BadgeDetailModal'
 import { BadgeIcon } from './BadgeIcon'
 
 export function NivelCard({
@@ -14,6 +15,7 @@ export function NivelCard({
   totalPoints: number
 }) {
   const [levels, setLevels] = useState<GamificationLevel[]>([])
+  const [selectedBadge, setSelectedBadge] = useState<GamificationLevel | null>(null)
 
   useEffect(() => {
     getLevels().then(setLevels)
@@ -73,18 +75,22 @@ export function NivelCard({
           <p className="text-xs font-semibold text-ink-soft">Badges conquistadas</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {reached.map((l) => (
-              <span
+              <button
                 key={l.id}
+                type="button"
                 title={l.name}
-                className="flex items-center gap-1.5 rounded-full bg-lavender px-3 py-1.5 text-sm font-semibold text-lavender-ink"
+                onClick={() => setSelectedBadge(l)}
+                className="flex items-center gap-1.5 rounded-full bg-lavender px-3 py-1.5 text-sm font-semibold text-lavender-ink transition hover:brightness-95"
               >
                 <BadgeIcon icon={l.badge_icon} size={16} />
                 {l.name}
-              </span>
+              </button>
             ))}
           </div>
         </div>
       )}
+
+      {selectedBadge && <BadgeDetailModal level={selectedBadge} onClose={() => setSelectedBadge(null)} />}
     </div>
   )
 }

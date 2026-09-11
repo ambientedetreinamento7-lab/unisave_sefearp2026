@@ -247,6 +247,7 @@ function LevelFormModal({
   const initialIsImage = /^https?:\/\//.test(level?.badge_icon ?? '')
   const [mode, setMode] = useState<'emoji' | 'image'>(initialIsImage ? 'image' : 'emoji')
   const [badgeIcon, setBadgeIcon] = useState(level?.badge_icon ?? '🏅')
+  const [description, setDescription] = useState(level?.description ?? '')
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -262,7 +263,12 @@ function LevelFormModal({
 
   async function submit() {
     setSaving(true)
-    const payload = { name: name.trim(), min_points: minPoints, badge_icon: badgeIcon.trim() }
+    const payload = {
+      name: name.trim(),
+      min_points: minPoints,
+      badge_icon: badgeIcon.trim(),
+      description: description.trim() || null,
+    }
     if (level) {
       await supabase.from('gamification_levels').update(payload).eq('id', level.id)
     } else {
@@ -340,6 +346,15 @@ function LevelFormModal({
             {uploading && <p className="mt-1 text-xs text-ink-soft">Enviando…</p>}
           </div>
         )}
+
+        <label className="mt-3 block text-xs font-semibold text-ink-soft">Descrição (mostrada no modal do badge)</label>
+        <textarea
+          className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5"
+          rows={3}
+          placeholder="Ex.: Chegou! Deu os primeiros passos na plataforma."
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
 
         <div className="mt-5 flex gap-2">
           <button onClick={onClose} className="flex-1 rounded-xl border border-navy-light py-2.5 font-semibold text-ink-soft">
