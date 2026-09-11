@@ -175,12 +175,16 @@ export function Estande() {
           </div>
         </div>
 
-        <p className="mt-4 text-center text-sm text-white/70">
-          Já fez o teste?{' '}
-          <Link to="/entrar" className="font-semibold text-white hover:underline">
+        <div className="mt-4 flex items-center justify-center gap-2 text-sm text-white/70">
+          <span>Já fez o teste?</span>
+          <Link
+            to="/entrar"
+            className="inline-flex items-center gap-1 rounded-full bg-brand-red px-3.5 py-1 text-xs font-bold text-white transition hover:bg-brand-red-dark"
+          >
             Entrar
+            <Icon name="arrow-right" size={13} />
           </Link>
-        </p>
+        </div>
 
         <div className="card mt-4 p-6 sm:p-8">
           {step === 0 && (
