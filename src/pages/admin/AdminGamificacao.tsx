@@ -1,8 +1,20 @@
 import { useEffect, useState } from 'react'
 import { AdminLayout } from './AdminLayout'
+import { BadgeIcon } from '../../components/BadgeIcon'
 import { useConfirm } from '../../components/ConfirmDialog'
+import { sanitizeFileName } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import type { GamificationLevel, GamificationRule } from '../../types/database'
+
+async function uploadLevelBadge(file: File): Promise<string> {
+  const path = `levels/${crypto.randomUUID()}-${sanitizeFileName(file.name)}`
+  const { error } = await supabase.storage.from('covers').upload(path, file, {
+    upsert: true,
+    contentType: file.type || 'image/png',
+  })
+  if (error) throw error
+  return supabase.storage.from('covers').getPublicUrl(path).data.publicUrl
+}
 
 export function AdminGamificacao() {
   const confirm = useConfirm()
@@ -95,7 +107,7 @@ export function AdminGamificacao() {
           {levels.map((level) => (
             <div key={level.id} className="card flex items-center justify-between gap-3 p-4">
               <div className="flex items-center gap-3">
-                <span className="text-2xl">{level.badge_icon}</span>
+                <BadgeIcon icon={level.badge_icon} size={28} />
                 <div>
                   <p className="font-semibold text-ink">{level.name}</p>
                   <p className="text-xs text-ink-soft">A partir de {level.min_points} pontos</p>
@@ -229,8 +241,24 @@ function LevelFormModal({
 }) {
   const [name, setName] = useState(level?.name ?? '')
   const [minPoints, setMinPoints] = useState(level?.min_points ?? 0)
+  // badge_icon guarda tanto emoji quanto URL de imagem no mesmo campo de
+  // texto (ver components/BadgeIcon.tsx) — a aba escolhida aqui é só pra
+  // decidir qual editor mostrar, não muda o que é salvo.
+  const initialIsImage = /^https?:\/\//.test(level?.badge_icon ?? '')
+  const [mode, setMode] = useState<'emoji' | 'image'>(initialIsImage ? 'image' : 'emoji')
   const [badgeIcon, setBadgeIcon] = useState(level?.badge_icon ?? '🏅')
+  const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  async function handleFile(file: File) {
+    setUploading(true)
+    try {
+      const url = await uploadLevelBadge(file)
+      setBadgeIcon(url)
+    } finally {
+      setUploading(false)
+    }
+  }
 
   async function submit() {
     setSaving(true)
@@ -264,12 +292,54 @@ function LevelFormModal({
           onChange={(e) => setMinPoints(Number(e.target.value))}
         />
 
-        <label className="mt-3 block text-xs font-semibold text-ink-soft">Emoji do badge</label>
-        <input
-          className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5"
-          value={badgeIcon}
-          onChange={(e) => setBadgeIcon(e.target.value)}
-        />
+        <label className="mt-3 block text-xs font-semibold text-ink-soft">Badge</label>
+        <div className="mt-1 flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-navy-light">
+            <BadgeIcon icon={badgeIcon} size={26} />
+          </div>
+          <div className="flex flex-1 gap-1.5">
+            <button
+              type="button"
+              onClick={() => setMode('emoji')}
+              className={`flex-1 rounded-lg border-2 py-1.5 text-xs font-bold transition ${
+                mode === 'emoji' ? 'border-navy bg-navy-light text-navy' : 'border-navy-light text-ink-soft'
+              }`}
+            >
+              Emoji
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('image')}
+              className={`flex-1 rounded-lg border-2 py-1.5 text-xs font-bold transition ${
+                mode === 'image' ? 'border-navy bg-navy-light text-navy' : 'border-navy-light text-ink-soft'
+              }`}
+            >
+              Imagem/SVG
+            </button>
+          </div>
+        </div>
+
+        {mode === 'emoji' ? (
+          <input
+            className="mt-2 w-full rounded-xl border border-navy-light px-4 py-2.5"
+            placeholder="Ex.: 🏅"
+            value={/^https?:\/\//.test(badgeIcon) ? '' : badgeIcon}
+            onChange={(e) => setBadgeIcon(e.target.value)}
+          />
+        ) : (
+          <div className="mt-2">
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) handleFile(file)
+              }}
+              className="block w-full text-sm text-ink-soft file:mr-3 file:rounded-lg file:border-0 file:bg-navy-light file:px-3 file:py-2 file:text-sm file:font-semibold file:text-navy"
+            />
+            {uploading && <p className="mt-1 text-xs text-ink-soft">Enviando…</p>}
+          </div>
+        )}
 
         <div className="mt-5 flex gap-2">
           <button onClick={onClose} className="flex-1 rounded-xl border border-navy-light py-2.5 font-semibold text-ink-soft">
@@ -277,7 +347,7 @@ function LevelFormModal({
           </button>
           <button
             onClick={submit}
-            disabled={saving || !name.trim() || !badgeIcon.trim()}
+            disabled={saving || uploading || !name.trim() || !badgeIcon.trim()}
             className="flex-1 rounded-xl bg-brand-red py-2.5 font-bold text-white disabled:opacity-50"
           >
             {saving ? 'Salvando…' : 'Salvar'}

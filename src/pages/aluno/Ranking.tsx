@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
+import { BadgeIcon } from '../../components/BadgeIcon'
 import { useAuth } from '../../context/AuthContext'
 import { colorForName, initials } from '../../lib/avatar'
 import { getLevels, getRanking, getRules, levelForPoints } from '../../lib/gamification'
@@ -65,7 +66,7 @@ export function Ranking() {
                   key={level.id}
                   className={`card flex items-center gap-3 p-4 ${unlocked ? '' : 'opacity-50 grayscale'}`}
                 >
-                  <span className="text-3xl">{level.badge_icon}</span>
+                  <BadgeIcon icon={level.badge_icon} size={36} />
                   <div>
                     <p className="font-semibold text-ink">{level.name}</p>
                     <p className="text-xs text-ink-soft">A partir de {level.min_points} pontos</p>
@@ -135,8 +136,8 @@ function RankingRow({
           </span>
         )}
       </span>
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-        {badge && <span className="mr-1">{badge}</span>}
+      <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-sm font-semibold text-ink">
+        <BadgeIcon icon={badge} size={16} />
         {profile.name}
       </span>
       <span className="shrink-0 text-sm font-bold text-navy">{profile.total_points} pts</span>

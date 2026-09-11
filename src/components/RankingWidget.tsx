@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { colorForName, initials } from '../lib/avatar'
 import { getLevels, getRanking, levelForPoints } from '../lib/gamification'
 import type { GamificationLevel, PublicProfile } from '../types/database'
+import { BadgeIcon } from './BadgeIcon'
 
 export function RankingWidget({ currentUserId }: { currentUserId: string }) {
   const [ranking, setRanking] = useState<PublicProfile[] | null>(null)
@@ -73,8 +74,8 @@ function RankingRow({
           </span>
         )}
       </span>
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-        {badge && <span className="mr-1">{badge}</span>}
+      <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-sm font-semibold text-ink">
+        <BadgeIcon icon={badge} size={16} />
         {profile.name}
       </span>
       <span className="shrink-0 text-sm font-bold text-navy">{profile.total_points} pts</span>

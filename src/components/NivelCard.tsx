@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { colorForName, initials } from '../lib/avatar'
 import { getLevels, levelForPoints, nextLevel } from '../lib/gamification'
 import type { GamificationLevel } from '../types/database'
+import { BadgeIcon } from './BadgeIcon'
 
 export function NivelCard({
   name,
@@ -42,8 +43,15 @@ export function NivelCard({
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate font-bold text-ink">{name}</p>
-          <p className="text-sm text-ink-soft">
-            {current ? `${current.badge_icon} ${current.name}` : 'Sem nível'} · {totalPoints} pontos
+          <p className="flex flex-wrap items-center gap-1 text-sm text-ink-soft">
+            {current ? (
+              <>
+                <BadgeIcon icon={current.badge_icon} size={16} /> {current.name}
+              </>
+            ) : (
+              'Sem nível'
+            )}{' '}
+            · {totalPoints} pontos
           </p>
         </div>
       </div>
@@ -53,8 +61,9 @@ export function NivelCard({
           <div className="progress-track">
             <div className="progress-fill" style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} />
           </div>
-          <p className="mt-1 text-xs text-ink-soft">
-            Faltam {next.min_points - totalPoints} pontos para {next.badge_icon} {next.name}
+          <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-ink-soft">
+            Faltam {next.min_points - totalPoints} pontos para <BadgeIcon icon={next.badge_icon} size={14} />{' '}
+            {next.name}
           </p>
         </div>
       )}
@@ -69,7 +78,7 @@ export function NivelCard({
                 title={l.name}
                 className="flex items-center gap-1.5 rounded-full bg-lavender px-3 py-1.5 text-sm font-semibold text-lavender-ink"
               >
-                <span>{l.badge_icon}</span>
+                <BadgeIcon icon={l.badge_icon} size={16} />
                 {l.name}
               </span>
             ))}
