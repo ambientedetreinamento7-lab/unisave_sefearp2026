@@ -17,6 +17,24 @@ export function formatCargaHoraria(minutes: number | null): string {
   return `${h}h${String(m).padStart(2, '0')}min`
 }
 
+/** pills.duration é texto livre (o admin digita algo como "12 min"), mas
+ * às vezes vem só o número puro (ex.: "120", "2") sem unidade — nesse caso
+ * interpreta como minutos e formata por extenso ("2 horas", "2 minutos").
+ * Texto que já tem qualquer coisa além de dígitos fica como o admin
+ * escreveu, sem tentar reformatar. */
+export function formatPillDuration(raw: string | null): string {
+  if (!raw) return '—'
+  const trimmed = raw.trim()
+  if (!/^\d+$/.test(trimmed)) return trimmed
+  const minutes = parseInt(trimmed, 10)
+  if (minutes < 60) return `${minutes} minuto${minutes === 1 ? '' : 's'}`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  const hoursPart = `${h} hora${h === 1 ? '' : 's'}`
+  if (m === 0) return hoursPart
+  return `${hoursPart} e ${m} minuto${m === 1 ? '' : 's'}`
+}
+
 export function relativeTime(iso: string) {
   const diffMs = Date.now() - new Date(iso).getTime()
   const min = Math.floor(diffMs / 60_000)

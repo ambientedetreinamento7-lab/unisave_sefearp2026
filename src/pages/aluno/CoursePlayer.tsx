@@ -5,6 +5,7 @@ import { Icon } from '../../components/Icon'
 import { ScormPlayer } from '../../components/ScormPlayer'
 import { useAuth } from '../../context/AuthContext'
 import { completePill, getBlockingPill, getTrackWithPills, getUserProgressMap, markPillInProgress } from '../../lib/api'
+import { formatPillDuration } from '../../lib/format'
 import { getModuleCompletionSettings } from '../../lib/settings'
 import { supabase } from '../../lib/supabase'
 import type { Pill, ScormLibraryItem, UserProgress } from '../../types/database'
@@ -110,6 +111,7 @@ export function CoursePlayer() {
   const [modules, setModules] = useState<Pill[]>([])
   const [moduleProgress, setModuleProgress] = useState<Record<string, UserProgress>>({})
   const [sequential, setSequential] = useState(false)
+  const [courseDescription, setCourseDescription] = useState<string | null>(null)
   const [hasQuiz, setHasQuiz] = useState(false)
   const [manualCompletionDefault, setManualCompletionDefault] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -213,6 +215,7 @@ export function CoursePlayer() {
           setModules(trackModules)
           setModuleProgress(progressMap)
           setSequential(homeTrack.sequential)
+          setCourseDescription(homeTrack.description)
         }
       }
 
@@ -484,6 +487,7 @@ export function CoursePlayer() {
               </div>
               <ModuleProgressRing pct={coursePct} />
             </div>
+            {courseDescription && <p className="mt-3 text-xs leading-relaxed text-ink-soft">{courseDescription}</p>}
             <div className="mt-3 space-y-1.5">
               {moduleStates.map(({ pill: m, completed, locked }) => {
                 const isCurrent = m.id === pill.id
@@ -517,7 +521,12 @@ export function CoursePlayer() {
                       <span className={`block truncate text-sm font-semibold ${isCurrent ? 'text-navy' : 'text-ink'}`}>
                         {m.title}
                       </span>
-                      <span className="block text-xs text-ink-soft">{m.duration ?? '—'}</span>
+                      <span className="block text-xs text-ink-soft">{formatPillDuration(m.duration)}</span>
+                      {m.description && (
+                        <span className="mt-0.5 line-clamp-2 block text-[11px] leading-snug text-ink-soft/80">
+                          {m.description}
+                        </span>
+                      )}
                     </span>
                     {completed && !locked && <span className="shrink-0 text-sm">✅</span>}
                   </div>
@@ -550,7 +559,7 @@ export function CoursePlayer() {
               </span>
             )}
             <span className="rounded-full bg-surface px-3 py-1 text-xs font-semibold text-ink-soft">
-              {pill.duration ?? '—'}
+              {formatPillDuration(pill.duration)}
             </span>
             <span
               className={`rounded-full px-3 py-1 text-xs font-bold ${
@@ -623,7 +632,7 @@ export function CoursePlayer() {
                 {!isFullscreen && pill.duration && (
                   <span className="glass-pill absolute right-3 top-3 z-10 px-3 py-1 text-xs font-semibold">
                     <Icon name="clock" size={12} />
-                    {pill.duration}
+                    {formatPillDuration(pill.duration)}
                   </span>
                 )}
                 {pill.content_type === 'video' && pill.content_url && (
