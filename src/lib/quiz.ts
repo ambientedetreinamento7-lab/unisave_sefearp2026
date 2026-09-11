@@ -2,10 +2,32 @@ import type { IconName } from '../components/Icon'
 import type { DiagnosticProfile } from '../types/database'
 
 export const PROGRAMS = [
-  { id: 'administracao', name: 'Administração', subtitle: 'Diretrizes CNE 2020 · 7 áreas + 6 eixos' },
-  { id: 'contabeis', name: 'Ciências Contábeis', subtitle: 'Framework IFAC/IAESB · 3 blocos' },
-  { id: 'economicas', name: 'Ciências Econômicas', subtitle: '4 blocos de formação' },
-  { id: 'financas', name: 'Finanças', subtitle: 'Taxonomia sintetizada dos 3 PPPs' },
+  // badge: null enquanto o selo do curso não estiver disponível em
+  // public/course-badges — OptionRow cai pro ícone genérico nesse caso.
+  {
+    id: 'administracao',
+    name: 'Administração',
+    subtitle: 'Diretrizes CNE 2020 · 7 áreas + 6 eixos',
+    badge: '/course-badges/selo-adm.png',
+  },
+  {
+    id: 'contabeis',
+    name: 'Ciências Contábeis',
+    subtitle: 'Framework IFAC/IAESB · 3 blocos',
+    badge: '/course-badges/selo-contabilidade.png',
+  },
+  {
+    id: 'economicas',
+    name: 'Ciências Econômicas',
+    subtitle: '4 blocos de formação',
+    badge: '/course-badges/selo-economia.png',
+  },
+  {
+    id: 'financas',
+    name: 'Finanças',
+    subtitle: 'Taxonomia sintetizada dos 3 PPPs',
+    badge: '/course-badges/selo-finan%C3%A7as.png',
+  },
 ] as const
 
 export type ProgramSlug = (typeof PROGRAMS)[number]['id']

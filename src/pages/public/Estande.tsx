@@ -194,6 +194,7 @@ export function Estande() {
                   <OptionRow
                     key={p.id}
                     icon="book"
+                    image={p.badge}
                     title={p.name}
                     subtitle={p.subtitle}
                     selected={program === p.id}
@@ -314,12 +315,14 @@ function StepBlock({ title, subtitle, children }: { title: string; subtitle: str
 
 function OptionRow({
   icon,
+  image,
   title,
   subtitle,
   selected,
   onClick,
 }: {
   icon: Parameters<typeof Icon>[0]['name']
+  image?: string | null
   title: string
   subtitle: string
   selected: boolean
@@ -332,9 +335,13 @@ function OptionRow({
         selected ? 'border-brand-red bg-red-50' : 'border-navy-light hover:border-navy'
       }`}
     >
-      <span className="icon-badge h-11 w-11">
-        <Icon name={icon} size={20} />
-      </span>
+      {image ? (
+        <img src={image} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
+      ) : (
+        <span className="icon-badge h-11 w-11">
+          <Icon name={icon} size={20} />
+        </span>
+      )}
       <span className="flex-1">
         <span className={`block font-bold ${selected ? 'text-brand-red' : 'text-ink'}`}>{title}</span>
         <span className="block text-xs text-ink-soft">{subtitle}</span>
