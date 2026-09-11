@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from 'r
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { Icon } from '../../components/Icon'
-import { ProgressBar } from '../../components/ProgressBar'
 import { ScormPlayer } from '../../components/ScormPlayer'
 import { useAuth } from '../../context/AuthContext'
 import { completePill, getBlockingPill, getTrackWithPills, getUserProgressMap, markPillInProgress } from '../../lib/api'
@@ -15,6 +14,42 @@ const CONTENT_TYPE_ICON: Record<Pill['content_type'], string> = {
   iframe: '▶',
   scorm: '▶',
   reaction: '📝',
+}
+
+// Gradiente de fallback pro thumb do módulo na barra lateral, quando a
+// pílula não tem thumbnail_url próprio — dá pra distinguir o tipo de
+// conteúdo de relance, sem depender de imagem nenhuma (zero custo extra).
+const CONTENT_TYPE_GRADIENT: Record<Pill['content_type'], string> = {
+  video: 'from-navy to-navy-dark',
+  iframe: 'from-lavender-ink to-navy',
+  scorm: 'from-navy-dark to-navy-deep',
+  reaction: 'from-brand-red to-brand-red-dark',
+}
+
+// Anel de progresso circular do curso — SVG puro, sem lib de gráfico.
+function ModuleProgressRing({ pct }: { pct: number }) {
+  const r = 14
+  const c = 2 * Math.PI * r
+  const offset = c - (Math.min(100, Math.max(0, pct)) / 100) * c
+  return (
+    <div className="relative h-[34px] w-[34px] shrink-0">
+      <svg width="34" height="34" viewBox="0 0 34 34" className="-rotate-90">
+        <circle cx="17" cy="17" r={r} fill="none" stroke="var(--color-navy-light)" strokeWidth="4" />
+        <circle
+          cx="17"
+          cy="17"
+          r={r}
+          fill="none"
+          stroke="var(--color-brand-red)"
+          strokeWidth="4"
+          strokeDasharray={c}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-ink">{pct}%</span>
+    </div>
+  )
 }
 
 // Links do Vimeo/YouTube (mesmo os de "compartilhar") não são um arquivo de
@@ -426,40 +461,56 @@ export function CoursePlayer() {
   const coursePct = modules.length ? Math.round((courseCompletedCount / modules.length) * 100) : 0
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-bg pb-16">
+    <div className="relative min-h-screen w-full overflow-x-hidden bg-bg pb-16">
+      {/* Fundo ambiente estático (sem animação) — só pra tirar o clima "flat"
+          da página, sem custo de performance nem distração pro aluno. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-0 h-[420px] bg-[radial-gradient(900px_420px_at_50%_-10%,rgba(55,56,150,0.10),transparent_70%)]" />
+
       <AppHeader />
 
       <main
-        className={`mx-auto w-full max-w-7xl gap-6 px-4 py-8 ${
+        className={`relative mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 ${
           modules.length > 1 ? 'lg:grid lg:grid-cols-[280px_1fr] lg:items-start' : 'max-w-4xl'
         }`}
       >
         {modules.length > 1 && (
-          <aside className="card mb-6 h-fit max-h-[75vh] overflow-y-auto p-4 lg:sticky lg:top-6 lg:mb-0">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-bold uppercase tracking-wide text-navy">Módulos do curso</p>
-              <span className="text-xs font-bold text-ink-soft">{coursePct}%</span>
-            </div>
-            <p className="mt-0.5 text-[11px] text-ink-soft">
-              {courseCompletedCount}/{modules.length} concluído{courseCompletedCount === 1 ? '' : 's'}
-            </p>
-            <div className="mt-2">
-              <ProgressBar value={coursePct} />
+          <aside className="card order-2 mb-6 h-fit max-h-64 overflow-y-auto p-4 lg:order-1 lg:sticky lg:top-6 lg:mb-0 lg:max-h-[75vh]">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-navy">Módulos do curso</p>
+                <p className="mt-0.5 text-[11px] text-ink-soft">
+                  {courseCompletedCount}/{modules.length} concluído{courseCompletedCount === 1 ? '' : 's'}
+                </p>
+              </div>
+              <ModuleProgressRing pct={coursePct} />
             </div>
             <div className="mt-3 space-y-1.5">
               {moduleStates.map(({ pill: m, completed, locked }) => {
                 const isCurrent = m.id === pill.id
                 const content = (
                   <div
-                    className={`flex items-center gap-2.5 rounded-xl p-2 transition ${
-                      isCurrent ? 'bg-navy-light' : locked ? 'opacity-50' : 'hover:bg-bg'
+                    className={`flex items-center gap-2.5 rounded-xl border-l-4 p-2 transition ${
+                      isCurrent
+                        ? 'border-brand-red bg-navy-light'
+                        : locked
+                          ? 'border-transparent opacity-60'
+                          : 'border-transparent hover:bg-bg'
                     }`}
                   >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-navy text-sm text-white">
+                    <span
+                      className={`relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl text-sm text-white ${
+                        m.thumbnail_url ? '' : `bg-gradient-to-br ${CONTENT_TYPE_GRADIENT[m.content_type]}`
+                      }`}
+                    >
                       {m.thumbnail_url ? (
                         <img src={m.thumbnail_url} alt="" className="h-full w-full object-cover" />
                       ) : (
-                        CONTENT_TYPE_ICON[m.content_type]
+                        <span className="text-base">{CONTENT_TYPE_ICON[m.content_type]}</span>
+                      )}
+                      {locked && (
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-xs backdrop-blur-[1px]">
+                          🔒
+                        </span>
                       )}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -468,7 +519,7 @@ export function CoursePlayer() {
                       </span>
                       <span className="block text-xs text-ink-soft">{m.duration ?? '—'}</span>
                     </span>
-                    <span className="shrink-0 text-sm">{locked ? '🔒' : completed ? '✅' : ''}</span>
+                    {completed && !locked && <span className="shrink-0 text-sm">✅</span>}
                   </div>
                 )
                 return locked ? (
@@ -485,7 +536,7 @@ export function CoursePlayer() {
           </aside>
         )}
 
-        <div className="min-w-0">
+        <div className="order-1 min-w-0 lg:order-2">
           <Link to="/dashboard" className="text-sm font-medium text-ink-soft hover:text-navy">
             ← Voltar ao painel
           </Link>
@@ -509,6 +560,24 @@ export function CoursePlayer() {
               {isCompleted ? 'Concluído' : 'Em andamento'}
             </span>
           </div>
+
+          {/* Engajamento com dados reais do aluno — nada inventado: sequência
+              de acesso e pontos já existem em profiles (lib/gamification.ts). */}
+          {profile && (typeof profile.access_streak === 'number' || typeof profile.total_points === 'number') && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {typeof profile.access_streak === 'number' && profile.access_streak > 1 && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-orange-600">
+                  🔥 {profile.access_streak} dias seguidos
+                </span>
+              )}
+              {typeof profile.total_points === 'number' && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-lavender px-3 py-1 text-xs font-bold text-lavender-ink">
+                  <Icon name="trophy" size={12} />
+                  {profile.total_points} pts
+                </span>
+              )}
+            </div>
+          )}
 
           {pill.content_type === 'reaction' ? (
             <div className="card mt-5 flex flex-col items-center gap-3 p-10 text-center">
@@ -534,7 +603,7 @@ export function CoursePlayer() {
             <>
               <div
                 ref={playerRef}
-                className={`card relative mt-5 overflow-hidden ${
+                className={`card relative mt-5 overflow-hidden shadow-[0_1px_2px_rgba(20,30,60,0.05),0_30px_70px_-24px_rgba(55,56,150,0.4)] ${
                   pill.content_type === 'scorm' ? 'h-[80vh] min-h-[560px]' : 'aspect-video'
                 } ${isFullscreen ? 'h-screen w-screen rounded-none' : ''}`}
               >
@@ -551,6 +620,12 @@ export function CoursePlayer() {
                 >
                   <Icon name={isFullscreen ? 'minimize' : 'maximize'} size={16} />
                 </button>
+                {!isFullscreen && pill.duration && (
+                  <span className="glass-pill absolute right-3 top-3 z-10 px-3 py-1 text-xs font-semibold">
+                    <Icon name="clock" size={12} />
+                    {pill.duration}
+                  </span>
+                )}
                 {pill.content_type === 'video' && pill.content_url && (
                   videoEmbedInfo ? (
                     <iframe
