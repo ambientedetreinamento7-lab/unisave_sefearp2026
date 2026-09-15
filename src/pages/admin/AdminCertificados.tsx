@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AdminLayout } from './AdminLayout'
 import { useConfirm } from '../../components/ConfirmDialog'
 import { RichTextEditor } from '../../components/RichTextEditor'
 import { applyCertificateVariables } from '../../lib/certificate'
+import { getIssuedCertificates } from '../../lib/api'
 import { formatCargaHoraria, sanitizeFileName } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
-import type { CertificateTemplate } from '../../types/database'
+import type { CertificateTemplate, IssuedCertificate } from '../../types/database'
 
 const VARIABLES = [
   { token: '{NOME_COMPLETO}', label: 'Nome completo' },
@@ -25,9 +26,15 @@ function previewVariables(html: string) {
 
 export function AdminCertificados() {
   const confirm = useConfirm()
+  const [tab, setTab] = useState<'templates' | 'buscar'>('templates')
   const [templates, setTemplates] = useState<CertificateTemplate[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const [issued, setIssued] = useState<IssuedCertificate[]>([])
+  const [issuedLoaded, setIssuedLoaded] = useState(false)
+  const [issuedLoading, setIssuedLoading] = useState(false)
+  const [query, setQuery] = useState('')
 
   async function reload() {
     const { data } = await supabase.from('certificate_templates').select('*').order('name')
@@ -38,6 +45,27 @@ export function AdminCertificados() {
   useEffect(() => {
     reload()
   }, [])
+
+  useEffect(() => {
+    if (tab !== 'buscar' || issuedLoaded) return
+    setIssuedLoading(true)
+    getIssuedCertificates().then((data) => {
+      setIssued(data)
+      setIssuedLoaded(true)
+      setIssuedLoading(false)
+    })
+  }, [tab, issuedLoaded])
+
+  const filteredIssued = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return issued
+    return issued.filter(
+      (c) =>
+        c.student_name.toLowerCase().includes(q) ||
+        c.code.toLowerCase().includes(q) ||
+        c.track_title.toLowerCase().includes(q),
+    )
+  }, [issued, query])
 
   async function createNew() {
     const { data, error } = await supabase
@@ -69,53 +97,128 @@ export function AdminCertificados() {
 
   return (
     <AdminLayout>
-      <p className="mb-4 text-sm text-ink-soft">
-        Crie um modelo de certificado aqui — com fundo e variáveis — e depois selecione qual usar em cada curso, em
-        "Editar curso". O mesmo modelo pode ser reaproveitado em vários cursos.
-      </p>
-
-      <div className="grid gap-4 md:grid-cols-[280px_1fr]">
-        <div className="card max-h-[70vh] overflow-y-auto p-3">
-          <button
-            onClick={createNew}
-            className="mb-2 block w-full rounded-lg bg-brand-red px-3 py-2 text-left text-sm font-bold text-white hover:bg-brand-red-dark"
-          >
-            + Novo certificado
-          </button>
-          {templates.map((t) => (
-            <div key={t.id} className="group flex items-center gap-1">
-              <button
-                onClick={() => setSelectedId(t.id)}
-                className={`block flex-1 truncate rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
-                  selectedId === t.id ? 'bg-navy text-white' : 'text-ink hover:bg-navy-light'
-                }`}
-              >
-                {t.name}
-              </button>
-              <button
-                onClick={() => deleteTemplate(t.id)}
-                title="Excluir"
-                className={`shrink-0 px-1.5 text-xs font-semibold hover:underline ${
-                  selectedId === t.id ? 'text-white/80' : 'text-brand-red'
-                }`}
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-          {templates.length === 0 && <p className="p-3 text-sm text-ink-soft">Nenhum certificado cadastrado ainda.</p>}
-        </div>
-
-        <div>
-          {selected ? (
-            <CertificateEditor key={selected.id} template={selected} onSaved={reload} />
-          ) : (
-            <div className="card p-8 text-center text-ink-soft">
-              Selecione um certificado à esquerda, ou crie um novo, pra editar o modelo.
-            </div>
-          )}
-        </div>
+      <div className="mb-4 flex gap-1.5">
+        <button
+          onClick={() => setTab('templates')}
+          className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+            tab === 'templates' ? 'bg-navy text-white' : 'text-ink-soft hover:bg-navy-light'
+          }`}
+        >
+          Modelos
+        </button>
+        <button
+          onClick={() => setTab('buscar')}
+          className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+            tab === 'buscar' ? 'bg-navy text-white' : 'text-ink-soft hover:bg-navy-light'
+          }`}
+        >
+          Buscar emitidos
+        </button>
       </div>
+
+      {tab === 'templates' ? (
+        <>
+          <p className="mb-4 text-sm text-ink-soft">
+            Crie um modelo de certificado aqui — com fundo e variáveis — e depois selecione qual usar em cada curso,
+            em "Editar curso". O mesmo modelo pode ser reaproveitado em vários cursos.
+          </p>
+
+          <div className="grid gap-4 md:grid-cols-[280px_1fr]">
+            <div className="card max-h-[70vh] overflow-y-auto p-3">
+              <button
+                onClick={createNew}
+                className="mb-2 block w-full rounded-lg bg-brand-red px-3 py-2 text-left text-sm font-bold text-white hover:bg-brand-red-dark"
+              >
+                + Novo certificado
+              </button>
+              {templates.map((t) => (
+                <div key={t.id} className="group flex items-center gap-1">
+                  <button
+                    onClick={() => setSelectedId(t.id)}
+                    className={`block flex-1 truncate rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
+                      selectedId === t.id ? 'bg-navy text-white' : 'text-ink hover:bg-navy-light'
+                    }`}
+                  >
+                    {t.name}
+                  </button>
+                  <button
+                    onClick={() => deleteTemplate(t.id)}
+                    title="Excluir"
+                    className={`shrink-0 px-1.5 text-xs font-semibold hover:underline ${
+                      selectedId === t.id ? 'text-white/80' : 'text-brand-red'
+                    }`}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              {templates.length === 0 && (
+                <p className="p-3 text-sm text-ink-soft">Nenhum certificado cadastrado ainda.</p>
+              )}
+            </div>
+
+            <div>
+              {selected ? (
+                <CertificateEditor key={selected.id} template={selected} onSaved={reload} />
+              ) : (
+                <div className="card p-8 text-center text-ink-soft">
+                  Selecione um certificado à esquerda, ou crie um novo, pra editar o modelo.
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="mb-4 text-sm text-ink-soft">
+            Encontre os certificados já emitidos pra um aluno — útil quando ele perdeu o link ou não sabe o código de
+            verificação.
+          </p>
+
+          <input
+            className="w-full max-w-md rounded-xl border border-navy-light px-4 py-2.5 text-sm"
+            placeholder="Nome (como emitido), código ou curso"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+
+          <div className="card mt-4 overflow-hidden">
+            {issuedLoading ? (
+              <p className="p-4 text-sm text-ink-soft">Carregando…</p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead className="bg-navy-light text-navy">
+                  <tr>
+                    <th className="px-4 py-3">Aluno</th>
+                    <th className="px-4 py-3">Curso</th>
+                    <th className="px-4 py-3">Código</th>
+                    <th className="px-4 py-3">Concluído em</th>
+                    <th className="px-4 py-3">Emitido em</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredIssued.map((c) => (
+                    <tr key={c.id} className="border-t border-navy-light/50">
+                      <td className="px-4 py-3 font-medium text-ink">{c.student_name}</td>
+                      <td className="px-4 py-3 text-ink-soft">{c.track_title}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-ink-soft">{c.code}</td>
+                      <td className="px-4 py-3 text-ink-soft">
+                        {c.completed_at ? new Date(c.completed_at).toLocaleDateString('pt-BR') : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-ink-soft">{new Date(c.issued_at).toLocaleDateString('pt-BR')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {!issuedLoading && filteredIssued.length === 0 && (
+              <p className="p-4 text-sm text-ink-soft">
+                {query ? 'Nenhum certificado encontrado.' : 'Nenhum certificado emitido ainda.'}
+              </p>
+            )}
+          </div>
+        </>
+      )}
     </AdminLayout>
   )
 }

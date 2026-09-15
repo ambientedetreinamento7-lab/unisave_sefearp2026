@@ -30,7 +30,23 @@ export function PwaController() {
   useEffect(() => {
     if (loading) return
     if (pwa.installableEnabled || isStandalone()) {
-      import('virtual:pwa-register').then(({ registerSW }) => registerSW({ immediate: true }))
+      import('virtual:pwa-register').then(({ registerSW }) => {
+        registerSW({
+          immediate: true,
+          // Por padrão (registerType: 'autoUpdate'), o vite-plugin-pwa
+          // recarrega a página sozinho, sem avisar, assim que uma versão
+          // nova do service worker termina de ativar — mesmo com um curso
+          // em andamento. Adia a atualização pra quando a aba não estiver
+          // em uso (fica invisível pra quem está usando o app).
+          onNeedReload() {
+            const reloadIfHidden = () => {
+              if (document.visibilityState === 'hidden') window.location.reload()
+            }
+            document.addEventListener('visibilitychange', reloadIfHidden)
+            reloadIfHidden()
+          },
+        })
+      })
     }
   }, [pwa.installableEnabled, loading])
 

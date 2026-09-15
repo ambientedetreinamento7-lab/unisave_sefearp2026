@@ -8,6 +8,7 @@ import { awardPoints } from '../../lib/gamification'
 import { formatCargaHoraria } from '../../lib/format'
 import { getAllTracks, getOrCreateCertificate, getTrackWithPills, getUserProgressMap, trackProgressPct } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
+import { QrCode } from '../../components/QrCode'
 import type { CertificateTemplate, Pill, Track } from '../../types/database'
 
 interface CertificateEntry {
@@ -162,10 +163,12 @@ function CertificateFace({
   template,
   html,
   code,
+  verifyUrl,
 }: {
   template: CertificateTemplate | null
   html: string
   code: string | null
+  verifyUrl: string | null
 }) {
   return (
     <div
@@ -177,10 +180,17 @@ function CertificateFace({
       }
     >
       <div className="max-w-lg text-base font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
-      {code && (
-        <p className="absolute bottom-3 right-4 text-[10px] font-semibold uppercase tracking-wide opacity-70">
-          Código de verificação: {code}
-        </p>
+      {code && verifyUrl && (
+        <div className="absolute bottom-3 right-4 flex items-end gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
+            Código de verificação:
+            <br />
+            {code}
+          </p>
+          <div className="rounded-md bg-white p-1 shadow">
+            <QrCode value={verifyUrl} size={52} />
+          </div>
+        </div>
       )}
     </div>
   )
@@ -336,7 +346,7 @@ function CertificateModal({
             como print de tela em vez de um certificado de verdade. */}
         <div className="mt-4 overflow-hidden rounded-xl border border-navy-light shadow-sm">
           <div ref={certRef}>
-            <CertificateFace template={entry.template} html={html} code={entry.code} />
+            <CertificateFace template={entry.template} html={html} code={entry.code} verifyUrl={verifyUrl} />
           </div>
         </div>
 
@@ -371,7 +381,7 @@ function CertificateModal({
         {entry.track.conteudo_programatico && samePage && (
           <div className="fixed left-[-9999px] top-0" aria-hidden="true">
             <div ref={combinedRef} className="w-[1400px]">
-              <CertificateFace template={entry.template} html={html} code={entry.code} />
+              <CertificateFace template={entry.template} html={html} code={entry.code} verifyUrl={verifyUrl} />
               <SyllabusBlock trackTitle={entry.track.title} html={entry.track.conteudo_programatico} />
             </div>
           </div>

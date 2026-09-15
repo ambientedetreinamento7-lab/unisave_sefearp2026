@@ -23,6 +23,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // como em AtivarConta) — sem isso, a resposta mais lenta podia sobrescrever
   // o profile já correto de uma chamada mais recente.
   const loadSeq = useRef(0)
+  // Guarda o usuário da sessão atual só pra distinguir um SIGNED_IN de
+  // verdade (login novo) de um SIGNED_IN "fantasma" — o supabase-js dispara
+  // esse mesmo evento de novo toda vez que a aba volta a ficar visível, só
+  // pra revalidar a sessão (ver GoTrueClient._onVisibilityChanged), mesmo
+  // sem o usuário ter trocado. Sem isso, cada troca de aba/minimização
+  // acionava "loading" de novo, o RouteGuard remontava a rota inteira e
+  // qualquer vídeo/SCORM em andamento perdia o progresso — parecia a
+  // página tendo recarregado sozinha.
+  const sessionUserIdRef = useRef<string | null>(null)
 
   async function loadProfile(userId: string) {
     const seq = ++loadSeq.current
@@ -34,6 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
       setSession(data.session)
+      sessionUserIdRef.current = data.session?.user.id ?? null
       if (data.session) await loadProfile(data.session.user.id)
       setLoading(false)
     })
@@ -44,14 +54,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // e as regras que dependem do profile (termos pendentes, senha ainda
     // não definida) não chegam a rodar a tempo, deixando a tela travada até
     // um refresh manual. TOKEN_REFRESHED fica de fora pra não piscar
-    // "Carregando…" pra quem já está logado só por renovar o token.
+    // "Carregando…" pra quem já está logado só por renovar o token — e um
+    // SIGNED_IN do mesmo usuário que já estava logado (ver comentário
+    // acima) recebe o mesmo tratamento.
     const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession)
       if (!newSession) {
+        sessionUserIdRef.current = null
         setProfile(null)
         return
       }
-      if (event === 'TOKEN_REFRESHED') return
+      const sameUser = sessionUserIdRef.current === newSession.user.id
+      sessionUserIdRef.current = newSession.user.id
+      if (event === 'TOKEN_REFRESHED' || (event === 'SIGNED_IN' && sameUser)) return
       setLoading(true)
       loadProfile(newSession.user.id).finally(() => setLoading(false))
     })
