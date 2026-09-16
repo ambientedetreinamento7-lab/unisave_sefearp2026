@@ -88,7 +88,11 @@ export function NotificationBell({ mobile = false }: { mobile?: boolean }) {
       {open && (
         <>
           <button className="fixed inset-0 z-10 cursor-default" onClick={() => setOpen(false)} aria-label="Fechar notificações" />
-          <div className="card absolute right-0 z-20 mt-2 w-80 max-w-[90vw] overflow-hidden text-ink">
+          <div
+            className={`card absolute z-20 mt-2 w-80 max-w-[90vw] overflow-hidden text-ink ${
+              mobile ? 'left-1/2 -translate-x-1/2' : 'right-0'
+            }`}
+          >
             <div className="flex items-center justify-between border-b border-navy-light px-3 py-2">
               <p className="text-sm font-bold text-ink">Notificações</p>
               <div className="flex items-center gap-3">
