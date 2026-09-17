@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AppHeader } from '../../components/AppHeader'
 import { useConfirm } from '../../components/ConfirmDialog'
 import { Icon } from '../../components/Icon'
@@ -32,7 +32,7 @@ import { supabase } from '../../lib/supabase'
 import { colorForName, initials } from '../../lib/avatar'
 import { relativeTime } from '../../lib/format'
 import { MAX_VIDEO_DURATION_SECONDS, readVideoDuration, uploadVideoToVimeo } from '../../lib/vimeo'
-import type { Program, SocialComment, SocialScope, SocialStoryView } from '../../types/database'
+import type { Program, SocialComment, SocialPostMedia, SocialScope, SocialStoryView } from '../../types/database'
 
 const MAX_STORY_VIDEO_SECONDS = 50
 
@@ -562,19 +562,11 @@ function PostCard({
       {post.body && <p className="mt-3 whitespace-pre-wrap text-sm text-ink">{post.body}</p>}
 
       {post.media.length === 1 && (
-        <div className="mt-3 aspect-video overflow-hidden rounded-xl border border-navy-light bg-bg">
-          <img src={post.media[0].url} alt="" className="h-full w-full object-cover" />
+        <div className="mt-3 flex max-h-[480px] items-center justify-center overflow-hidden rounded-xl border border-navy-light bg-bg">
+          <img src={post.media[0].url} alt="" className="max-h-[480px] w-full object-contain" />
         </div>
       )}
-      {post.media.length > 1 && (
-        <div className="scroll-x-soft mt-3 flex snap-x gap-2 overflow-x-auto rounded-xl">
-          {post.media.map((m) => (
-            <div key={m.id} className="h-64 w-64 shrink-0 snap-start overflow-hidden rounded-xl border border-navy-light bg-bg">
-              <img src={m.url} alt="" className="h-full w-full object-cover" />
-            </div>
-          ))}
-        </div>
-      )}
+      {post.media.length > 1 && <PostMediaCarousel media={post.media} />}
 
       {post.post_type === 'video' && post.vimeo_id && (
         <div className="mt-3 aspect-video overflow-hidden rounded-xl border border-navy-light bg-black">
@@ -646,6 +638,55 @@ function PostCard({
 
       {showComments && <Comments postId={post.id} viewerId={viewerId} viewerName={viewerName} />}
     </article>
+  )
+}
+
+// Carrossel de fotos de um post com mais de uma imagem — swipe/arraste
+// horizontal com snap, uma foto por vez em tamanho generoso (object-contain,
+// sem cortar), e bolinhas indicando a posição atual.
+function PostMediaCarousel({ media }: { media: SocialPostMedia[] }) {
+  const [index, setIndex] = useState(0)
+  const trackRef = useRef<HTMLDivElement>(null)
+
+  function scrollTo(i: number) {
+    const el = trackRef.current
+    if (!el) return
+    el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' })
+    setIndex(i)
+  }
+
+  function handleScroll() {
+    const el = trackRef.current
+    if (!el || el.clientWidth === 0) return
+    setIndex(Math.round(el.scrollLeft / el.clientWidth))
+  }
+
+  return (
+    <div className="mt-3">
+      <div
+        ref={trackRef}
+        onScroll={handleScroll}
+        className="scroll-x-soft flex snap-x snap-mandatory overflow-x-auto rounded-xl border border-navy-light bg-bg"
+      >
+        {media.map((m) => (
+          <div key={m.id} className="flex h-80 w-full shrink-0 snap-center items-center justify-center">
+            <img src={m.url} alt="" className="max-h-full max-w-full object-contain" />
+          </div>
+        ))}
+      </div>
+      {media.length > 1 && (
+        <div className="mt-2 flex justify-center gap-1.5">
+          {media.map((m, i) => (
+            <button
+              key={m.id}
+              onClick={() => scrollTo(i)}
+              aria-label={`Ir para a foto ${i + 1}`}
+              className={`h-1.5 rounded-full transition-all ${i === index ? 'w-4 bg-navy' : 'w-1.5 bg-navy-light'}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
