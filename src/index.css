@@ -33,11 +33,11 @@
   --color-ink: #eef1f8;
   --color-ink-soft: #9aa3b8;
   /* navy no tom original (#373896) quase some no fundo escuro — mesmo
-     matiz/saturação, mais claro, pra texto/borda ficar legível sem deixar
-     o branco dos botões bg-navy ilegível. */
-  --color-navy: #6a6bc8;
-  --color-navy-dark: #494bbc;
-  --color-navy-deep: #32348a;
+     matiz/saturação, bem mais claro, pra texto/borda ficar legível sem
+     deixar o branco dos botões bg-navy ilegível. */
+  --color-navy: #8789d3;
+  --color-navy-dark: #6768c7;
+  --color-navy-deep: #3d3fa8;
   --color-navy-light: #46479c;
   --color-lavender: #232a52;
   --color-lavender-ink: #b7bdf8;
