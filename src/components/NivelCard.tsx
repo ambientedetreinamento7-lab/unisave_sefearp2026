@@ -9,10 +9,14 @@ export function NivelCard({
   name,
   avatarUrl,
   totalPoints,
+  courseName,
+  courseBadgeUrl,
 }: {
   name: string
   avatarUrl: string | null
   totalPoints: number
+  courseName?: string | null
+  courseBadgeUrl?: string | null
 }) {
   const [levels, setLevels] = useState<GamificationLevel[]>([])
   const [selectedBadge, setSelectedBadge] = useState<GamificationLevel | null>(null)
@@ -44,7 +48,15 @@ export function NivelCard({
           )}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-bold text-ink">{name}</p>
+          <p className="flex flex-wrap items-center gap-1 truncate font-bold text-ink">
+            {name}
+            {courseName && (
+              <span className="inline-flex items-center gap-1 font-medium text-ink-soft">
+                ·{courseBadgeUrl && <img src={courseBadgeUrl} alt="" className="h-4 w-4 object-contain" />}
+                {courseName}
+              </span>
+            )}
+          </p>
           <p className="flex flex-wrap items-center gap-1 text-sm text-ink-soft">
             {current ? (
               <>
