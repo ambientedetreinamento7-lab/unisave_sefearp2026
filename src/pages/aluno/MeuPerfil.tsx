@@ -34,7 +34,12 @@ export function MeuPerfil() {
         <h1 className="text-2xl font-extrabold text-ink">Meu Perfil</h1>
         <p className="mt-1 text-ink-soft">Seus dados, foto e senha de acesso.</p>
 
-        <NivelCard name={profile.name} avatarUrl={profile.avatar_url} totalPoints={profile.total_points} />
+        <NivelCard
+          name={profile.name}
+          avatarUrl={profile.avatar_url}
+          totalPoints={profile.total_points}
+          programId={profile.program_id}
+        />
 
         <AvatarCard userId={profile.id} name={profile.name} avatarUrl={profile.avatar_url} onChanged={refreshProfile} />
         <DadosCard

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { colorForName, initials } from '../lib/avatar'
-import { getLevels, getRanking, levelForPoints } from '../lib/gamification'
+import { getLevels, getRanking, levelBadgeIcon, levelForPoints } from '../lib/gamification'
 import type { GamificationLevel, PublicProfile } from '../types/database'
 import { BadgeIcon } from './BadgeIcon'
 
@@ -29,7 +29,7 @@ export function RankingWidget({ currentUserId }: { currentUserId: string }) {
             position={i + 1}
             profile={p}
             highlighted={p.id === currentUserId}
-            badge={levelForPoints(p.total_points, levels)?.badge_icon}
+            badge={levelBadgeIcon(levelForPoints(p.total_points, levels), levels, p.program_id)}
           />
         ))}
       </div>
@@ -54,7 +54,7 @@ function RankingRow({
   position: number
   profile: PublicProfile
   highlighted: boolean
-  badge?: string
+  badge?: string | null
 }) {
   return (
     <Link

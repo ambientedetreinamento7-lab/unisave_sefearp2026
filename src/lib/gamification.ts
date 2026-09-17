@@ -1,4 +1,5 @@
 import { notifyPoints } from './notifications'
+import { PROGRAMS } from './quiz'
 import { supabase } from './supabase'
 import type { GamificationLevel, GamificationRule, PublicProfile, UserPointsEvent } from '../types/database'
 
@@ -24,6 +25,25 @@ export function levelForPoints(points: number, levels: GamificationLevel[]): Gam
 
 export function nextLevel(points: number, levels: GamificationLevel[]): GamificationLevel | null {
   return levels.find((l) => l.min_points > points) ?? null
+}
+
+/**
+ * Ícone de um nível pra exibição — igual ao badge_icon configurado, exceto
+ * pro nível mais alto (o "último badge a ser conquistado"), que passa a
+ * ser o selo do curso do próprio aluno (os mesmos selos do diagnóstico em
+ * lib/quiz.ts — o id do curso no banco é o mesmo slug usado lá). Sem curso
+ * vinculado ou sem selo pra esse curso, cai pro badge_icon normal.
+ */
+export function levelBadgeIcon(
+  level: GamificationLevel | null,
+  levels: GamificationLevel[],
+  programId: string | null,
+): string | null {
+  if (!level) return null
+  if (!programId || levels.length === 0) return level.badge_icon
+  const topLevel = levels.reduce((a, b) => (b.min_points > a.min_points ? b : a))
+  if (level.id !== topLevel.id) return level.badge_icon
+  return PROGRAMS.find((p) => p.id === programId)?.badge ?? level.badge_icon
 }
 
 /**

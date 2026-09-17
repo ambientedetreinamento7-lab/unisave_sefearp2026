@@ -4,7 +4,7 @@ import { AppHeader } from '../../components/AppHeader'
 import { BadgeIcon } from '../../components/BadgeIcon'
 import { useAuth } from '../../context/AuthContext'
 import { colorForName, initials } from '../../lib/avatar'
-import { getLevels, getRanking, getRules, levelForPoints } from '../../lib/gamification'
+import { getLevels, getRanking, getRules, levelBadgeIcon, levelForPoints } from '../../lib/gamification'
 import type { GamificationLevel, GamificationRule, PublicProfile } from '../../types/database'
 
 export function Ranking() {
@@ -48,7 +48,7 @@ export function Ranking() {
                 position={i + 1}
                 profile={p}
                 highlighted={p.id === profile?.id}
-                badge={levelForPoints(p.total_points, levels)?.badge_icon}
+                badge={levelBadgeIcon(levelForPoints(p.total_points, levels), levels, p.program_id)}
               />
             ))}
             {ranking.length === 0 && <p className="text-ink-soft">Ninguém pontuou ainda.</p>}
@@ -66,7 +66,7 @@ export function Ranking() {
                   key={level.id}
                   className={`card flex items-center gap-3 p-4 ${unlocked ? '' : 'opacity-50 grayscale'}`}
                 >
-                  <BadgeIcon icon={level.badge_icon} size={36} />
+                  <BadgeIcon icon={levelBadgeIcon(level, levels, profile?.program_id ?? null)} size={36} />
                   <div>
                     <p className="font-semibold text-ink">{level.name}</p>
                     <p className="text-xs text-ink-soft">A partir de {level.min_points} pontos</p>
@@ -116,7 +116,7 @@ function RankingRow({
   position: number
   profile: PublicProfile
   highlighted: boolean
-  badge?: string
+  badge?: string | null
 }) {
   return (
     <Link

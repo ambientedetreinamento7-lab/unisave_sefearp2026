@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { colorForName, initials } from '../lib/avatar'
-import { getLevels, levelForPoints, nextLevel } from '../lib/gamification'
+import { getLevels, levelBadgeIcon, levelForPoints, nextLevel } from '../lib/gamification'
+import { PROGRAMS } from '../lib/quiz'
 import type { GamificationLevel } from '../types/database'
 import { BadgeDetailModal } from './BadgeDetailModal'
 import { BadgeIcon } from './BadgeIcon'
@@ -10,13 +11,13 @@ export function NivelCard({
   avatarUrl,
   totalPoints,
   courseName,
-  courseBadgeUrl,
+  programId,
 }: {
   name: string
   avatarUrl: string | null
   totalPoints: number
   courseName?: string | null
-  courseBadgeUrl?: string | null
+  programId?: string | null
 }) {
   const [levels, setLevels] = useState<GamificationLevel[]>([])
   const [selectedBadge, setSelectedBadge] = useState<GamificationLevel | null>(null)
@@ -28,6 +29,7 @@ export function NivelCard({
   const current = levelForPoints(totalPoints, levels)
   const next = nextLevel(totalPoints, levels)
   const reached = levels.filter((l) => l.min_points <= totalPoints)
+  const courseBadgeUrl = programId ? (PROGRAMS.find((p) => p.id === programId)?.badge ?? null) : null
   const pct = next
     ? Math.round(((totalPoints - (current?.min_points ?? 0)) / (next.min_points - (current?.min_points ?? 0))) * 100)
     : 100
@@ -60,7 +62,7 @@ export function NivelCard({
           <p className="flex flex-wrap items-center gap-1 text-sm text-ink-soft">
             {current ? (
               <>
-                <BadgeIcon icon={current.badge_icon} size={16} /> {current.name}
+                <BadgeIcon icon={levelBadgeIcon(current, levels, programId ?? null)} size={16} /> {current.name}
               </>
             ) : (
               'Sem nível'
@@ -76,8 +78,8 @@ export function NivelCard({
             <div className="progress-fill" style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} />
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-ink-soft">
-            Faltam {next.min_points - totalPoints} pontos para <BadgeIcon icon={next.badge_icon} size={14} />{' '}
-            {next.name}
+            Faltam {next.min_points - totalPoints} pontos para{' '}
+            <BadgeIcon icon={levelBadgeIcon(next, levels, programId ?? null)} size={14} /> {next.name}
           </p>
         </div>
       )}
@@ -91,10 +93,10 @@ export function NivelCard({
                 key={l.id}
                 type="button"
                 title={l.name}
-                onClick={() => setSelectedBadge(l)}
+                onClick={() => setSelectedBadge({ ...l, badge_icon: levelBadgeIcon(l, levels, programId ?? null) ?? l.badge_icon })}
                 className="flex items-center gap-1.5 rounded-full bg-lavender px-3 py-1.5 text-sm font-semibold text-lavender-ink transition hover:brightness-95"
               >
-                <BadgeIcon icon={l.badge_icon} size={16} />
+                <BadgeIcon icon={levelBadgeIcon(l, levels, programId ?? null)} size={16} />
                 {l.name}
               </button>
             ))}

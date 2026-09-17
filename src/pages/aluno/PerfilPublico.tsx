@@ -4,7 +4,6 @@ import { AppHeader } from '../../components/AppHeader'
 import { NivelCard } from '../../components/NivelCard'
 import { useAuth } from '../../context/AuthContext'
 import { getPublicProfile } from '../../lib/gamification'
-import { PROGRAMS } from '../../lib/quiz'
 import { supabase } from '../../lib/supabase'
 import type { Program, PublicProfile } from '../../types/database'
 
@@ -29,13 +28,6 @@ export function PerfilPublico() {
       }
     })
   }, [userId])
-
-  // O id do programa no banco é o mesmo slug usado no diagnóstico (ver seed
-  // em supabase/schema.sql) — reaproveita o selo de lá em vez de exigir
-  // upload de imagem por programa, que hoje nem tem UI de edição.
-  const courseBadgeUrl = publicProfile?.program_id
-    ? (PROGRAMS.find((p) => p.id === publicProfile.program_id)?.badge ?? null)
-    : null
 
   if (profile && userId === profile.id) {
     return (
@@ -68,7 +60,7 @@ export function PerfilPublico() {
             avatarUrl={publicProfile.avatar_url}
             totalPoints={publicProfile.total_points}
             courseName={courseName}
-            courseBadgeUrl={courseBadgeUrl}
+            programId={publicProfile.program_id}
           />
         )}
       </main>
