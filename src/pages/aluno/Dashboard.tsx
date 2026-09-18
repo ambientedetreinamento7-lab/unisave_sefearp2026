@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { Icon } from '../../components/Icon'
@@ -685,7 +685,20 @@ function CourseCard({
   const title = isCourse ? item.track.title : item.pill.title
   const description = isCourse ? item.track.description : item.pill.description
   const thumbnailUrl = isCourse ? item.track.thumbnail_url ?? item.track.cover_url : item.pill.thumbnail_url
+  const teaserVimeoId = isCourse ? item.track.teaser_vimeo_id : null
   const axis = isCourse ? item.track.title : item.pill.axis
+  const [showTeaser, setShowTeaser] = useState(false)
+  const teaserTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function handleMouseEnter() {
+    if (!teaserVimeoId) return
+    teaserTimer.current = setTimeout(() => setShowTeaser(true), 400)
+  }
+
+  function handleMouseLeave() {
+    if (teaserTimer.current) clearTimeout(teaserTimer.current)
+    setShowTeaser(false)
+  }
   const metaLine = isCourse
     ? `${item.modules.length} ${item.modules.length === 1 ? 'módulo' : 'módulos'}${item.track.carga_horaria_total ? ` · ${formatCargaHoraria(item.track.carga_horaria_total)}` : ''}`
     : `${item.pill.axis} · ${item.pill.duration}`
@@ -705,7 +718,11 @@ function CourseCard({
   }
 
   return (
-    <div className="card relative flex h-full flex-col overflow-hidden p-0 transition duration-200 hover:-translate-y-1 hover:shadow-lg">
+    <div
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className="card relative flex h-full flex-col overflow-hidden p-0 transition duration-200 hover:-translate-y-1 hover:shadow-lg"
+    >
       {onToggleFavorite && (
         <button
           onClick={(e) => {
@@ -720,18 +737,28 @@ function CourseCard({
         </button>
       )}
       <Link to={`/curso/${linkTargetId}`} className="flex flex-1 flex-col">
-        {thumbnailUrl ? (
-          <img src={thumbnailUrl} alt="" className="h-32 w-full shrink-0 object-cover" />
-        ) : (
-          <div className={`relative flex h-32 w-full shrink-0 items-center justify-center bg-gradient-to-br ${gradientForAxis(axis)}`}>
-            <Icon name={isCourse ? 'graduation-cap' : 'book'} size={34} className="text-white/90" />
-            {isCourse && (
-              <span className="absolute left-3 top-3 rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur-sm">
-                Curso
-              </span>
-            )}
-          </div>
-        )}
+        <div className="relative h-32 w-full shrink-0 overflow-hidden">
+          {thumbnailUrl ? (
+            <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${gradientForAxis(axis)}`}>
+              <Icon name={isCourse ? 'graduation-cap' : 'book'} size={34} className="text-white/90" />
+              {isCourse && (
+                <span className="absolute left-3 top-3 rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur-sm">
+                  Curso
+                </span>
+              )}
+            </div>
+          )}
+          {showTeaser && teaserVimeoId && (
+            <iframe
+              src={`https://player.vimeo.com/video/${teaserVimeoId}?autoplay=1&muted=1&background=1&loop=1`}
+              title="Prévia do curso"
+              className="pointer-events-none absolute inset-0 h-full w-full"
+              allow="autoplay"
+            />
+          )}
+        </div>
         <div className="flex flex-1 flex-col gap-2 p-4">
           <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
           <h3 className="-mt-1 font-bold leading-snug text-ink">{title}</h3>

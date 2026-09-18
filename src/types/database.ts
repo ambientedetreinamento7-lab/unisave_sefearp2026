@@ -80,6 +80,7 @@ export interface Track {
   certificate_enabled: boolean
   cover_url: string | null
   thumbnail_url: string | null
+  teaser_vimeo_id: string | null
   certificate_template_id: string | null
   conteudo_programatico: string | null
   certificate_syllabus_same_page: boolean

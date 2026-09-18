@@ -36,6 +36,7 @@ export function AdminScormLibrary() {
   const [formItem, setFormItem] = useState<ScormLibraryItem | 'new' | null>(null)
   const [sortField, setSortField] = useState<SortField>('created_at')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [query, setQuery] = useState('')
 
   async function reload() {
     // Ordena por cadastro (não por nome) pra bater com o ID de exibição
@@ -83,7 +84,17 @@ export function AdminScormLibrary() {
       .map((item, index) => [item.id, `SCO-${String(index + 1).padStart(3, '0')}`]),
   )
 
-  const sortedItems = [...items].sort((a, b) => {
+  const q = query.trim().toLowerCase()
+  const filteredItems = q
+    ? items.filter(
+        (item) =>
+          item.name.toLowerCase().includes(q) ||
+          item.manifest_path.toLowerCase().includes(q) ||
+          idByItemId.get(item.id)?.toLowerCase().includes(q),
+      )
+    : items
+
+  const sortedItems = [...filteredItems].sort((a, b) => {
     const dir = sortDir === 'asc' ? 1 : -1
     if (sortField === 'name') return a.name.localeCompare(b.name) * dir
     return a[sortField].localeCompare(b[sortField]) * dir
@@ -95,7 +106,13 @@ export function AdminScormLibrary() {
         Pacotes SCORM ficam guardados aqui de forma independente das pílulas. Atualizar um pacote aqui atualiza
         automaticamente todas as pílulas que o utilizam.
       </p>
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar por nome, ID ou arquivo de entrada"
+          className="w-full max-w-xs rounded-xl border border-navy-light px-4 py-2 text-sm outline-none focus:border-navy"
+        />
         <button
           onClick={() => setFormItem('new')}
           className="rounded-xl bg-brand-red px-4 py-2 text-sm font-bold text-white hover:bg-brand-red-dark"
@@ -139,8 +156,12 @@ export function AdminScormLibrary() {
                 </td>
               </tr>
             ))}
-            {items.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-3 text-ink-soft">Nenhum pacote SCORM cadastrado ainda.</td></tr>
+            {sortedItems.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-3 text-ink-soft">
+                  {items.length === 0 ? 'Nenhum pacote SCORM cadastrado ainda.' : 'Nenhum pacote encontrado.'}
+                </td>
+              </tr>
             )}
           </tbody>
         </table>

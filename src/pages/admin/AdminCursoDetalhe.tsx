@@ -6,6 +6,7 @@ import { RichTextEditor } from '../../components/RichTextEditor'
 import { getReactionSurveys, linkPillToTrack, unlinkPillFromTrack } from '../../lib/api'
 import { formatCargaHoraria, sanitizeFileName } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
+import { parseVimeoId } from '../../lib/vimeo'
 import type { Category, CertificateTemplate, ContentType, DiagnosticProfile, Pill, Program, ReactionSurvey, ScormLibraryItem, SkillCategory, Track, TrackPill } from '../../types/database'
 
 async function uploadCover(file: File, folder: string): Promise<string> {
@@ -76,6 +77,7 @@ export function AdminCursoDetalhe() {
   const [categoryId, setCategoryId] = useState('')
   const [skillCategoryId, setSkillCategoryId] = useState('')
   const [skillCategories, setSkillCategories] = useState<SkillCategory[]>([])
+  const [teaserInput, setTeaserInput] = useState('')
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [removeCover, setRemoveCover] = useState(false)
@@ -133,6 +135,7 @@ export function AdminCursoDetalhe() {
           setProfile(row.diagnostic_profile ?? '')
           setCategoryId(row.category_id ?? '')
           setSkillCategoryId(row.skill_category_id ?? '')
+          setTeaserInput(row.teaser_vimeo_id ?? '')
         }
         await reloadAulas(id)
       }
@@ -180,6 +183,7 @@ export function AdminCursoDetalhe() {
         skill_category_id: skillCategoryId || null,
         cover_url: coverUrl,
         thumbnail_url: thumbnailUrl,
+        teaser_vimeo_id: parseVimeoId(teaserInput),
       }
       if (track) {
         const { error: saveError } = await supabase.from('tracks').update(payload).eq('id', track.id)
@@ -444,6 +448,22 @@ export function AdminCursoDetalhe() {
               }}
               className="mt-1 w-full text-sm"
             />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-ink-soft">Vídeo teaser (Vimeo)</label>
+            <p className="mt-0.5 text-xs text-ink-soft">
+              Cole o link do vídeo no Vimeo (ex.: https://vimeo.com/123456789) ou só o ID. Toca automaticamente,
+              sem som, quando o aluno passa o mouse sobre o card do curso.
+            </p>
+            <input
+              className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5 text-sm"
+              placeholder="https://vimeo.com/123456789"
+              value={teaserInput}
+              onChange={(e) => setTeaserInput(e.target.value)}
+            />
+            {teaserInput && !parseVimeoId(teaserInput) && (
+              <p className="mt-1 text-xs text-brand-red">Não reconheci esse link/ID do Vimeo.</p>
+            )}
           </div>
 
           <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">

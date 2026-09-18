@@ -99,6 +99,7 @@ export function Entrar() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && !loading && email && (mode === 'magic' ? handleMagicLink() : handlePassword())}
           />
 
           {mode === 'senha' && (
@@ -108,6 +109,7 @@ export function Entrar() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !loading && email && handlePassword()}
             />
           )}
 

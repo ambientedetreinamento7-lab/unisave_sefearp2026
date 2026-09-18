@@ -20,6 +20,17 @@ export interface VimeoUploadResult {
   vimeoId: string
 }
 
+/** Aceita tanto o id puro (ex.: "123456789") quanto uma URL colada do Vimeo
+ * (ex.: "https://vimeo.com/123456789") — devolve só o id, ou null se não
+ * reconhecer o formato. */
+export function parseVimeoId(input: string): string | null {
+  const trimmed = input.trim()
+  if (!trimmed) return null
+  if (/^\d+$/.test(trimmed)) return trimmed
+  const match = trimmed.match(/vimeo\.com\/(?:video\/)?(\d+)/)
+  return match ? match[1] : null
+}
+
 /**
  * Fase C: o token da conta Vimeo Pro nunca chega ao navegador — este
  * helper pede um link de upload assinado pro backend (api/vimeo-upload.ts)
