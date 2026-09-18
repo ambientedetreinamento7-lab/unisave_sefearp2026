@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { Icon } from '../../components/Icon'
@@ -687,18 +687,7 @@ function CourseCard({
   const thumbnailUrl = isCourse ? item.track.thumbnail_url ?? item.track.cover_url : item.pill.thumbnail_url
   const teaserVimeoId = isCourse ? item.track.teaser_vimeo_id : null
   const axis = isCourse ? item.track.title : item.pill.axis
-  const [showTeaser, setShowTeaser] = useState(false)
-  const teaserTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function handleMouseEnter() {
-    if (!teaserVimeoId) return
-    teaserTimer.current = setTimeout(() => setShowTeaser(true), 400)
-  }
-
-  function handleMouseLeave() {
-    if (teaserTimer.current) clearTimeout(teaserTimer.current)
-    setShowTeaser(false)
-  }
+  const [previewOpen, setPreviewOpen] = useState(false)
   const metaLine = isCourse
     ? `${item.modules.length} ${item.modules.length === 1 ? 'módulo' : 'módulos'}${item.track.carga_horaria_total ? ` · ${formatCargaHoraria(item.track.carga_horaria_total)}` : ''}`
     : `${item.pill.axis} · ${item.pill.duration}`
@@ -717,12 +706,55 @@ function CourseCard({
     linkTargetId = item.pill.id
   }
 
+  const hasPreview = isCourse && !!teaserVimeoId
+
+  const cardInner = (
+    <>
+      <div className="relative h-32 w-full shrink-0 overflow-hidden">
+        {thumbnailUrl ? (
+          <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${gradientForAxis(axis)}`}>
+            <Icon name={isCourse ? 'graduation-cap' : 'book'} size={34} className="text-white/90" />
+            {isCourse && (
+              <span className="absolute left-3 top-3 rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur-sm">
+                Curso
+              </span>
+            )}
+          </div>
+        )}
+        {hasPreview && (
+          <span className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm">
+            <Icon name="video" size={13} />
+          </span>
+        )}
+      </div>
+      <div className="flex flex-1 flex-col gap-2 p-4">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
+        <h3 className="-mt-1 font-bold leading-snug text-ink">{title}</h3>
+        {description && <p className="line-clamp-2 text-sm text-ink-soft">{description}</p>}
+        {isCourse && status !== 'not_started' && (
+          <div className="mt-1">
+            <div className="flex items-center justify-between text-[11px] font-semibold text-ink-soft">
+              <span>{pct}% concluído</span>
+            </div>
+            <ProgressBar value={pct} />
+          </div>
+        )}
+        <div className="mt-auto flex items-center justify-end pt-2">
+          <span
+            className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-white transition ${ACTION_COLOR[status]}`}
+          >
+            {ACTION_LABEL[status]}
+            <Icon name="arrow-right" size={12} />
+          </span>
+        </div>
+      </div>
+    </>
+  )
+
   return (
-    <div
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      className="card relative flex h-full flex-col overflow-hidden p-0 transition duration-200 hover:-translate-y-1 hover:shadow-lg"
-    >
+    <div className="card relative flex h-full flex-col overflow-hidden p-0 transition duration-200 hover:-translate-y-1 hover:shadow-lg">
       {onToggleFavorite && (
         <button
           onClick={(e) => {
@@ -736,51 +768,91 @@ function CourseCard({
           <Icon name={favorited ? 'heart-filled' : 'heart'} size={14} className={favorited ? 'text-brand-red' : undefined} />
         </button>
       )}
-      <Link to={`/curso/${linkTargetId}`} className="flex flex-1 flex-col">
-        <div className="relative h-32 w-full shrink-0 overflow-hidden">
-          {thumbnailUrl ? (
-            <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${gradientForAxis(axis)}`}>
-              <Icon name={isCourse ? 'graduation-cap' : 'book'} size={34} className="text-white/90" />
-              {isCourse && (
-                <span className="absolute left-3 top-3 rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur-sm">
-                  Curso
-                </span>
-              )}
-            </div>
-          )}
-          {showTeaser && teaserVimeoId && (
-            <iframe
-              src={`https://player.vimeo.com/video/${teaserVimeoId}?autoplay=1&muted=1&background=1&loop=1`}
-              title="Prévia do curso"
-              className="pointer-events-none absolute inset-0 h-full w-full"
-              allow="autoplay"
-            />
-          )}
+      {hasPreview ? (
+        <button onClick={() => setPreviewOpen(true)} className="flex flex-1 flex-col text-left">
+          {cardInner}
+        </button>
+      ) : (
+        <Link to={`/curso/${linkTargetId}`} className="flex flex-1 flex-col">
+          {cardInner}
+        </Link>
+      )}
+      {previewOpen && teaserVimeoId && (
+        <CoursePreviewModal
+          vimeoId={teaserVimeoId}
+          title={title}
+          description={description}
+          metaLine={metaLine}
+          status={status}
+          pct={pct}
+          linkTargetId={linkTargetId}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+function CoursePreviewModal({
+  vimeoId,
+  title,
+  description,
+  metaLine,
+  status,
+  pct,
+  linkTargetId,
+  onClose,
+}: {
+  vimeoId: string
+  title: string
+  description: string | null
+  metaLine: string
+  status: UserProgress['status']
+  pct: number
+  linkTargetId: string
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className="card w-full max-w-lg overflow-hidden p-0" onClick={(e) => e.stopPropagation()}>
+        <div className="relative aspect-video w-full bg-black">
+          <iframe
+            src={`https://player.vimeo.com/video/${vimeoId}?autoplay=1&muted=1`}
+            title="Prévia do curso"
+            className="absolute inset-0 h-full w-full"
+            allow="autoplay; fullscreen; picture-in-picture"
+            allowFullScreen
+          />
+          <button
+            onClick={onClose}
+            aria-label="Fechar"
+            className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+          >
+            <Icon name="x" size={16} />
+          </button>
         </div>
-        <div className="flex flex-1 flex-col gap-2 p-4">
+        <div className="p-5">
           <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
-          <h3 className="-mt-1 font-bold leading-snug text-ink">{title}</h3>
-          {description && <p className="line-clamp-2 text-sm text-ink-soft">{description}</p>}
-          {isCourse && status !== 'not_started' && (
-            <div className="mt-1">
+          <h3 className="-mt-1 text-lg font-bold text-ink">{title}</h3>
+          {description && <p className="mt-1 text-sm text-ink-soft">{description}</p>}
+          {status !== 'not_started' && (
+            <div className="mt-3">
               <div className="flex items-center justify-between text-[11px] font-semibold text-ink-soft">
                 <span>{pct}% concluído</span>
               </div>
               <ProgressBar value={pct} />
             </div>
           )}
-          <div className="mt-auto flex items-center justify-end pt-2">
-            <span
-              className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-white transition ${ACTION_COLOR[status]}`}
-            >
-              {ACTION_LABEL[status]}
-              <Icon name="arrow-right" size={12} />
-            </span>
-          </div>
+          <Link
+            to={`/curso/${linkTargetId}`}
+            onClick={onClose}
+            className={`mt-4 flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-bold text-white transition ${ACTION_COLOR[status]}`}
+          >
+            {ACTION_LABEL[status]}
+            <Icon name="arrow-right" size={12} />
+          </Link>
         </div>
-      </Link>
+      </div>
     </div>
   )
 }
