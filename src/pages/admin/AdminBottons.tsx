@@ -18,6 +18,11 @@ export function AdminBottons() {
 
   useEffect(() => {
     reload()
+    // Atualiza sozinho pra refletir pedidos novos feitos ao vivo no
+    // estande, sem precisar recarregar a página manualmente — só essa
+    // tela, o intervalo é limpo ao sair dela.
+    const interval = setInterval(reload, 5000)
+    return () => clearInterval(interval)
   }, [])
 
   async function handleSearchCode() {
