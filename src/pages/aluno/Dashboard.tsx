@@ -29,7 +29,9 @@ import {
 } from '../../lib/api'
 import { brasiliaDaysBetween, claimDailyAccess, getLastPointsEvent, getRule } from '../../lib/gamification'
 import { formatCargaHoraria } from '../../lib/format'
-import type { Category, DashboardSection, GamificationRule, Pill, UserProgress, Track } from '../../types/database'
+import { createRedemption, getMyRedemption } from '../../lib/bottons'
+import { PROGRAMS } from '../../lib/quiz'
+import type { BottonRedemption, Category, DashboardSection, GamificationRule, Pill, Profile, UserProgress, Track } from '../../types/database'
 
 const NAV_TOUR_STEPS: TourStep[] = [
   {
@@ -109,6 +111,13 @@ export function Dashboard() {
   const [multiModuleTracks, setMultiModuleTracks] = useState<Map<string, { track: Track; pills: Pill[] }>>(new Map())
   const [bannerTracks, setBannerTracks] = useState<{ track: Track; pills: Pill[] }[]>([])
   const [pdiPills, setPdiPills] = useState<Pill[]>([])
+  const [redemption, setRedemption] = useState<BottonRedemption | null | undefined>(undefined)
+  const [redemptionModalOpen, setRedemptionModalOpen] = useState(false)
+
+  useEffect(() => {
+    if (!profile) return
+    getMyRedemption(profile.id).then(setRedemption)
+  }, [profile])
 
   useEffect(() => {
     if (!profile) return
@@ -282,12 +291,25 @@ export function Dashboard() {
       <main className="mx-auto max-w-7xl px-4 py-6 sm:py-8">
         <div className="lg:grid lg:grid-cols-[1fr_320px] lg:items-start lg:gap-8">
           <div className="min-w-0">
-            <h1 className="text-xl font-extrabold text-ink sm:text-2xl">
-              Bem-vindo, {profile?.name.split(' ')[0]} 👋
-            </h1>
-            <p className="mt-1 text-sm text-ink-soft sm:text-base">
-              Continue evoluindo o seu Plano de Desenvolvimento Individual.
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h1 className="text-xl font-extrabold text-ink sm:text-2xl">
+                  Bem-vindo, {profile?.name.split(' ')[0]} 👋
+                </h1>
+                <p className="mt-1 text-sm text-ink-soft sm:text-base">
+                  Continue evoluindo o seu Plano de Desenvolvimento Individual.
+                </p>
+              </div>
+              {redemption !== undefined && (
+                <button
+                  onClick={() => setRedemptionModalOpen(true)}
+                  className="flex shrink-0 items-center gap-1.5 rounded-xl bg-navy px-4 py-2.5 text-sm font-bold text-white hover:bg-navy-dark"
+                >
+                  <Icon name="trophy" size={15} />
+                  Resgatar botton
+                </button>
+              )}
+            </div>
 
             {bannerTracks.length > 0 && (
               <BannerCarousel
@@ -471,6 +493,15 @@ export function Dashboard() {
           steps={NAV_TOUR_STEPS}
           onFinish={handleNavTourFinish}
           laterHint='no menu do seu avatar, em "Tutorial de navegação"'
+        />
+      )}
+
+      {redemptionModalOpen && profile && (
+        <RedeemBottonModal
+          profile={profile}
+          redemption={redemption ?? null}
+          onClose={() => setRedemptionModalOpen(false)}
+          onRedeemed={setRedemption}
         />
       )}
     </div>
@@ -852,6 +883,81 @@ function CoursePreviewModal({
             <Icon name="arrow-right" size={12} />
           </Link>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function RedeemBottonModal({
+  profile,
+  redemption,
+  onClose,
+  onRedeemed,
+}: {
+  profile: Profile
+  redemption: BottonRedemption | null
+  onClose: () => void
+  onRedeemed: (r: BottonRedemption) => void
+}) {
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const program = profile.program_id ? PROGRAMS.find((p) => p.id === profile.program_id) : null
+
+  async function handleConfirm() {
+    setSaving(true)
+    setError('')
+    try {
+      const created = await createRedemption(profile.id, profile.name, profile.program_id, program?.name ?? null)
+      onRedeemed(created)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível gerar o código de resgate.')
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="card w-full max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-bold text-ink">Resgatar botton</h3>
+
+        {program?.badge && (
+          <img src={program.badge} alt={program.name} className="mx-auto mt-4 h-24 w-24 object-contain" />
+        )}
+
+        {redemption ? (
+          <>
+            <p className="mt-3 text-sm text-ink-soft">
+              Pedido já feito! Mostre esse código no estande pra retirar o botton do curso{' '}
+              <strong className="text-ink">{redemption.course_name ?? program?.name}</strong>:
+            </p>
+            <p className="mt-3 rounded-xl bg-navy-light px-4 py-3 text-2xl font-extrabold tracking-widest text-navy">
+              {redemption.code}
+            </p>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">
+              {redemption.status === 'delivered' ? '✅ Já retirado' : 'Pendente de retirada'}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="mt-3 text-sm text-ink-soft">
+              {program
+                ? `Peça seu botton físico do curso ${program.name}! Ao finalizar, você recebe um código pra mostrar no estande e retirar o brinde.`
+                : 'Vincule um curso em Meu Perfil antes de resgatar seu botton.'}
+            </p>
+            {error && <p className="mt-2 text-xs text-brand-red">{error}</p>}
+            <button
+              onClick={handleConfirm}
+              disabled={saving || !program}
+              className="mt-4 w-full rounded-xl bg-brand-red py-2.5 font-bold text-white hover:bg-brand-red-dark disabled:opacity-50"
+            >
+              {saving ? 'Gerando…' : 'Finalizar pedido'}
+            </button>
+          </>
+        )}
+
+        <button onClick={onClose} className="mt-3 w-full rounded-xl border border-navy-light py-2.5 font-semibold text-ink-soft">
+          Fechar
+        </button>
       </div>
     </div>
   )

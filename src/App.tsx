@@ -6,6 +6,7 @@ import { AuthProvider } from './context/AuthContext'
 import { PlatformSettingsProvider } from './context/PlatformSettingsContext'
 import { AceitarTermos } from './pages/aluno/AceitarTermos'
 import { AdminAnalytics } from './pages/admin/AdminAnalytics'
+import { AdminBottons } from './pages/admin/AdminBottons'
 import { AdminCertificados } from './pages/admin/AdminCertificados'
 import { AdminComunidade } from './pages/admin/AdminComunidade'
 import { AdminConfiguracoes } from './pages/admin/AdminConfiguracoes'
@@ -256,6 +257,14 @@ function App() {
           element={
             <RouteGuard allow={['admin']}>
               <AdminCertificados />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/admin/bottons"
+          element={
+            <RouteGuard allow={['admin']}>
+              <AdminBottons />
             </RouteGuard>
           }
         />

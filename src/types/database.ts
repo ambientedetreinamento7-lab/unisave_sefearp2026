@@ -240,6 +240,18 @@ export interface PublicCertificate {
   issued_at: string
 }
 
+export interface BottonRedemption {
+  id: string
+  code: string
+  user_id: string
+  student_name: string
+  program_id: string | null
+  course_name: string | null
+  status: 'pending' | 'delivered'
+  created_at: string
+  delivered_at: string | null
+}
+
 export interface UserProgress {
   id: string
   user_id: string
@@ -473,6 +485,7 @@ export interface Database {
       dashboard_sections: { Row: DashboardSection; Insert: Partial<DashboardSection>; Update: Partial<DashboardSection> }
       app_settings: { Row: AppSetting; Insert: Partial<AppSetting>; Update: Partial<AppSetting> }
       issued_certificates: { Row: IssuedCertificate; Insert: Partial<IssuedCertificate>; Update: Partial<IssuedCertificate> }
+      botton_redemptions: { Row: BottonRedemption; Insert: Partial<BottonRedemption>; Update: Partial<BottonRedemption> }
       public_certificates: { Row: PublicCertificate; Insert: never; Update: never }
       user_progress: { Row: UserProgress; Insert: Partial<UserProgress>; Update: Partial<UserProgress> }
       quizzes: { Row: Quiz; Insert: Partial<Quiz>; Update: Partial<Quiz> }
