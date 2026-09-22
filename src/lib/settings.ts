@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 import type {
   BrandingSettings,
   CommunitySettings,
+  CourseDefaultsSettings,
   LegalSettings,
   MaintenanceSettings,
   ModuleCompletionSettings,
@@ -140,4 +141,19 @@ export async function getPwaSettings(): Promise<PwaSettings> {
 
 export async function updatePwaSettings(settings: PwaSettings) {
   await supabase.from('app_settings').upsert({ key: 'pwa', value: settings })
+}
+
+const DEFAULT_COURSE_DEFAULTS: CourseDefaultsSettings = {
+  courseCoverUrl: null,
+  courseThumbnailUrl: null,
+  lessonCoverUrl: null,
+  lessonThumbnailUrl: null,
+}
+
+export async function getCourseDefaultsSettings(): Promise<CourseDefaultsSettings> {
+  return getAppSetting('course_defaults', DEFAULT_COURSE_DEFAULTS)
+}
+
+export async function updateCourseDefaultsSettings(settings: CourseDefaultsSettings) {
+  await supabase.from('app_settings').upsert({ key: 'course_defaults', value: settings })
 }

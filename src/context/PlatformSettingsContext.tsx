@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   getBrandingSettings,
+  getCourseDefaultsSettings,
   getLegalSettings,
   getMaintenanceSettings,
   getPwaSettings,
@@ -10,6 +11,7 @@ import {
 } from '../lib/settings'
 import type {
   BrandingSettings,
+  CourseDefaultsSettings,
   LegalSettings,
   MaintenanceSettings,
   PwaSettings,
@@ -24,6 +26,7 @@ interface PlatformSettingsValue {
   session: SessionSettings
   security: SecuritySettings
   pwa: PwaSettings
+  courseDefaults: CourseDefaultsSettings
   loading: boolean
 }
 
@@ -42,6 +45,7 @@ const DEFAULTS: Omit<PlatformSettingsValue, 'loading'> = {
   session: { inactivityTimeoutMinutes: null },
   security: { magicLinkResetEnabled: true, birthDateResetEnabled: true },
   pwa: { installableEnabled: false },
+  courseDefaults: { courseCoverUrl: null, courseThumbnailUrl: null, lessonCoverUrl: null, lessonThumbnailUrl: null },
 }
 
 const PlatformSettingsContext = createContext<PlatformSettingsValue | undefined>(undefined)
@@ -64,9 +68,10 @@ export function PlatformSettingsProvider({ children }: { children: ReactNode }) 
       getSessionSettings(),
       getSecuritySettings(),
       getPwaSettings(),
+      getCourseDefaultsSettings(),
     ]).then(
-      ([branding, legal, maintenance, session, security, pwa]) => {
-        setValue({ branding, legal, maintenance, session, security, pwa })
+      ([branding, legal, maintenance, session, security, pwa, courseDefaults]) => {
+        setValue({ branding, legal, maintenance, session, security, pwa, courseDefaults })
         setLoading(false)
         // Sobrescreve os tokens de cor em runtime (definidos em index.css)
         // só quando o admin configurou algo — sem isso, continua com a

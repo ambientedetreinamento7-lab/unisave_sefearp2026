@@ -220,6 +220,13 @@ export interface PwaSettings {
   installableEnabled: boolean
 }
 
+export interface CourseDefaultsSettings {
+  courseCoverUrl: string | null
+  courseThumbnailUrl: string | null
+  lessonCoverUrl: string | null
+  lessonThumbnailUrl: string | null
+}
+
 export interface IssuedCertificate {
   id: string
   code: string

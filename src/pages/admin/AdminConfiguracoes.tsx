@@ -3,6 +3,7 @@ import { AdminLayout } from './AdminLayout'
 import {
   getBrandingSettings,
   getCommunitySettings,
+  getCourseDefaultsSettings,
   getLegalSettings,
   getMaintenanceSettings,
   getModuleCompletionSettings,
@@ -13,6 +14,7 @@ import {
   getTrialSettings,
   updateBrandingSettings,
   updateCommunitySettings,
+  updateCourseDefaultsSettings,
   updateLegalSettings,
   updateMaintenanceSettings,
   updateModuleCompletionSettings,
@@ -27,6 +29,7 @@ import { supabase } from '../../lib/supabase'
 import type {
   BrandingSettings,
   CommunitySettings,
+  CourseDefaultsSettings,
   LegalSettings,
   MaintenanceSettings,
   ModuleCompletionSettings,
@@ -37,8 +40,8 @@ import type {
   TrialSettings,
 } from '../../types/database'
 
-async function uploadBrandingAsset(file: File): Promise<string> {
-  const path = `branding/${crypto.randomUUID()}-${sanitizeFileName(file.name)}`
+async function uploadBrandingAsset(file: File, folder = 'branding'): Promise<string> {
+  const path = `${folder}/${crypto.randomUUID()}-${sanitizeFileName(file.name)}`
   const { error } = await supabase.storage.from('covers').upload(path, file, {
     upsert: true,
     contentType: file.type || 'image/png',
@@ -53,6 +56,7 @@ export function AdminConfiguracoes() {
       <div className="space-y-6">
         <TrialSection />
         <BrandingSection />
+        <CourseDefaultsSection />
         <SignupSection />
         <ModuleCompletionSection />
         <CommunitySection />
@@ -344,6 +348,170 @@ function BrandingSection() {
                 />
               </div>
             ) : null}
+          </div>
+        </div>
+      )}
+    </SectionShell>
+  )
+}
+
+function CourseImageField({
+  label,
+  url,
+  file,
+  removed,
+  onFile,
+  onRemove,
+}: {
+  label: string
+  url: string | null
+  file: File | null
+  removed: boolean
+  onFile: (file: File | null) => void
+  onRemove: () => void
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-ink-soft">{label}</label>
+      {url && !file && !removed && (
+        <div className="mt-1 flex items-center gap-2">
+          <img src={url} alt="" className="h-14 w-24 rounded-lg border border-navy-light object-cover" />
+          <button type="button" onClick={onRemove} className="text-xs font-semibold text-brand-red hover:underline">
+            Remover
+          </button>
+        </div>
+      )}
+      <input
+        type="file"
+        accept="image/*"
+        onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+        className="mt-1 w-full text-sm"
+      />
+    </div>
+  )
+}
+
+function CourseDefaultsSection() {
+  const [settings, setSettings] = useState<CourseDefaultsSettings | null>(null)
+  const [courseCoverFile, setCourseCoverFile] = useState<File | null>(null)
+  const [removeCourseCover, setRemoveCourseCover] = useState(false)
+  const [courseThumbFile, setCourseThumbFile] = useState<File | null>(null)
+  const [removeCourseThumb, setRemoveCourseThumb] = useState(false)
+  const [lessonCoverFile, setLessonCoverFile] = useState<File | null>(null)
+  const [removeLessonCover, setRemoveLessonCover] = useState(false)
+  const [lessonThumbFile, setLessonThumbFile] = useState<File | null>(null)
+  const [removeLessonThumb, setRemoveLessonThumb] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    getCourseDefaultsSettings().then(setSettings)
+  }, [])
+
+  async function save() {
+    if (!settings) return
+    setSaving(true)
+    setSaved(false)
+    const courseCoverUrl = courseCoverFile
+      ? await uploadBrandingAsset(courseCoverFile, 'course-defaults')
+      : removeCourseCover
+        ? null
+        : settings.courseCoverUrl
+    const courseThumbnailUrl = courseThumbFile
+      ? await uploadBrandingAsset(courseThumbFile, 'course-defaults')
+      : removeCourseThumb
+        ? null
+        : settings.courseThumbnailUrl
+    const lessonCoverUrl = lessonCoverFile
+      ? await uploadBrandingAsset(lessonCoverFile, 'course-defaults')
+      : removeLessonCover
+        ? null
+        : settings.lessonCoverUrl
+    const lessonThumbnailUrl = lessonThumbFile
+      ? await uploadBrandingAsset(lessonThumbFile, 'course-defaults')
+      : removeLessonThumb
+        ? null
+        : settings.lessonThumbnailUrl
+    const next = { ...settings, courseCoverUrl, courseThumbnailUrl, lessonCoverUrl, lessonThumbnailUrl }
+    await updateCourseDefaultsSettings(next)
+    setSettings(next)
+    setCourseCoverFile(null)
+    setRemoveCourseCover(false)
+    setCourseThumbFile(null)
+    setRemoveCourseThumb(false)
+    setLessonCoverFile(null)
+    setRemoveLessonCover(false)
+    setLessonThumbFile(null)
+    setRemoveLessonThumb(false)
+    setSaving(false)
+    setSaved(true)
+  }
+
+  return (
+    <SectionShell
+      title="Imagens padrão de cursos e aulas"
+      description='Usadas quando um curso ou uma aula específica não tem capa/miniatura própria. Sem nada definido aqui, o card continua preenchido só com uma cor sortida, como hoje.'
+      loading={!settings}
+      onSave={save}
+      saving={saving}
+      saved={saved}
+    >
+      {settings && (
+        <div className="mt-4 space-y-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Cursos</p>
+            <div className="mt-2 space-y-3">
+              <CourseImageField
+                label="Capa padrão do curso"
+                url={settings.courseCoverUrl}
+                file={courseCoverFile}
+                removed={removeCourseCover}
+                onFile={(f) => {
+                  setCourseCoverFile(f)
+                  setRemoveCourseCover(false)
+                }}
+                onRemove={() => setRemoveCourseCover(true)}
+              />
+              <CourseImageField
+                label="Miniatura padrão do curso"
+                url={settings.courseThumbnailUrl}
+                file={courseThumbFile}
+                removed={removeCourseThumb}
+                onFile={(f) => {
+                  setCourseThumbFile(f)
+                  setRemoveCourseThumb(false)
+                }}
+                onRemove={() => setRemoveCourseThumb(true)}
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-navy-light pt-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Aulas</p>
+            <div className="mt-2 space-y-3">
+              <CourseImageField
+                label="Capa padrão da aula"
+                url={settings.lessonCoverUrl}
+                file={lessonCoverFile}
+                removed={removeLessonCover}
+                onFile={(f) => {
+                  setLessonCoverFile(f)
+                  setRemoveLessonCover(false)
+                }}
+                onRemove={() => setRemoveLessonCover(true)}
+              />
+              <CourseImageField
+                label="Miniatura padrão da aula"
+                url={settings.lessonThumbnailUrl}
+                file={lessonThumbFile}
+                removed={removeLessonThumb}
+                onFile={(f) => {
+                  setLessonThumbFile(f)
+                  setRemoveLessonThumb(false)
+                }}
+                onRemove={() => setRemoveLessonThumb(true)}
+              />
+            </div>
           </div>
         </div>
       )}

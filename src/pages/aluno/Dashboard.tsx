@@ -8,6 +8,7 @@ import { RankingWidget } from '../../components/RankingWidget'
 import { Tour } from '../../components/Tour'
 import type { TourStep } from '../../components/Tour'
 import { useAuth } from '../../context/AuthContext'
+import { usePlatformSettings } from '../../context/PlatformSettingsContext'
 import {
   completeTour,
   getAllPills,
@@ -713,10 +714,13 @@ function CourseCard({
   favorited?: boolean
   onToggleFavorite?: () => void
 }) {
+  const { courseDefaults } = usePlatformSettings()
   const isCourse = item.kind === 'course'
   const title = isCourse ? item.track.title : item.pill.title
   const description = isCourse ? item.track.description : item.pill.description
-  const thumbnailUrl = isCourse ? item.track.thumbnail_url ?? item.track.cover_url : item.pill.thumbnail_url
+  const thumbnailUrl = isCourse
+    ? item.track.thumbnail_url ?? item.track.cover_url ?? courseDefaults.courseThumbnailUrl ?? courseDefaults.courseCoverUrl
+    : item.pill.thumbnail_url ?? courseDefaults.lessonThumbnailUrl ?? courseDefaults.lessonCoverUrl
   const teaserVimeoId = isCourse ? item.track.teaser_vimeo_id : null
   const axis = isCourse ? item.track.title : item.pill.axis
   const [previewOpen, setPreviewOpen] = useState(false)
