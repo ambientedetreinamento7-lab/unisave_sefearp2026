@@ -150,10 +150,10 @@ export function MeuPdi() {
         </div>
 
         <div id="pdi-tab-panel">
-          {profile && tab === 'pdi' && <MeuPdiTab userId={profile.id} programId={profile.program_id ?? null} />}
-          {profile && tab === 'balanco' && (
-            <BalancoTab userId={profile.id} programId={profile.program_id} diagnosticProfile={profile.diagnostic_profile} />
+          {profile && tab === 'pdi' && (
+            <MeuPdiTab userId={profile.id} programId={profile.program_id ?? null} diagnosticProfile={profile.diagnostic_profile} />
           )}
+          {profile && tab === 'balanco' && <BalancoTab userId={profile.id} programId={profile.program_id} />}
           {profile && tab === 'biblioteca' && (
             <BibliotecaTab userId={profile.id} programId={profile.program_id} diagnosticProfile={profile.diagnostic_profile} />
           )}
@@ -173,27 +173,52 @@ export function MeuPdi() {
 
 // ---------------- Meu PDI tab ----------------
 
-function MeuPdiTab({ userId, programId }: { userId: string; programId: string | null }) {
+function MeuPdiTab({
+  userId,
+  programId,
+  diagnosticProfile,
+}: {
+  userId: string
+  programId: string | null
+  diagnosticProfile: DiagnosticProfile | null
+}) {
   const [plans, setPlans] = useState<PdiPlan[]>([])
+  const [categories, setCategories] = useState<SkillCategory[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
 
   async function reload() {
     setLoading(true)
     await recomputeAndSaveTier(userId)
-    setPlans(await getUserPlans(userId))
+    const [userPlans, skillCategories] = await Promise.all([
+      getUserPlans(userId),
+      programId ? getSkillCategories(programId) : Promise.resolve([]),
+    ])
+    setPlans(userPlans)
+    setCategories(skillCategories)
     setLoading(false)
   }
 
   useEffect(() => {
     reload()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId])
+  }, [userId, programId])
 
   return (
     <div className="mt-6 space-y-5">
       {loading && <p className="text-ink-soft">Carregando…</p>}
-      {!loading && plans.map((plan) => <PlanCard key={plan.id} plan={plan} programId={programId} onChanged={reload} />)}
+      {!loading &&
+        plans.map((plan) => (
+          <PlanCard
+            key={plan.id}
+            plan={plan}
+            userId={userId}
+            programId={programId}
+            diagnosticProfile={diagnosticProfile}
+            categories={categories}
+            onChanged={reload}
+          />
+        ))}
 
       {!loading && plans.length === 0 && (
         <p className="text-ink-soft">Você ainda não tem nenhum plano. Crie o primeiro abaixo.</p>
@@ -222,7 +247,21 @@ function MeuPdiTab({ userId, programId }: { userId: string; programId: string | 
   )
 }
 
-function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: string | null; onChanged: () => void }) {
+function PlanCard({
+  plan,
+  userId,
+  programId,
+  diagnosticProfile,
+  categories,
+  onChanged,
+}: {
+  plan: PdiPlan
+  userId: string
+  programId: string | null
+  diagnosticProfile: DiagnosticProfile | null
+  categories: SkillCategory[]
+  onChanged: () => void
+}) {
   const confirm = useConfirm()
   const [items, setItems] = useState<PdiPlanItem[]>([])
   const [labels, setLabels] = useState<Record<string, string>>({})
@@ -332,6 +371,16 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
           Cadência: {cadence.freq.toLowerCase()} — {cadence.detail}
         </p>
       </div>
+
+      {categories.length > 0 && (
+        <CompetencyGrid
+          userId={userId}
+          programId={programId}
+          diagnosticProfile={diagnosticProfile}
+          categories={categories}
+          planId={plan.id}
+        />
+      )}
 
       <div className="mt-4 space-y-4">
         {loading && <p className="text-sm text-ink-soft">Carregando itens…</p>}
@@ -632,15 +681,7 @@ function CreatePlanModal({
 
 // ---------------- Balanço de Competências tab ----------------
 
-function BalancoTab({
-  userId,
-  programId,
-  diagnosticProfile,
-}: {
-  userId: string
-  programId: string | null
-  diagnosticProfile: DiagnosticProfile | null
-}) {
+function BalancoTab({ userId, programId }: { userId: string; programId: string | null }) {
   const [categories, setCategories] = useState<SkillCategory[]>([])
   const [ratings, setRatings] = useState<SkillRating[]>([])
   const [loading, setLoading] = useState(true)
@@ -722,10 +763,6 @@ function BalancoTab({
         )
       })}
       {categories.length === 0 && <p className="text-ink-soft">Nenhuma categoria de skill cadastrada para o curso.</p>}
-
-      {categories.length > 0 && (
-        <CompetencyGrid userId={userId} programId={programId} diagnosticProfile={diagnosticProfile} categories={categories} />
-      )}
     </div>
   )
 }

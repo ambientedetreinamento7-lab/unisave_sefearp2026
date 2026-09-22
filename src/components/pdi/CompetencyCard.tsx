@@ -18,17 +18,19 @@ export function CompetencyCard({
   category,
   summary,
   isDesafioInicial,
+  onClick,
 }: {
   category: SkillCategory
   summary: CompetencyPdiSummary | undefined
   isDesafioInicial: boolean
+  onClick: () => void
 }) {
   const status = summary?.status ?? 'nao_iniciado'
   const preenchimentoPct = summary?.preenchimentoPct ?? 0
   const evolucaoPct = summary?.evolucaoPct ?? 0
 
   return (
-    <div className="card p-5">
+    <div className="card cursor-pointer p-5 transition hover:border-navy" onClick={onClick} role="button">
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="flex items-center gap-1.5 font-bold text-ink">

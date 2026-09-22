@@ -488,7 +488,7 @@ async function syncTrackProgressToPdi(userId: string, trackId: string, planIds: 
   return rows.map((r) => r.plan_id)
 }
 
-async function recomputePlanProgress(planId: string) {
+export async function recomputePlanProgress(planId: string) {
   const items = await getPlanItems(planId)
   if (items.length === 0) return
   const sum = items.reduce((acc, i) => acc + i.progress_current / Math.max(1, i.progress_total), 0)
@@ -846,6 +846,114 @@ export async function addPillToPlan(planId: string, pillId: string) {
   })
 }
 
+/**
+ * Adiciona uma trilha sugerida (cursos do catálogo, filtrados pela tag da
+ * competência) diretamente vinculada a uma competência — variante de
+ * addTrackToPlan que, ao contrário dela, grava skill_category_id e um
+ * jornada_bucket explícito ('formacao') em vez de deixar o bucketForIndex
+ * (ciclagem mecânica por ordem de inserção) decidir. Usada pelo passo 4 do
+ * wizard de competência (bloco "10% Aprendizagem Formal").
+ */
+export async function addTrackToCompetency(planId: string, skillCategoryId: string, trackId: string): Promise<void> {
+  const { data: existing } = await supabase
+    .from('pdi_plan_items')
+    .select('id')
+    .eq('plan_id', planId)
+    .eq('item_type', 'trilha')
+    .eq('ref_id', trackId)
+    .maybeSingle()
+  if (existing) return
+
+  const { pills } = await getTrackWithPills(trackId)
+  const { count } = await supabase
+    .from('pdi_plan_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('plan_id', planId)
+  const orderIndex = count ?? 0
+
+  await supabase.from('pdi_plan_items').insert({
+    plan_id: planId,
+    item_type: 'trilha' as const,
+    ref_id: trackId,
+    skill_category_id: skillCategoryId,
+    progress_current: 0,
+    progress_total: Math.max(1, pills.length),
+    status: 'nao_iniciado' as const,
+    order_index: orderIndex,
+    jornada_bucket: 'formacao' as const,
+  })
+  await recomputePlanProgress(planId)
+}
+
+/**
+ * Adiciona um item de texto livre (sem curso/trilha por trás) a uma
+ * competência, já vinculado ao bucket 70/20/10 explícito — bucket
+ * 'pratica'/'mentoria' (o aluno descreve o que vai fazer) ou "outra
+ * tarefa" dentro de 'formacao'. Ao contrário dos cursos/trilhas, o status
+ * desse item é ciclado manualmente pelo aluno (cycleItemStatus).
+ */
+export async function addFreeTextItemToCompetency(
+  planId: string,
+  skillCategoryId: string,
+  bucket: PdiJornadaBucket,
+  descricao: string,
+): Promise<void> {
+  const { count } = await supabase
+    .from('pdi_plan_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('plan_id', planId)
+  const orderIndex = count ?? 0
+
+  await supabase.from('pdi_plan_items').insert({
+    plan_id: planId,
+    item_type: 'tarefa_livre' as const,
+    ref_id: null,
+    descricao,
+    skill_category_id: skillCategoryId,
+    progress_current: 0,
+    progress_total: 1,
+    status: 'nao_iniciado' as const,
+    order_index: orderIndex,
+    jornada_bucket: bucket,
+  })
+  await recomputePlanProgress(planId)
+}
+
+const NEXT_STATUS: Record<PdiItemStatus, PdiItemStatus> = {
+  nao_iniciado: 'em_andamento',
+  em_andamento: 'concluido',
+  concluido: 'nao_iniciado',
+}
+
+/**
+ * Avança manualmente o status de um item do PDI (não iniciado → em
+ * andamento → concluído → não iniciado). Só faz sentido pra itens
+ * item_type='tarefa_livre' — itens de curso/trilha têm status derivado do
+ * consumo real via syncPillCompletionToPdi/syncTrackProgressToPdi, e a UI
+ * não deve oferecer esse controle pra eles.
+ */
+export async function cycleItemStatus(planId: string, itemId: string, currentStatus: PdiItemStatus): Promise<PdiItemStatus> {
+  const next = NEXT_STATUS[currentStatus]
+  await supabase
+    .from('pdi_plan_items')
+    .update({ status: next, progress_current: next === 'concluido' ? 1 : 0, progress_total: 1 })
+    .eq('id', itemId)
+  await recomputePlanProgress(planId)
+  return next
+}
+
+/** Itens de um plano vinculados a uma competência específica — usado no
+ * wizard de competência (passos 4 e 5). */
+export async function getCompetencyPlanItems(planId: string, skillCategoryId: string): Promise<PdiPlanItem[]> {
+  const { data } = await supabase
+    .from('pdi_plan_items')
+    .select('*')
+    .eq('plan_id', planId)
+    .eq('skill_category_id', skillCategoryId)
+    .order('order_index')
+  return (data as PdiPlanItem[]) ?? []
+}
+
 export async function createPlanWithPill(userId: string, title: string, pillId: string): Promise<PdiPlan> {
   const { data: plan, error } = await supabase
     .from('pdi_plans')
@@ -878,12 +986,12 @@ export async function getSkillRatings(userId: string): Promise<SkillRating[]> {
   return (data as SkillRating[]) ?? []
 }
 
-export async function upsertSelfRating(userId: string, skillCategoryId: string, rating: number, objetivo?: string) {
+export async function upsertSelfRating(userId: string, skillCategoryId: string, rating?: number, objetivo?: string) {
   await supabase.from('skill_ratings').upsert(
     {
       user_id: userId,
       skill_category_id: skillCategoryId,
-      self_rating: rating,
+      ...(rating !== undefined ? { self_rating: rating } : {}),
       ...(objetivo !== undefined ? { objetivo } : {}),
       rated_at: new Date().toISOString(),
     },
