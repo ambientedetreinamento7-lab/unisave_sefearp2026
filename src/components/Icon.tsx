@@ -31,6 +31,8 @@ export type IconName =
   | "help-circle"
   | "bell"
   | "download"
+  | "camera"
+  | "copy"
 
 const PATHS: Record<IconName, React.ReactNode> = {
   book: (
@@ -307,6 +309,32 @@ const PATHS: Record<IconName, React.ReactNode> = {
       strokeLinecap="round"
       strokeLinejoin="round"
     />
+  ),
+  camera: (
+    <>
+      <path
+        d="M4 8.5a2 2 0 0 1 2-2h1.2l1-1.6A1.5 1.5 0 0 1 9.5 4h5a1.5 1.5 0 0 1 1.3.8l1 1.7H18a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8.5Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="12.5" r="3.3" fill="none" stroke="currentColor" strokeWidth="1.7" />
+    </>
+  ),
+  copy: (
+    <>
+      <rect x="8.5" y="8.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </>
   ),
 }
 

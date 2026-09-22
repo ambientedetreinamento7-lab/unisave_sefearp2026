@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { Icon } from '../../components/Icon'
 import { ProgressBar } from '../../components/ProgressBar'
+import { QrCode } from '../../components/QrCode'
 import { RankingWidget } from '../../components/RankingWidget'
 import { Tour } from '../../components/Tour'
 import type { TourStep } from '../../components/Tour'
@@ -930,6 +931,9 @@ function RedeemBottonModal({
               Pedido já feito! Mostre esse código no estande pra retirar o botton do curso{' '}
               <strong className="text-ink">{redemption.course_name ?? program?.name}</strong>:
             </p>
+            <div className="mt-4 flex justify-center">
+              <QrCode value={redemption.code} size={160} className="rounded-lg" />
+            </div>
             <p className="mt-3 rounded-xl bg-navy-light px-4 py-3 text-2xl font-extrabold tracking-widest text-navy">
               {redemption.code}
             </p>

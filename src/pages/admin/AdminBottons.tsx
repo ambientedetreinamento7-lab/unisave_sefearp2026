@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AdminLayout } from './AdminLayout'
+import { Icon } from '../../components/Icon'
+import { QrScannerModal } from '../../components/QrScannerModal'
 import { getAllRedemptions, getRedemptionByCode, markRedemptionDelivered } from '../../lib/bottons'
 import type { BottonRedemption } from '../../types/database'
 
@@ -10,6 +12,7 @@ export function AdminBottons() {
   const [codeSearch, setCodeSearch] = useState('')
   const [codeResult, setCodeResult] = useState<BottonRedemption | null | undefined>(undefined)
   const [searching, setSearching] = useState(false)
+  const [scannerOpen, setScannerOpen] = useState(false)
 
   async function reload() {
     setRedemptions(await getAllRedemptions())
@@ -25,11 +28,21 @@ export function AdminBottons() {
     return () => clearInterval(interval)
   }, [])
 
-  async function handleSearchCode() {
-    if (!codeSearch.trim()) return
+  async function runSearch(code: string) {
+    if (!code.trim()) return
     setSearching(true)
-    setCodeResult(await getRedemptionByCode(codeSearch))
+    setCodeResult(await getRedemptionByCode(code))
     setSearching(false)
+  }
+
+  async function handleSearchCode() {
+    await runSearch(codeSearch)
+  }
+
+  function handleDetected(text: string) {
+    setCodeSearch(text)
+    setScannerOpen(false)
+    runSearch(text)
   }
 
   async function handleMarkDelivered(id: string) {
@@ -75,27 +88,59 @@ export function AdminBottons() {
           >
             {searching ? 'Buscando…' : 'Buscar'}
           </button>
+          <button
+            onClick={() => setScannerOpen(true)}
+            className="flex items-center justify-center gap-1.5 rounded-xl border border-navy-light px-5 py-2.5 text-sm font-semibold text-navy hover:border-navy"
+          >
+            <Icon name="camera" size={16} />
+            Escanear QR
+          </button>
         </div>
 
         {codeResult === null && <p className="mt-3 text-sm text-brand-red">Código não encontrado.</p>}
         {codeResult && (
-          <div className="mt-4 rounded-xl border border-navy-light p-4">
-            <p className="text-lg font-bold text-ink">{codeResult.student_name}</p>
-            <p className="text-sm text-ink-soft">{codeResult.course_name ?? 'Sem curso vinculado'}</p>
-            <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">
-              {codeResult.status === 'delivered' ? '✅ Já entregue' : 'Pendente de entrega'}
-            </p>
-            {codeResult.status !== 'delivered' && (
-              <button
-                onClick={() => handleMarkDelivered(codeResult.id)}
-                className="mt-3 rounded-xl bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy-dark"
+          <div className="mt-4 overflow-hidden rounded-2xl card-highlight">
+            <div className="flex items-center gap-4 bg-navy-light/40 p-6">
+              <div className="icon-badge h-14 w-14 shrink-0">
+                <Icon name="shield" size={28} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xl font-extrabold text-ink">{codeResult.student_name}</p>
+                <p className="text-sm text-ink-soft">{codeResult.course_name ?? 'Sem curso vinculado'}</p>
+              </div>
+              <span
+                className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wide ${
+                  codeResult.status === 'delivered' ? 'bg-success/15 text-success' : 'bg-gold/15 text-gold'
+                }`}
               >
-                Marcar como entregue
-              </button>
-            )}
+                {codeResult.status === 'delivered' ? 'Entregue' : 'Pendente'}
+              </span>
+            </div>
+            <div className="flex flex-col items-center gap-3 p-6">
+              <span className="inline-flex items-center gap-2 rounded-full bg-navy-light px-6 py-3 font-mono text-2xl font-extrabold tracking-[0.2em] text-navy">
+                {codeResult.code}
+                <button
+                  onClick={() => navigator.clipboard.writeText(codeResult.code)}
+                  aria-label="Copiar código"
+                  className="text-navy/70 hover:text-navy"
+                >
+                  <Icon name="copy" size={18} />
+                </button>
+              </span>
+              {codeResult.status !== 'delivered' && (
+                <button
+                  onClick={() => handleMarkDelivered(codeResult.id)}
+                  className="mt-2 w-full max-w-xs rounded-xl bg-brand-red py-4 text-base font-bold text-white transition hover:bg-brand-red-dark active:scale-[0.98]"
+                >
+                  Marcar como entregue
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
+
+      {scannerOpen && <QrScannerModal onDetected={handleDetected} onClose={() => setScannerOpen(false)} />}
 
       <div className="mt-8 mb-3 flex items-center justify-between gap-2">
         <h2 className="font-bold text-ink">Todos os pedidos</h2>
