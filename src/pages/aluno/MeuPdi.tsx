@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { useConfirm } from '../../components/ConfirmDialog'
+import { CompetencyGrid } from '../../components/pdi/CompetencyGrid'
 import { ProgressBar } from '../../components/ProgressBar'
 import { Tour } from '../../components/Tour'
 import type { TourStep } from '../../components/Tour'
@@ -150,7 +151,9 @@ export function MeuPdi() {
 
         <div id="pdi-tab-panel">
           {profile && tab === 'pdi' && <MeuPdiTab userId={profile.id} programId={profile.program_id ?? null} />}
-          {profile && tab === 'balanco' && <BalancoTab userId={profile.id} programId={profile.program_id} />}
+          {profile && tab === 'balanco' && (
+            <BalancoTab userId={profile.id} programId={profile.program_id} diagnosticProfile={profile.diagnostic_profile} />
+          )}
           {profile && tab === 'biblioteca' && (
             <BibliotecaTab userId={profile.id} programId={profile.program_id} diagnosticProfile={profile.diagnostic_profile} />
           )}
@@ -231,9 +234,9 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
     setItems(planItems)
     setProgress(progressMap)
 
-    const pillIds = planItems.filter((i) => i.item_type === 'pill').map((i) => i.ref_id)
-    const skillIds = planItems.filter((i) => i.item_type === 'skill_category').map((i) => i.ref_id)
-    const trackIds = planItems.filter((i) => i.item_type === 'trilha').map((i) => i.ref_id)
+    const pillIds = planItems.filter((i) => i.item_type === 'pill').map((i) => i.ref_id as string)
+    const skillIds = planItems.filter((i) => i.item_type === 'skill_category').map((i) => i.ref_id as string)
+    const trackIds = planItems.filter((i) => i.item_type === 'trilha').map((i) => i.ref_id as string)
 
     const labelMap: Record<string, string> = {}
     if (pillIds.length) {
@@ -342,7 +345,7 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
                     <ItemRow
                       key={item.id}
                       item={item}
-                      label={labels[item.ref_id] ?? item.ref_id}
+                      label={item.ref_id ? (labels[item.ref_id] ?? item.ref_id) : (item.descricao ?? 'Tarefa')}
                       planId={plan.id}
                       planItems={items}
                       progress={progress}
@@ -359,7 +362,7 @@ function PlanCard({ plan, programId, onChanged }: { plan: PdiPlan; programId: st
               <ItemRow
                 key={item.id}
                 item={item}
-                label={labels[item.ref_id] ?? item.ref_id}
+                label={item.ref_id ? (labels[item.ref_id] ?? item.ref_id) : (item.descricao ?? 'Tarefa')}
                 planId={plan.id}
                 planItems={items}
                 progress={progress}
@@ -417,7 +420,7 @@ function ItemRow({
   // botão "+ Adicionar", que ficaria enganoso repetido pro mesmo curso).
   const addedTrackIds = useMemo(() => {
     const set = new Set<string>()
-    for (const i of planItems) if (i.item_type === 'trilha') set.add(i.ref_id)
+    for (const i of planItems) if (i.item_type === 'trilha' && i.ref_id) set.add(i.ref_id)
     return set
   }, [planItems])
 
@@ -428,7 +431,7 @@ function ItemRow({
       return
     }
     setOpen(true)
-    if (suggested === null) {
+    if (suggested === null && item.ref_id) {
       setLoadingTracks(true)
       const tracks = await getTracksBySkillCategory(item.ref_id)
       const withPills = await Promise.all(tracks.map((t) => getTrackWithPills(t.id)))
@@ -629,7 +632,15 @@ function CreatePlanModal({
 
 // ---------------- Balanço de Competências tab ----------------
 
-function BalancoTab({ userId, programId }: { userId: string; programId: string | null }) {
+function BalancoTab({
+  userId,
+  programId,
+  diagnosticProfile,
+}: {
+  userId: string
+  programId: string | null
+  diagnosticProfile: DiagnosticProfile | null
+}) {
   const [categories, setCategories] = useState<SkillCategory[]>([])
   const [ratings, setRatings] = useState<SkillRating[]>([])
   const [loading, setLoading] = useState(true)
@@ -658,9 +669,18 @@ function BalancoTab({ userId, programId }: { userId: string; programId: string |
     await upsertSelfRating(userId, categoryId, value)
     setRatings((prev) => {
       const others = prev.filter((r) => r.skill_category_id !== categoryId)
+      const previous = prev.find((r) => r.skill_category_id === categoryId)
       return [
         ...others,
-        { id: '', user_id: userId, skill_category_id: categoryId, self_rating: value, moderator_rating: null, rated_at: '' },
+        {
+          id: previous?.id ?? '',
+          user_id: userId,
+          skill_category_id: categoryId,
+          self_rating: value,
+          moderator_rating: previous?.moderator_rating ?? null,
+          rated_at: '',
+          objetivo: previous?.objetivo ?? null,
+        },
       ]
     })
     await recomputeAndSaveTier(userId)
@@ -702,6 +722,10 @@ function BalancoTab({ userId, programId }: { userId: string; programId: string |
         )
       })}
       {categories.length === 0 && <p className="text-ink-soft">Nenhuma categoria de skill cadastrada para o curso.</p>}
+
+      {categories.length > 0 && (
+        <CompetencyGrid userId={userId} programId={programId} diagnosticProfile={diagnosticProfile} categories={categories} />
+      )}
     </div>
   )
 }

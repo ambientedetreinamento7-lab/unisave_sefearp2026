@@ -13,7 +13,9 @@ create type pill_status as enum ('not_started', 'in_progress', 'completed');
 create type skill_type as enum ('tecnica', 'comportamental', 'etica');
 create type content_type as enum ('video', 'iframe', 'scorm', 'reaction');
 create type pdi_plan_type as enum ('trilha_evento', 'plano_pessoal', 'plano_institucional');
-create type pdi_item_type as enum ('skill_category', 'pill', 'trilha');
+-- 'tarefa_livre' (Meu PDI — Painel 70/20/10) é um item sem curso/trilha por
+-- trás: texto livre digitado pelo aluno (ver pdi_plan_items.descricao).
+create type pdi_item_type as enum ('skill_category', 'pill', 'trilha', 'tarefa_livre');
 create type pdi_item_status as enum ('nao_iniciado', 'em_andamento', 'concluido');
 -- Faixa de desempenho (spec: metodologia de PDI 70-20-10), recalculada no
 -- client (src/lib/pdiTier.ts) sempre que o Balanço de Competências muda.
@@ -423,6 +425,9 @@ create table skill_ratings (
   self_rating numeric,
   moderator_rating numeric,
   rated_at timestamptz not null default now(),
+  -- Objetivo em texto livre do aluno pra essa competência (Meu PDI —
+  -- Painel 70/20/10, passo 3 do wizard de competência).
+  objetivo text,
   unique (user_id, skill_category_id)
 );
 
@@ -442,14 +447,28 @@ create table pdi_plan_items (
   id uuid primary key default gen_random_uuid(),
   plan_id uuid not null references pdi_plans(id) on delete cascade,
   item_type pdi_item_type not null,
-  ref_id uuid not null,
+  -- Nulo só quando item_type='tarefa_livre' (item de texto livre, sem
+  -- curso/trilha/categoria por trás) — ver check abaixo.
+  ref_id uuid,
   progress_current int not null default 0,
   progress_total int not null default 4,
   status pdi_item_status not null default 'nao_iniciado',
   order_index int not null default 0,
   -- Classificação 70-20-10 (spec: metodologia de PDI 70-20-10).
-  jornada_bucket pdi_jornada_bucket
+  jornada_bucket pdi_jornada_bucket,
+  -- Competência de origem do item (Meu PDI — Painel 70/20/10) — liga o
+  -- item de volta à competência que o sugeriu, pra poder agrupar/computar
+  -- % Preenchimento e % Evolução por competência no grid.
+  skill_category_id uuid references skill_categories(id) on delete cascade,
+  -- Texto livre do item (bucket prática/troca de conhecimento, ou "outra
+  -- tarefa" no bucket de aprendizagem formal) — item_type='tarefa_livre'.
+  descricao text,
+  constraint pdi_plan_items_ref_id_check check (
+    (item_type = 'tarefa_livre' and ref_id is null)
+    or (item_type <> 'tarefa_livre' and ref_id is not null)
+  )
 );
+create index on pdi_plan_items (skill_category_id);
 
 -- Rede social interna — Fase A (feed base: texto/imagem/carrossel, curtir,
 -- comentar, duas abas, moderação) + Fase B (enquete). Vídeo (Vimeo) e
@@ -1604,4 +1623,13 @@ on conflict (key) do nothing;
 -- /admin/configuracoes.
 insert into app_settings (key, value) values
   ('trial', '{"enabled": true, "days": 14}'::jsonb)
+on conflict (key) do nothing;
+
+-- Meu PDI — Painel 70/20/10: quais competências aparecem no grid do
+-- aluno na primeira visita. 'selecionadas' (padrão) = competências que o
+-- aluno já autoavaliou no Balanço de Competências; 'desafio_inicial' = só
+-- a competência ligada à resposta de "maior desafio" do PDI Express.
+-- Editável em /admin/configuracoes.
+insert into app_settings (key, value) values
+  ('pdi_competency_visibility', '{"mode": "selecionadas"}'::jsonb)
 on conflict (key) do nothing;

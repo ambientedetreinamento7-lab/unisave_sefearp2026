@@ -4,7 +4,7 @@ export type PillStatus = 'not_started' | 'in_progress' | 'completed'
 export type SkillType = 'tecnica' | 'comportamental' | 'etica'
 export type ContentType = 'video' | 'iframe' | 'scorm' | 'reaction'
 export type PdiPlanType = 'trilha_evento' | 'plano_pessoal' | 'plano_institucional'
-export type PdiItemType = 'skill_category' | 'pill' | 'trilha'
+export type PdiItemType = 'skill_category' | 'pill' | 'trilha' | 'tarefa_livre'
 export type PdiItemStatus = 'nao_iniciado' | 'em_andamento' | 'concluido'
 export type PdiTier = 'abaixo' | 'proximo' | 'dentro' | 'acima'
 export type PdiJornadaBucket = 'pratica' | 'mentoria' | 'formacao'
@@ -170,6 +170,14 @@ export interface TrialSettings {
   days: number
 }
 
+// Meu PDI — Painel 70/20/10: quais competências aparecem no grid do aluno
+// na primeira visita. 'selecionadas' = competências que o aluno já
+// autoavaliou; 'desafio_inicial' = só a competência do "maior desafio" do
+// PDI Express.
+export interface PdiCompetencyVisibilitySettings {
+  mode: 'selecionadas' | 'desafio_inicial'
+}
+
 export interface BrandingSettings {
   platformName: string | null
   logoUrl: string | null
@@ -324,6 +332,7 @@ export interface SkillRating {
   self_rating: number | null
   moderator_rating: number | null
   rated_at: string
+  objetivo: string | null
 }
 
 export interface PdiPlan {
@@ -341,12 +350,14 @@ export interface PdiPlanItem {
   id: string
   plan_id: string
   item_type: PdiItemType
-  ref_id: string
+  ref_id: string | null
   progress_current: number
   progress_total: number
   status: PdiItemStatus
   order_index: number
   jornada_bucket: PdiJornadaBucket | null
+  skill_category_id: string | null
+  descricao: string | null
 }
 
 export interface SocialPost {
