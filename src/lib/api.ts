@@ -23,8 +23,6 @@ import type {
   UserProgress,
 } from '../types/database'
 
-const DEFAULT_SKILL_TARGET = 4
-
 // Distribuição 70-20-10 (spec: metodologia de PDI): a cada 10 itens, 7
 // prática, 2 mentoria, 1 formação, ciclando pela ordem dos itens.
 const JORNADA_BUCKET_CYCLE: PdiJornadaBucket[] = [
@@ -488,7 +486,7 @@ async function syncTrackProgressToPdi(userId: string, trackId: string, planIds: 
   return rows.map((r) => r.plan_id)
 }
 
-async function recomputePlanProgress(planId: string) {
+export async function recomputePlanProgress(planId: string) {
   const items = await getPlanItems(planId)
   if (items.length === 0) return
   const sum = items.reduce((acc, i) => acc + i.progress_current / Math.max(1, i.progress_total), 0)
@@ -648,13 +646,25 @@ export async function getReactionSurveyResponses(surveyId: string): Promise<
   }))
 }
 
+export interface NpsOtherAnswer {
+  questionText: string
+  valueNumber: number | null
+  valueText: string | null
+}
+
 export interface NpsResponseRow {
+  responseId: string
   value: number
   submittedAt: string
+  userId: string
+  userName: string
   pillId: string
   pillTitle: string
   trackId: string | null
   trackTitle: string | null
+  /** Demais perguntas da mesma pesquisa (likert, texto aberto etc.),
+   * ordenadas por order_index — pro CSV detalhado, não pro cálculo de NPS. */
+  otherAnswers: NpsOtherAnswer[]
 }
 
 const NPS_QUESTION_ANCHOR = 'recomendaria este curso'
@@ -665,7 +675,8 @@ function normalizeQuestionText(s: string) {
 
 /** Respostas da pergunta de recomendação (0-10, "quanto recomendaria este
  * curso") em todas as pesquisas de reação — não uma survey específica —
- * já com curso (pill/track) e data, prontas pro cálculo de NPS. Filtra por
+ * já com curso (pill/track), aluno e data, prontas pro cálculo de NPS, mais
+ * as demais respostas da mesma pesquisa (pro CSV detalhado). Filtra por
  * question_type='nps' + texto contendo a âncora, não por um ID fixo,
  * porque cada survey cadastra sua própria cópia da pergunta. */
 export async function getNpsResponses(): Promise<NpsResponseRow[]> {
@@ -680,37 +691,79 @@ export async function getNpsResponses(): Promise<NpsResponseRow[]> {
   )
   if (npsQuestionIds.size === 0) return []
 
-  const { data: answers } = await supabase
+  const { data: npsAnswers } = await supabase
     .from('reaction_answers')
     .select('response_id, question_id, value_number')
     .in('question_id', Array.from(npsQuestionIds))
     .not('value_number', 'is', null)
-  const answersArr = (answers as { response_id: string; question_id: string; value_number: number }[]) ?? []
-  if (answersArr.length === 0) return []
+  const npsAnswersArr = (npsAnswers as { response_id: string; question_id: string; value_number: number }[]) ?? []
+  if (npsAnswersArr.length === 0) return []
 
   const { data: responses } = await supabase
     .from('reaction_responses')
-    .select('id, submitted_at, pill_id, pills(title, track_id, tracks(title))')
-    .in('id', answersArr.map((a) => a.response_id))
+    .select('id, survey_id, submitted_at, pill_id, user_id, pills(title, track_id, tracks(title)), profiles(name)')
+    .in(
+      'id',
+      npsAnswersArr.map((a) => a.response_id),
+    )
   type ResponseRow = {
     id: string
+    survey_id: string
     submitted_at: string
     pill_id: string
+    user_id: string
     pills: { title: string; track_id: string | null; tracks: { title: string } | null } | null
+    profiles: { name: string } | null
   }
-  const responseMap = new Map(((responses as ResponseRow[]) ?? []).map((r) => [r.id, r]))
+  const responseRows = (responses as unknown as ResponseRow[]) ?? []
+  const responseMap = new Map(responseRows.map((r) => [r.id, r]))
 
-  return answersArr
+  // Todas as perguntas (não só NPS) das pesquisas envolvidas, ordenadas —
+  // pro CSV detalhado trazer cada resposta com o texto certo da pergunta.
+  const surveyIds = [...new Set(responseRows.map((r) => r.survey_id))]
+  const { data: allQuestions } = surveyIds.length
+    ? await supabase
+        .from('reaction_questions')
+        .select('id, question_text, survey_id')
+        .in('survey_id', surveyIds)
+        .order('order_index')
+    : { data: [] }
+  const questionMap = new Map(
+    ((allQuestions as { id: string; question_text: string; survey_id: string }[]) ?? []).map((q) => [q.id, q]),
+  )
+
+  const { data: allAnswers } = await supabase
+    .from('reaction_answers')
+    .select('response_id, question_id, value_number, value_text')
+    .in(
+      'response_id',
+      responseRows.map((r) => r.id),
+    )
+  const otherAnswersByResponse = new Map<string, NpsOtherAnswer[]>()
+  for (const a of (allAnswers as { response_id: string; question_id: string; value_number: number | null; value_text: string | null }[] | null) ?? []) {
+    if (npsQuestionIds.has(a.question_id)) continue
+    const question = questionMap.get(a.question_id)
+    if (!question) continue
+    const arr = otherAnswersByResponse.get(a.response_id) ?? []
+    arr.push({ questionText: question.question_text, valueNumber: a.value_number, valueText: a.value_text })
+    otherAnswersByResponse.set(a.response_id, arr)
+  }
+
+  return npsAnswersArr
     .map((a) => {
       const r = responseMap.get(a.response_id)
       if (!r) return null
       return {
+        responseId: r.id,
         value: a.value_number,
         submittedAt: r.submitted_at,
+        userId: r.user_id,
+        userName: r.profiles?.name ?? '—',
         pillId: r.pill_id,
         pillTitle: r.pills?.title ?? '—',
         trackId: r.pills?.track_id ?? null,
         trackTitle: r.pills?.tracks?.title ?? null,
+        otherAnswers: otherAnswersByResponse.get(r.id) ?? [],
       }
     })
     .filter((x): x is NpsResponseRow => x !== null)
@@ -808,37 +861,23 @@ export async function getPdiCoursePills(userId: string): Promise<Pill[]> {
   return [...byId.values()]
 }
 
-export async function createPlan(
-  userId: string,
-  title: string,
-  origin: 'taxonomia' | 'vazio',
-  programId?: string | null,
-): Promise<PdiPlan> {
+/** Cria um plano já com as competências escolhidas pelo aluno (até 3) —
+ * define direto quais cards aparecem no Painel 70/20/10 desse plano, sem
+ * inferir por toggle/autoavaliação. */
+export async function createPlan(userId: string, title: string, competencyIds: string[]): Promise<PdiPlan> {
   const { data: plan, error } = await supabase
     .from('pdi_plans')
-    .insert({ user_id: userId, title, type: 'plano_pessoal', endorsed: false, progress_pct: 0 })
+    .insert({
+      user_id: userId,
+      title,
+      type: 'plano_pessoal',
+      endorsed: false,
+      progress_pct: 0,
+      competency_ids: competencyIds.slice(0, 3),
+    })
     .select('*')
     .single()
   if (error) throw error
-
-  if (origin === 'taxonomia' && programId) {
-    const { data: categories } = await supabase
-      .from('skill_categories')
-      .select('*')
-      .eq('program_id', programId)
-    const items = ((categories as SkillCategory[]) ?? []).map((cat, idx) => ({
-      plan_id: plan.id,
-      item_type: 'skill_category' as const,
-      ref_id: cat.id,
-      progress_current: 0,
-      progress_total: DEFAULT_SKILL_TARGET,
-      status: 'nao_iniciado' as const,
-      order_index: idx,
-      jornada_bucket: bucketForIndex(idx),
-    }))
-    if (items.length) await supabase.from('pdi_plan_items').insert(items)
-  }
-
   return plan as PdiPlan
 }
 
@@ -914,6 +953,113 @@ export async function addPillToPlan(planId: string, pillId: string) {
   })
 }
 
+/**
+ * Adiciona uma trilha sugerida (cursos do catálogo, filtrados pela tag da
+ * competência) diretamente vinculada a uma competência — variante de
+ * addTrackToPlan que, ao contrário dela, grava skill_category_id e um
+ * jornada_bucket explícito ('formacao') em vez de deixar o bucketForIndex
+ * (ciclagem mecânica por ordem de inserção) decidir. Usada pelo passo 4 do
+ * wizard de competência (bloco "10% Aprendizagem Formal").
+ */
+export async function addTrackToCompetency(planId: string, skillCategoryId: string, trackId: string): Promise<void> {
+  const { data: existing } = await supabase
+    .from('pdi_plan_items')
+    .select('id')
+    .eq('plan_id', planId)
+    .eq('item_type', 'trilha')
+    .eq('ref_id', trackId)
+    .maybeSingle()
+  if (existing) return
+
+  const { pills } = await getTrackWithPills(trackId)
+  const { count } = await supabase
+    .from('pdi_plan_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('plan_id', planId)
+  const orderIndex = count ?? 0
+
+  await supabase.from('pdi_plan_items').insert({
+    plan_id: planId,
+    item_type: 'trilha' as const,
+    ref_id: trackId,
+    skill_category_id: skillCategoryId,
+    progress_current: 0,
+    progress_total: Math.max(1, pills.length),
+    status: 'nao_iniciado' as const,
+    order_index: orderIndex,
+    jornada_bucket: 'formacao' as const,
+  })
+  await recomputePlanProgress(planId)
+}
+
+/**
+ * Adiciona um item de texto livre (sem curso/trilha por trás) a uma
+ * competência, já vinculado ao bucket 70/20/10 explícito — bucket
+ * 'pratica'/'mentoria' (o aluno descreve o que vai fazer) ou "outra
+ * tarefa" dentro de 'formacao'. Ao contrário dos cursos/trilhas, o status
+ * desse item é definido manualmente pelo aluno (setItemStatus).
+ */
+export async function addFreeTextItemToCompetency(
+  planId: string,
+  skillCategoryId: string,
+  bucket: PdiJornadaBucket,
+  descricao: string,
+): Promise<void> {
+  const { count } = await supabase
+    .from('pdi_plan_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('plan_id', planId)
+  const orderIndex = count ?? 0
+
+  await supabase.from('pdi_plan_items').insert({
+    plan_id: planId,
+    item_type: 'tarefa_livre' as const,
+    ref_id: null,
+    descricao,
+    skill_category_id: skillCategoryId,
+    progress_current: 0,
+    progress_total: 1,
+    status: 'nao_iniciado' as const,
+    order_index: orderIndex,
+    jornada_bucket: bucket,
+  })
+  await recomputePlanProgress(planId)
+}
+
+/**
+ * Define manualmente o status de um item do PDI (lista suspensa: não
+ * iniciado / em andamento / concluído). Só faz sentido pra itens
+ * item_type='tarefa_livre' — itens de curso/trilha têm status derivado do
+ * consumo real via syncPillCompletionToPdi/syncTrackProgressToPdi, e a UI
+ * não deve oferecer esse controle pra eles.
+ */
+export async function setItemStatus(planId: string, itemId: string, status: PdiItemStatus): Promise<void> {
+  await supabase
+    .from('pdi_plan_items')
+    .update({ status, progress_current: status === 'concluido' ? 1 : 0, progress_total: 1 })
+    .eq('id', itemId)
+  await recomputePlanProgress(planId)
+}
+
+/** Data em que o aluno pretende concluir o item — vale pra qualquer
+ * bucket/tipo de item, é só uma meta pessoal (não entra no cálculo de
+ * Preenchimento/Evolução). */
+export async function setItemTargetDate(itemId: string, targetDate: string | null): Promise<void> {
+  await supabase.from('pdi_plan_items').update({ target_date: targetDate }).eq('id', itemId)
+}
+
+/** Itens de um plano vinculados a uma competência específica — usado no
+ * wizard de competência (passos 4 e 5). */
+export async function getCompetencyPlanItems(planId: string, skillCategoryId: string): Promise<PdiPlanItem[]> {
+  const { data } = await supabase
+    .from('pdi_plan_items')
+    .select('*')
+    .eq('plan_id', planId)
+    .eq('skill_category_id', skillCategoryId)
+    .order('order_index')
+  return (data as PdiPlanItem[]) ?? []
+}
+
 export async function createPlanWithPill(userId: string, title: string, pillId: string): Promise<PdiPlan> {
   const { data: plan, error } = await supabase
     .from('pdi_plans')
@@ -937,8 +1083,24 @@ export async function createPlanWithTrack(userId: string, title: string, trackId
 }
 
 export async function getSkillCategories(programId: string): Promise<SkillCategory[]> {
-  const { data } = await supabase.from('skill_categories').select('*').eq('program_id', programId)
+  const { data } = await supabase.from('skill_categories').select('*').eq('program_id', programId).eq('ativo', true)
   return (data as SkillCategory[]) ?? []
+}
+
+/** Resolve os ids de skill_categories ativas de um curso a partir dos
+ * nomes exatos (ex.: os rótulos das 10 soft skills do PDI Express) —
+ * usado no envio do onboarding, que só conhece o texto da opção
+ * escolhida, não o id (o id é por curso, o texto da opção não). */
+export async function getSkillCategoryIdsByNames(programId: string, names: string[]): Promise<string[]> {
+  if (names.length === 0) return []
+  const { data } = await supabase
+    .from('skill_categories')
+    .select('id, name')
+    .eq('program_id', programId)
+    .eq('ativo', true)
+    .in('name', names)
+  const byName = new Map(((data as { id: string; name: string }[]) ?? []).map((row) => [row.name, row.id]))
+  return names.map((name) => byName.get(name)).filter((id): id is string => Boolean(id))
 }
 
 export async function getSkillRatings(userId: string): Promise<SkillRating[]> {
@@ -946,9 +1108,15 @@ export async function getSkillRatings(userId: string): Promise<SkillRating[]> {
   return (data as SkillRating[]) ?? []
 }
 
-export async function upsertSelfRating(userId: string, skillCategoryId: string, rating: number) {
+export async function upsertSelfRating(userId: string, skillCategoryId: string, rating?: number, objetivo?: string) {
   await supabase.from('skill_ratings').upsert(
-    { user_id: userId, skill_category_id: skillCategoryId, self_rating: rating, rated_at: new Date().toISOString() },
+    {
+      user_id: userId,
+      skill_category_id: skillCategoryId,
+      ...(rating !== undefined ? { self_rating: rating } : {}),
+      ...(objetivo !== undefined ? { objetivo } : {}),
+      rated_at: new Date().toISOString(),
+    },
     { onConflict: 'user_id,skill_category_id' },
   )
 }
@@ -977,6 +1145,74 @@ export async function getTracksBySkillCategory(skillCategoryId: string): Promise
   if (ids.length === 0) return []
   const { data } = await supabase.from('tracks').select('*').in('skill_category_id', ids).eq('published', true)
   return (data as Track[]) ?? []
+}
+
+// ---- Meu PDI: painel de competências (Painel 70/20/10) ----
+
+export interface CompetencyPdiSummary {
+  skillCategoryId: string
+  hasRating: boolean
+  hasObjetivo: boolean
+  bucketCounts: Record<PdiJornadaBucket, number>
+  totalItems: number
+  concludedItems: number
+  /** 0-100 — 5 checks (autoavaliação, objetivo, ≥1 item em cada bucket), cada um valendo 20%. */
+  preenchimentoPct: number
+  /** 0-100 — itens concluídos ÷ total de itens nos 3 buckets; 0 se não houver itens. */
+  evolucaoPct: number
+  status: 'nao_iniciado' | 'em_andamento' | 'completo'
+}
+
+/** Resume, por competência, o estado do Painel 70/20/10 (spec: fórmulas de
+ * Preenchimento% e Evolução%) — usado no grid de cards de Meu PDI. */
+export async function getCompetencyPdiSummaries(
+  userId: string,
+  planId: string | null,
+  skillCategoryIds: string[],
+): Promise<Map<string, CompetencyPdiSummary>> {
+  const result = new Map<string, CompetencyPdiSummary>()
+  if (skillCategoryIds.length === 0) return result
+
+  const [{ data: ratingRows }, itemsResult] = await Promise.all([
+    supabase.from('skill_ratings').select('*').eq('user_id', userId).in('skill_category_id', skillCategoryIds),
+    planId
+      ? supabase.from('pdi_plan_items').select('*').eq('plan_id', planId).in('skill_category_id', skillCategoryIds)
+      : Promise.resolve({ data: [] as PdiPlanItem[] }),
+  ])
+  const ratings = (ratingRows as SkillRating[]) ?? []
+  const items = (itemsResult.data as PdiPlanItem[]) ?? []
+
+  for (const skillCategoryId of skillCategoryIds) {
+    const rating = ratings.find((r) => r.skill_category_id === skillCategoryId)
+    const catItems = items.filter((i) => i.skill_category_id === skillCategoryId)
+    const bucketCounts: Record<PdiJornadaBucket, number> = { pratica: 0, mentoria: 0, formacao: 0 }
+    let concludedItems = 0
+    for (const item of catItems) {
+      if (item.jornada_bucket) bucketCounts[item.jornada_bucket]++
+      if (item.status === 'concluido') concludedItems++
+    }
+    const hasRating = rating?.self_rating != null
+    const hasObjetivo = Boolean(rating?.objetivo?.trim())
+    const checks = [hasRating, hasObjetivo, bucketCounts.pratica > 0, bucketCounts.mentoria > 0, bucketCounts.formacao > 0]
+    const preenchimentoPct = Math.round((checks.filter(Boolean).length / checks.length) * 100)
+    const totalItems = catItems.length
+    const evolucaoPct = totalItems === 0 ? 0 : Math.round((concludedItems / totalItems) * 100)
+    const status: CompetencyPdiSummary['status'] =
+      preenchimentoPct === 0 ? 'nao_iniciado' : evolucaoPct === 100 && totalItems >= 1 ? 'completo' : 'em_andamento'
+
+    result.set(skillCategoryId, {
+      skillCategoryId,
+      hasRating,
+      hasObjetivo,
+      bucketCounts,
+      totalItems,
+      concludedItems,
+      preenchimentoPct,
+      evolucaoPct,
+      status,
+    })
+  }
+  return result
 }
 
 /**
