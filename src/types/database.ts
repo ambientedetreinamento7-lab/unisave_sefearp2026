@@ -61,6 +61,7 @@ export interface SkillCategory {
   program_id: string
   name: string
   type: SkillType
+  ativo: boolean
 }
 
 export interface Track {
@@ -168,14 +169,6 @@ export interface AppSetting {
 export interface TrialSettings {
   enabled: boolean
   days: number
-}
-
-// Meu PDI — Painel 70/20/10: quais competências aparecem no grid do aluno
-// na primeira visita. 'selecionadas' = competências que o aluno já
-// autoavaliou; 'desafio_inicial' = só a competência do "maior desafio" do
-// PDI Express.
-export interface PdiCompetencyVisibilitySettings {
-  mode: 'selecionadas' | 'desafio_inicial'
 }
 
 export interface BrandingSettings {
@@ -344,6 +337,9 @@ export interface PdiPlan {
   progress_pct: number
   created_at: string
   tier: PdiTier | null
+  /** Até 3 skill_categories.id escolhidas pelo aluno pra este plano —
+   * define quais cards aparecem no Painel 70/20/10. */
+  competency_ids: string[]
 }
 
 export interface PdiPlanItem {
@@ -358,6 +354,7 @@ export interface PdiPlanItem {
   jornada_bucket: PdiJornadaBucket | null
   skill_category_id: string | null
   descricao: string | null
+  target_date: string | null
 }
 
 export interface SocialPost {

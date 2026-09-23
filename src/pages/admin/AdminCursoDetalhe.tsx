@@ -380,8 +380,13 @@ export function AdminCursoDetalhe() {
             >
               <option value="">Nenhuma</option>
               {skillCategories
-                .filter((s) => s.program_id === programId)
-                .map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                .filter((s) => s.program_id === programId && (s.ativo || s.id === skillCategoryId))
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                    {!s.ativo ? ' (descontinuada)' : ''}
+                  </option>
+                ))}
             </select>
           ) : (
             <p className="text-xs text-ink-soft">Escolha um programa acima para poder vincular uma competência.</p>

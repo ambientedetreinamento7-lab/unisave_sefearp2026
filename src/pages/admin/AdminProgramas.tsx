@@ -31,13 +31,13 @@ export function AdminProgramas() {
             <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-navy">Taxonomia de skills</p>
             <div className="mt-1 flex flex-wrap gap-1.5">
               {categories
-                .filter((c) => c.program_id === p.id)
+                .filter((c) => c.program_id === p.id && c.ativo)
                 .map((c) => (
                   <span key={c.id} className="rounded-full bg-navy-light px-2.5 py-1 text-xs font-medium text-navy">
                     {c.name} · {c.type}
                   </span>
                 ))}
-              {categories.filter((c) => c.program_id === p.id).length === 0 && (
+              {categories.filter((c) => c.program_id === p.id && c.ativo).length === 0 && (
                 <span className="text-xs text-ink-soft">Nenhuma categoria cadastrada</span>
               )}
             </div>

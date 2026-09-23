@@ -6,7 +6,6 @@ import type {
   LegalSettings,
   MaintenanceSettings,
   ModuleCompletionSettings,
-  PdiCompetencyVisibilitySettings,
   PwaSettings,
   SecuritySettings,
   SessionSettings,
@@ -159,12 +158,3 @@ export async function updateCourseDefaultsSettings(settings: CourseDefaultsSetti
   await supabase.from('app_settings').upsert({ key: 'course_defaults', value: settings })
 }
 
-const DEFAULT_PDI_COMPETENCY_VISIBILITY: PdiCompetencyVisibilitySettings = { mode: 'selecionadas' }
-
-export async function getPdiCompetencyVisibilitySettings(): Promise<PdiCompetencyVisibilitySettings> {
-  return getAppSetting('pdi_competency_visibility', DEFAULT_PDI_COMPETENCY_VISIBILITY)
-}
-
-export async function updatePdiCompetencyVisibilitySettings(settings: PdiCompetencyVisibilitySettings) {
-  await supabase.from('app_settings').upsert({ key: 'pdi_competency_visibility', value: settings })
-}

@@ -7,7 +7,6 @@ import {
   getLegalSettings,
   getMaintenanceSettings,
   getModuleCompletionSettings,
-  getPdiCompetencyVisibilitySettings,
   getPwaSettings,
   getSecuritySettings,
   getSessionSettings,
@@ -19,7 +18,6 @@ import {
   updateLegalSettings,
   updateMaintenanceSettings,
   updateModuleCompletionSettings,
-  updatePdiCompetencyVisibilitySettings,
   updatePwaSettings,
   updateSecuritySettings,
   updateSessionSettings,
@@ -35,7 +33,6 @@ import type {
   LegalSettings,
   MaintenanceSettings,
   ModuleCompletionSettings,
-  PdiCompetencyVisibilitySettings,
   PwaSettings,
   SecuritySettings,
   SessionSettings,
@@ -61,7 +58,6 @@ export function AdminConfiguracoes() {
         <BrandingSection />
         <CourseDefaultsSection />
         <SignupSection />
-        <PdiCompetencyVisibilitySection />
         <ModuleCompletionSection />
         <CommunitySection />
         <SessionSection />
@@ -622,70 +618,6 @@ function SignupSection() {
   )
 }
 
-function PdiCompetencyVisibilitySection() {
-  const [settings, setSettings] = useState<PdiCompetencyVisibilitySettings | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
-    getPdiCompetencyVisibilitySettings().then(setSettings)
-  }, [])
-
-  async function save() {
-    if (!settings) return
-    setSaving(true)
-    setSaved(false)
-    await updatePdiCompetencyVisibilitySettings(settings)
-    setSaving(false)
-    setSaved(true)
-  }
-
-  return (
-    <SectionShell
-      title="Meu PDI — competências visíveis"
-      description='Controla quais competências aparecem no grid da aba "Balanço de Competências" na primeira visita do aluno.'
-      loading={!settings}
-      onSave={save}
-      saving={saving}
-      saved={saved}
-    >
-      {settings && (
-        <div className="mt-4 space-y-2">
-          <label className="flex items-start gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
-            <input
-              type="radio"
-              name="pdiCompetencyVisibilityMode"
-              className="mt-0.5"
-              checked={settings.mode === 'selecionadas'}
-              onChange={() => setSettings({ mode: 'selecionadas' })}
-            />
-            <span>
-              Competências já autoavaliadas
-              <span className="mt-0.5 block text-xs font-normal text-ink-soft">
-                O aluno vê cards para as competências que já autoavaliou no Balanço de Competências.
-              </span>
-            </span>
-          </label>
-          <label className="flex items-start gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
-            <input
-              type="radio"
-              name="pdiCompetencyVisibilityMode"
-              className="mt-0.5"
-              checked={settings.mode === 'desafio_inicial'}
-              onChange={() => setSettings({ mode: 'desafio_inicial' })}
-            />
-            <span>
-              Só o maior desafio do PDI Express
-              <span className="mt-0.5 block text-xs font-normal text-ink-soft">
-                O aluno vê só a competência ligada à resposta de "maior desafio" no cadastro do estande.
-              </span>
-            </span>
-          </label>
-        </div>
-      )}
-    </SectionShell>
-  )
-}
 
 function ModuleCompletionSection() {
   const [settings, setSettings] = useState<ModuleCompletionSettings | null>(null)

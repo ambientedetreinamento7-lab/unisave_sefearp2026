@@ -997,7 +997,11 @@ export async function addTrackToCompetency(planId: string, skillCategoryId: stri
  * competência, já vinculado ao bucket 70/20/10 explícito — bucket
  * 'pratica'/'mentoria' (o aluno descreve o que vai fazer) ou "outra
  * tarefa" dentro de 'formacao'. Ao contrário dos cursos/trilhas, o status
+<<<<<<< HEAD
  * desse item é definido manualmente pelo aluno (setItemStatus).
+=======
+ * desse item é ciclado manualmente pelo aluno (cycleItemStatus).
+>>>>>>> 08f618616d90ffb4f29aac228b42fc75f18aa15e
  */
 export async function addFreeTextItemToCompetency(
   planId: string,
@@ -1026,13 +1030,26 @@ export async function addFreeTextItemToCompetency(
   await recomputePlanProgress(planId)
 }
 
+<<<<<<< HEAD
 /**
  * Define manualmente o status de um item do PDI (lista suspensa: não
  * iniciado / em andamento / concluído). Só faz sentido pra itens
+=======
+const NEXT_STATUS: Record<PdiItemStatus, PdiItemStatus> = {
+  nao_iniciado: 'em_andamento',
+  em_andamento: 'concluido',
+  concluido: 'nao_iniciado',
+}
+
+/**
+ * Avança manualmente o status de um item do PDI (não iniciado → em
+ * andamento → concluído → não iniciado). Só faz sentido pra itens
+>>>>>>> 08f618616d90ffb4f29aac228b42fc75f18aa15e
  * item_type='tarefa_livre' — itens de curso/trilha têm status derivado do
  * consumo real via syncPillCompletionToPdi/syncTrackProgressToPdi, e a UI
  * não deve oferecer esse controle pra eles.
  */
+<<<<<<< HEAD
 export async function setItemStatus(planId: string, itemId: string, status: PdiItemStatus): Promise<void> {
   await supabase
     .from('pdi_plan_items')
@@ -1046,6 +1063,16 @@ export async function setItemStatus(planId: string, itemId: string, status: PdiI
  * Preenchimento/Evolução). */
 export async function setItemTargetDate(itemId: string, targetDate: string | null): Promise<void> {
   await supabase.from('pdi_plan_items').update({ target_date: targetDate }).eq('id', itemId)
+=======
+export async function cycleItemStatus(planId: string, itemId: string, currentStatus: PdiItemStatus): Promise<PdiItemStatus> {
+  const next = NEXT_STATUS[currentStatus]
+  await supabase
+    .from('pdi_plan_items')
+    .update({ status: next, progress_current: next === 'concluido' ? 1 : 0, progress_total: 1 })
+    .eq('id', itemId)
+  await recomputePlanProgress(planId)
+  return next
+>>>>>>> 08f618616d90ffb4f29aac228b42fc75f18aa15e
 }
 
 /** Itens de um plano vinculados a uma competência específica — usado no
@@ -1149,6 +1176,55 @@ export async function getTracksBySkillCategory(skillCategoryId: string): Promise
 
 // ---- Meu PDI: painel de competências (Painel 70/20/10) ----
 
+<<<<<<< HEAD
+=======
+// Mesma correspondência já usada pra vincular as trilhas semente de cada
+// perfil diagnóstico à competência do PDI (ver seed de tracks acima):
+// autogestão → "Gestão do Tempo e Autogestão", tech/IA → "Análise de
+// Dados e Tecnologia", liderança → "Comunicação e Liderança".
+const DESAFIO_SKILL_NAME: Record<DiagnosticProfile, string> = {
+  autogestao: 'Gestão do Tempo e Autogestão',
+  tech_ia: 'Análise de Dados e Tecnologia',
+  lideranca: 'Comunicação e Liderança',
+}
+
+/** Id da competência ligada ao "maior desafio" do PDI Express do aluno —
+ * usado pra marcar a estrela ★ no grid, independente do modo do toggle do
+ * admin (que só decide quais cards aparecem, não qual leva a estrela). */
+export async function getDesafioInicialSkillCategoryId(
+  programId: string | null,
+  diagnosticProfile: DiagnosticProfile | null,
+): Promise<string | null> {
+  if (!programId || !diagnosticProfile) return null
+  const { data } = await supabase
+    .from('skill_categories')
+    .select('id')
+    .eq('program_id', programId)
+    .eq('name', DESAFIO_SKILL_NAME[diagnosticProfile])
+    .maybeSingle()
+  return (data as { id: string } | null)?.id ?? null
+}
+
+/** Resolve quais competências aparecem no grid de Meu PDI na primeira
+ * visita, conforme o modo configurado pelo admin em app_settings
+ * ('pdi_competency_visibility'): 'selecionadas' = competências que o
+ * aluno já autoavaliou no Balanço; 'desafio_inicial' = só a competência
+ * do maior desafio do PDI Express. */
+export async function getVisibleCompetencyIds(
+  userId: string,
+  programId: string | null,
+  diagnosticProfile: DiagnosticProfile | null,
+  mode: 'selecionadas' | 'desafio_inicial',
+): Promise<string[]> {
+  if (mode === 'desafio_inicial') {
+    const id = await getDesafioInicialSkillCategoryId(programId, diagnosticProfile)
+    return id ? [id] : []
+  }
+  const ratings = await getSkillRatings(userId)
+  return [...new Set(ratings.filter((r) => r.self_rating != null).map((r) => r.skill_category_id))]
+}
+
+>>>>>>> 08f618616d90ffb4f29aac228b42fc75f18aa15e
 export interface CompetencyPdiSummary {
   skillCategoryId: string
   hasRating: boolean

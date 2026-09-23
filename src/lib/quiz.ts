@@ -96,6 +96,28 @@ interface QuizQuestionDef {
   options: QuizOption[]
 }
 
+/** Meu PDI — Painel 70/20/10: as 10 soft skills do passo "maior desafio"
+ * (seleção múltipla, até 3). O `label` de cada uma é exatamente o `name`
+ * semeado em skill_categories — é assim que Estande.tsx resolve a
+ * escolha (texto) pro id real da competência daquele curso, depois do
+ * envio. `weight` continua alimentando computeProfile (perfil de 3
+ * válvulas), só pra Resultado/recomendação de trilha do pós-evento
+ * continuarem funcionando sem mudança. */
+export const SOFT_SKILLS: QuizOption[] = [
+  { value: 'gestao_tempo', label: 'Gestão de Tempo', subtitle: 'Foco, rotina, prioridades', icon: 'clock', weight: { autogestao: 1 } },
+  { value: 'inteligencia_emocional', label: 'Inteligência Emocional', subtitle: 'Autocontrole, empatia', icon: 'heart', weight: { autogestao: 1 } },
+  { value: 'logica_dados', label: 'Lógica e Dados', subtitle: 'Análise, raciocínio estruturado', icon: 'cpu', weight: { tech_ia: 1 } },
+  { value: 'ia_inovacao', label: 'IA e Inovação', subtitle: 'Novas ferramentas e ideias', icon: 'sparkles', weight: { tech_ia: 1 } },
+  { value: 'comunicacao', label: 'Comunicação', subtitle: 'Falar e escrever com clareza', icon: 'message-circle', weight: { lideranca: 1 } },
+  { value: 'lideranca', label: 'Liderança', subtitle: 'Guiar pessoas e projetos', icon: 'flag', weight: { lideranca: 1 } },
+  { value: 'trabalho_equipe', label: 'Trabalho em Equipe e Colaboração', subtitle: 'Construir junto', icon: 'users', weight: { lideranca: 1 } },
+  { value: 'atendimento_cliente', label: 'Atendimento ao Cliente', subtitle: 'Ouvir e resolver pro outro', icon: 'shield', weight: { lideranca: 1 } },
+  { value: 'resolucao_problemas', label: 'Resolução de Problemas', subtitle: 'Diagnosticar e agir', icon: 'target', weight: { tech_ia: 1 } },
+  { value: 'adaptabilidade', label: 'Adaptabilidade e Gestão da Mudança', subtitle: 'Lidar bem com o imprevisto', icon: 'sun', weight: { autogestao: 1 } },
+]
+
+export const MAX_DESAFIO_SKILLS = 3
+
 export const QUIZ_QUESTIONS: QuizQuestionDef[] = [
   {
     id: 'fase',
@@ -110,30 +132,8 @@ export const QUIZ_QUESTIONS: QuizQuestionDef[] = [
   {
     id: 'desafio',
     question: 'Qual é o seu maior desafio hoje?',
-    subtitle: 'Escolha o que mais te consome energia agora.',
-    options: [
-      {
-        value: 'tempo_ansiedade',
-        label: 'Gestão do tempo e ansiedade',
-        subtitle: 'Foco, rotina, equilíbrio',
-        icon: 'clock',
-        weight: { autogestao: 2 },
-      },
-      {
-        value: 'ia_dados',
-        label: 'IA, lógica e dados',
-        subtitle: 'Ferramentas e pensamento tech',
-        icon: 'cpu',
-        weight: { tech_ia: 2 },
-      },
-      {
-        value: 'comunicacao_lideranca',
-        label: 'Comunicação e liderança',
-        subtitle: 'Falar, negociar, se posicionar',
-        icon: 'users',
-        weight: { lideranca: 2 },
-      },
-    ],
+    subtitle: 'Escolha até 3 competências que mais te consomem energia agora.',
+    options: SOFT_SKILLS,
   },
   {
     id: 'objetivo',
@@ -167,20 +167,32 @@ export const QUIZ_QUESTIONS: QuizQuestionDef[] = [
 
 export interface QuizAnswers {
   fase: string
-  desafio: string
+  /** Até 3 values de SOFT_SKILLS (seleção múltipla). */
+  desafio: string[]
   objetivo: string
   program: ProgramSlug
 }
 
+/** Perfil de 3 válvulas (Autogestão/Tech&IA/Liderança) — mantido por
+ * baixo só pra Resultado.tsx e a recomendação de trilha/catálogo do
+ * pós-evento continuarem funcionando sem mudança. Cada uma das até-3
+ * soft skills escolhidas soma seu peso, igual ao objetivo (1 escolha só). */
 export function computeProfile(answers: Pick<QuizAnswers, 'desafio' | 'objetivo'>): DiagnosticProfile {
   const scores: Record<DiagnosticProfile, number> = { autogestao: 0, tech_ia: 0, lideranca: 0 }
 
-  for (const qId of ['desafio', 'objetivo'] as const) {
-    const value = answers[qId]
-    const question = QUIZ_QUESTIONS.find((q) => q.id === qId)
-    const option = question?.options.find((o) => o.value === value)
+  const desafioQuestion = QUIZ_QUESTIONS.find((q) => q.id === 'desafio')
+  for (const value of answers.desafio) {
+    const option = desafioQuestion?.options.find((o) => o.value === value)
     if (!option) continue
     for (const [profile, weight] of Object.entries(option.weight)) {
+      scores[profile as DiagnosticProfile] += weight ?? 0
+    }
+  }
+
+  const objetivoQuestion = QUIZ_QUESTIONS.find((q) => q.id === 'objetivo')
+  const objetivoOption = objetivoQuestion?.options.find((o) => o.value === answers.objetivo)
+  if (objetivoOption) {
+    for (const [profile, weight] of Object.entries(objetivoOption.weight)) {
       scores[profile as DiagnosticProfile] += weight ?? 0
     }
   }

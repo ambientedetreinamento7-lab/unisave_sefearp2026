@@ -57,7 +57,12 @@ create table skill_categories (
   id uuid primary key default gen_random_uuid(),
   program_id text not null references programs(id) on delete cascade,
   name text not null,
-  type skill_type not null
+  type skill_type not null,
+  -- Meu PDI — taxonomia de 10 soft skills (2026): categorias antigas
+  -- ficam com ativo=false em vez de apagadas — alunos que já têm
+  -- skill_ratings/pdi_plan_items apontando pra elas não perdem histórico;
+  -- só param de aparecer nas telas de seleção (onboarding, novo plano).
+  ativo boolean not null default true
 );
 
 create table tracks (
@@ -440,7 +445,13 @@ create table pdi_plans (
   progress_pct numeric not null default 0,
   created_at timestamptz not null default now(),
   -- Faixa de desempenho atual do plano (spec: metodologia de PDI 70-20-10).
-  tier pdi_tier
+  tier pdi_tier,
+  -- Até 3 competências (skill_categories.id) escolhidas pelo aluno pra
+  -- este plano — define quais cards aparecem no Painel 70/20/10. O
+  -- primeiro plano nasce com as competências escolhidas no PDI Express
+  -- ("maior desafio"); qualquer plano novo repete essa escolha.
+  competency_ids uuid[] not null default '{}',
+  constraint pdi_plans_competency_ids_max3 check (array_length(competency_ids, 1) is null or array_length(competency_ids, 1) <= 3)
 );
 
 create table pdi_plan_items (
@@ -463,6 +474,9 @@ create table pdi_plan_items (
   -- Texto livre do item (bucket prática/troca de conhecimento, ou "outra
   -- tarefa" no bucket de aprendizagem formal) — item_type='tarefa_livre'.
   descricao text,
+  -- Data em que o aluno pretende concluir o item (qualquer bucket/tipo) —
+  -- só uma meta pessoal, não afeta o cálculo de Preenchimento/Evolução.
+  target_date date,
   constraint pdi_plan_items_ref_id_check check (
     (item_type = 'tarefa_livre' and ref_id is null)
     or (item_type <> 'tarefa_livre' and ref_id is not null)
@@ -985,12 +999,17 @@ create or replace function public.capture_estande_lead(
   p_curriculum_period text,
   p_diagnostic_profile diagnostic_profile,
   p_selected_track_id uuid,
-  p_birth_date date default null
+  p_birth_date date default null,
+  -- Meu PDI — Painel 70/20/10: até 3 skill_categories.id escolhidas no
+  -- passo "maior desafio", pra já nascer o primeiro plano com esses cards.
+  p_desafio_skill_ids uuid[] default '{}'
 ) returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_profile_id uuid;
 begin
   insert into profiles (
     name, email, phone_whatsapp, program_id, curriculum_period,
@@ -1008,12 +1027,21 @@ begin
     diagnostic_profile = excluded.diagnostic_profile,
     selected_track_id = excluded.selected_track_id,
     birth_date = coalesce(excluded.birth_date, profiles.birth_date)
-  where profiles.claimed = false;
+  where profiles.claimed = false
+  returning id into v_profile_id;
+
+  -- Cria o primeiro plano só se o aluno ainda não tiver nenhum — reenvio
+  -- idempotente do mesmo quiz (withRetry) não deve duplicar o plano.
+  if v_profile_id is not null and array_length(p_desafio_skill_ids, 1) > 0 then
+    insert into pdi_plans (user_id, title, type, competency_ids)
+    select v_profile_id, 'Meu primeiro plano', 'plano_pessoal', p_desafio_skill_ids
+    where not exists (select 1 from pdi_plans where user_id = v_profile_id);
+  end if;
 end;
 $$;
 
 grant execute on function public.capture_estande_lead(
-  text, text, text, text, text, diagnostic_profile, uuid, date
+  text, text, text, text, text, diagnostic_profile, uuid, date, uuid[]
 ) to anon;
 
 -- Recuperação de senha sem e-mail: confere e-mail + data de nascimento
@@ -1349,15 +1377,42 @@ insert into programs (id, name, mission, framework_reference, color_accent) valu
   ('economicas', 'Ciências Econômicas', 'Formar analistas capazes de interpretar cenários e tomar decisões orientadas a dados.', 'PPP Ciências Econômicas', '#1A3B6E'),
   ('financas', 'Finanças', 'Formar especialistas em análise, planejamento e gestão de recursos financeiros.', 'PPP Finanças', '#1A3B6E');
 
--- Example skill taxonomy per program (adjust with the real PPP taxonomy).
+-- Taxonomia antiga por PPP — mantida (ativo=false) só por causa de
+-- skill_ratings/pdi_plan_items de alunos reais que já apontam pra ela;
+-- não aparece mais em nenhuma tela de seleção nova.
+insert into skill_categories (program_id, name, type, ativo)
+select id, 'Ética e Responsabilidade Socioambiental', 'etica'::skill_type, false from programs
+union all
+select id, 'Comunicação e Liderança', 'comportamental'::skill_type, false from programs
+union all
+select id, 'Análise de Dados e Tecnologia', 'tecnica'::skill_type, false from programs
+union all
+select id, 'Gestão do Tempo e Autogestão', 'comportamental'::skill_type, false from programs;
+
+-- Meu PDI — taxonomia de 10 soft skills (2026), compartilhada por todos
+-- os cursos: mesmas 10 linhas semeadas uma vez por curso (reaproveita o
+-- casamento por nome já usado em getTracksBySkillCategory, em vez de
+-- mudar program_id pra nullable) — spec: PDI Express, "maior desafio".
 insert into skill_categories (program_id, name, type)
-select id, 'Ética e Responsabilidade Socioambiental', 'etica'::skill_type from programs
+select id, 'Gestão de Tempo', 'comportamental'::skill_type from programs
 union all
-select id, 'Comunicação e Liderança', 'comportamental'::skill_type from programs
+select id, 'Inteligência Emocional', 'comportamental'::skill_type from programs
 union all
-select id, 'Análise de Dados e Tecnologia', 'tecnica'::skill_type from programs
+select id, 'Lógica e Dados', 'tecnica'::skill_type from programs
 union all
-select id, 'Gestão do Tempo e Autogestão', 'comportamental'::skill_type from programs;
+select id, 'IA e Inovação', 'tecnica'::skill_type from programs
+union all
+select id, 'Comunicação', 'comportamental'::skill_type from programs
+union all
+select id, 'Liderança', 'comportamental'::skill_type from programs
+union all
+select id, 'Trabalho em Equipe e Colaboração', 'comportamental'::skill_type from programs
+union all
+select id, 'Atendimento ao Cliente', 'comportamental'::skill_type from programs
+union all
+select id, 'Resolução de Problemas', 'tecnica'::skill_type from programs
+union all
+select id, 'Adaptabilidade e Gestão da Mudança', 'comportamental'::skill_type from programs;
 
 -- One example track per program x profile combination (Admin can add the
 -- remaining ones later — not all 12 combinations need to exist).
@@ -1623,13 +1678,4 @@ on conflict (key) do nothing;
 -- /admin/configuracoes.
 insert into app_settings (key, value) values
   ('trial', '{"enabled": true, "days": 14}'::jsonb)
-on conflict (key) do nothing;
-
--- Meu PDI — Painel 70/20/10: quais competências aparecem no grid do
--- aluno na primeira visita. 'selecionadas' (padrão) = competências que o
--- aluno já autoavaliou no Balanço de Competências; 'desafio_inicial' = só
--- a competência ligada à resposta de "maior desafio" do PDI Express.
--- Editável em /admin/configuracoes.
-insert into app_settings (key, value) values
-  ('pdi_competency_visibility', '{"mode": "selecionadas"}'::jsonb)
 on conflict (key) do nothing;

@@ -17,12 +17,10 @@ const STATUS_CLASS: Record<CompetencyPdiSummary['status'], string> = {
 export function CompetencyCard({
   category,
   summary,
-  isDesafioInicial,
   onClick,
 }: {
   category: SkillCategory
   summary: CompetencyPdiSummary | undefined
-  isDesafioInicial: boolean
   onClick: () => void
 }) {
   const status = summary?.status ?? 'nao_iniciado'
@@ -30,13 +28,14 @@ export function CompetencyCard({
   const evolucaoPct = summary?.evolucaoPct ?? 0
 
   return (
-    <div className="card cursor-pointer p-5 transition hover:border-navy" onClick={onClick} role="button">
+    <div
+      className="card cursor-pointer border-2 border-transparent p-5 transition hover:-translate-y-0.5 hover:border-navy hover:shadow-lg"
+      onClick={onClick}
+      role="button"
+    >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="flex items-center gap-1.5 font-bold text-ink">
-            {isDesafioInicial && <span title="Desafio inicial do PDI Express">★</span>}
-            {category.name}
-          </p>
+          <p className="font-bold text-ink">{category.name}</p>
           <p className="text-xs uppercase tracking-wide text-ink-soft">{category.type}</p>
         </div>
         <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_CLASS[status]}`}>
