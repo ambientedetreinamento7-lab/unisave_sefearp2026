@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { useConfirm } from '../../components/ConfirmDialog'
 import { CompetencyGrid } from '../../components/pdi/CompetencyGrid'
@@ -19,17 +18,13 @@ import {
   getPlanItems,
   getSkillCategories,
   getSkillRatings,
-  getTracksBySkillCategory,
-  getTrackWithPills,
   getUserPlans,
-  getUserProgressMap,
   recomputeAndSaveTier,
   removePlan,
   upsertSelfRating,
 } from '../../lib/api'
 import { getProgramJourney, JORNADA_CADENCE, TIER_META } from '../../lib/pdiJourneys'
 import { TIER_LABEL, TIER_RANGE } from '../../lib/pdiTier'
-import { supabase } from '../../lib/supabase'
 import type {
   DiagnosticProfile,
   PdiJornadaBucket,
@@ -40,7 +35,6 @@ import type {
   SkillCategory,
   SkillRating,
   Track,
-  UserProgress,
 } from '../../types/database'
 
 const TIER_BADGE_CLASS: Record<PdiTier, string> = {
@@ -150,9 +144,7 @@ export function MeuPdi() {
         </div>
 
         <div id="pdi-tab-panel">
-          {profile && tab === 'pdi' && (
-            <MeuPdiTab userId={profile.id} programId={profile.program_id ?? null} diagnosticProfile={profile.diagnostic_profile} />
-          )}
+          {profile && tab === 'pdi' && <MeuPdiTab userId={profile.id} programId={profile.program_id ?? null} />}
           {profile && tab === 'balanco' && <BalancoTab userId={profile.id} programId={profile.program_id} />}
           {profile && tab === 'biblioteca' && (
             <BibliotecaTab userId={profile.id} programId={profile.program_id} diagnosticProfile={profile.diagnostic_profile} />
@@ -173,15 +165,7 @@ export function MeuPdi() {
 
 // ---------------- Meu PDI tab ----------------
 
-function MeuPdiTab({
-  userId,
-  programId,
-  diagnosticProfile,
-}: {
-  userId: string
-  programId: string | null
-  diagnosticProfile: DiagnosticProfile | null
-}) {
+function MeuPdiTab({ userId, programId }: { userId: string; programId: string | null }) {
   const [plans, setPlans] = useState<PdiPlan[]>([])
   const [categories, setCategories] = useState<SkillCategory[]>([])
   const [loading, setLoading] = useState(true)
@@ -209,15 +193,7 @@ function MeuPdiTab({
       {loading && <p className="text-ink-soft">Carregando…</p>}
       {!loading &&
         plans.map((plan) => (
-          <PlanCard
-            key={plan.id}
-            plan={plan}
-            userId={userId}
-            programId={programId}
-            diagnosticProfile={diagnosticProfile}
-            categories={categories}
-            onChanged={reload}
-          />
+          <PlanCard key={plan.id} plan={plan} userId={userId} programId={programId} categories={categories} onChanged={reload} />
         ))}
 
       {!loading && plans.length === 0 && (
@@ -235,7 +211,7 @@ function MeuPdiTab({
       {showCreate && (
         <CreatePlanModal
           userId={userId}
-          programId={programId}
+          categories={categories}
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false)
@@ -251,47 +227,20 @@ function PlanCard({
   plan,
   userId,
   programId,
-  diagnosticProfile,
   categories,
   onChanged,
 }: {
   plan: PdiPlan
   userId: string
   programId: string | null
-  diagnosticProfile: DiagnosticProfile | null
   categories: SkillCategory[]
   onChanged: () => void
 }) {
   const confirm = useConfirm()
   const [items, setItems] = useState<PdiPlanItem[]>([])
-  const [labels, setLabels] = useState<Record<string, string>>({})
-  const [progress, setProgress] = useState<Record<string, UserProgress>>({})
-  const [loading, setLoading] = useState(true)
 
   async function loadItems() {
-    const [planItems, progressMap] = await Promise.all([getPlanItems(plan.id), getUserProgressMap(plan.user_id)])
-    setItems(planItems)
-    setProgress(progressMap)
-
-    const pillIds = planItems.filter((i) => i.item_type === 'pill').map((i) => i.ref_id as string)
-    const skillIds = planItems.filter((i) => i.item_type === 'skill_category').map((i) => i.ref_id as string)
-    const trackIds = planItems.filter((i) => i.item_type === 'trilha').map((i) => i.ref_id as string)
-
-    const labelMap: Record<string, string> = {}
-    if (pillIds.length) {
-      const { data } = await supabase.from('pills').select('id,title').in('id', pillIds)
-      for (const row of (data as Pick<Pill, 'id' | 'title'>[]) ?? []) labelMap[row.id] = row.title
-    }
-    if (skillIds.length) {
-      const { data } = await supabase.from('skill_categories').select('id,name').in('id', skillIds)
-      for (const row of (data as Pick<SkillCategory, 'id' | 'name'>[]) ?? []) labelMap[row.id] = row.name
-    }
-    if (trackIds.length) {
-      const { data } = await supabase.from('tracks').select('id,title').in('id', trackIds)
-      for (const row of (data as Pick<Track, 'id' | 'title'>[]) ?? []) labelMap[row.id] = row.title
-    }
-    setLabels(labelMap)
-    setLoading(false)
+    setItems(await getPlanItems(plan.id))
   }
 
   useEffect(() => {
@@ -315,13 +264,6 @@ function PlanCard({
   const journey = getProgramJourney(programId, tier)
   const meta = TIER_META[tier]
   const cadence = JORNADA_CADENCE[tier]
-
-  const grouped: Record<PdiJornadaBucket, PdiPlanItem[]> = { pratica: [], mentoria: [], formacao: [] }
-  const ungrouped: PdiPlanItem[] = []
-  for (const item of items) {
-    if (item.jornada_bucket) grouped[item.jornada_bucket].push(item)
-    else ungrouped.push(item)
-  }
 
   return (
     <div className="card p-6">
@@ -372,56 +314,9 @@ function PlanCard({
         </p>
       </div>
 
-      {categories.length > 0 && (
-        <CompetencyGrid
-          userId={userId}
-          programId={programId}
-          diagnosticProfile={diagnosticProfile}
-          categories={categories}
-          planId={plan.id}
-        />
+      {plan.competency_ids.length > 0 && (
+        <CompetencyGrid userId={userId} planId={plan.id} competencyIds={plan.competency_ids} categories={categories} />
       )}
-
-      <div className="mt-4 space-y-4">
-        {loading && <p className="text-sm text-ink-soft">Carregando itens…</p>}
-        {!loading &&
-          (['pratica', 'mentoria', 'formacao'] as PdiJornadaBucket[]).map((bucket) =>
-            grouped[bucket].length === 0 ? null : (
-              <div key={bucket}>
-                <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{BUCKET_LABEL[bucket]}</p>
-                <div className="mt-1 divide-y divide-navy-light/60">
-                  {grouped[bucket].map((item) => (
-                    <ItemRow
-                      key={item.id}
-                      item={item}
-                      label={item.ref_id ? (labels[item.ref_id] ?? item.ref_id) : (item.descricao ?? 'Tarefa')}
-                      planId={plan.id}
-                      planItems={items}
-                      progress={progress}
-                      onAdded={loadItems}
-                    />
-                  ))}
-                </div>
-              </div>
-            ),
-          )}
-        {!loading && ungrouped.length > 0 && (
-          <div className="divide-y divide-navy-light/60">
-            {ungrouped.map((item) => (
-              <ItemRow
-                key={item.id}
-                item={item}
-                label={item.ref_id ? (labels[item.ref_id] ?? item.ref_id) : (item.descricao ?? 'Tarefa')}
-                planId={plan.id}
-                planItems={items}
-                progress={progress}
-                onAdded={loadItems}
-              />
-            ))}
-          </div>
-        )}
-        {!loading && items.length === 0 && <p className="text-sm text-ink-soft">Nenhum item ainda.</p>}
-      </div>
 
       <button onClick={handleRemove} className="mt-4 text-sm font-medium text-brand-red hover:underline">
         Remover plano
@@ -430,213 +325,41 @@ function PlanCard({
   )
 }
 
-const TRACK_STATUS_LABEL: Record<'completed' | 'in_progress' | 'not_started', string> = {
-  completed: 'Concluído',
-  in_progress: 'Em andamento',
-  not_started: 'Ainda não iniciado',
-}
-
-const TRACK_STATUS_COLOR: Record<'completed' | 'in_progress' | 'not_started', string> = {
-  completed: 'bg-success',
-  in_progress: 'bg-navy',
-  not_started: 'bg-gray-300 text-ink-soft',
-}
-
-function ItemRow({
-  item,
-  label,
-  planId,
-  planItems,
-  progress,
-  onAdded,
-}: {
-  item: PdiPlanItem
-  label: string
-  planId: string
-  planItems: PdiPlanItem[]
-  progress: Record<string, UserProgress>
-  onAdded: () => Promise<void>
-}) {
-  const isSkill = item.item_type === 'skill_category'
-  const [open, setOpen] = useState(false)
-  const [loadingTracks, setLoadingTracks] = useState(false)
-  const [suggested, setSuggested] = useState<Track[] | null>(null)
-  const [trackPillsMap, setTrackPillsMap] = useState<Map<string, Pill[]>>(new Map())
-  const [addingId, setAddingId] = useState<string | null>(null)
-
-  // Cursos (trilha) já adicionados ao plano — usado pra saber se um curso
-  // sugerido já foi adicionado (e então mostrar o andamento dele em vez do
-  // botão "+ Adicionar", que ficaria enganoso repetido pro mesmo curso).
-  const addedTrackIds = useMemo(() => {
-    const set = new Set<string>()
-    for (const i of planItems) if (i.item_type === 'trilha' && i.ref_id) set.add(i.ref_id)
-    return set
-  }, [planItems])
-
-  async function toggle() {
-    if (!isSkill) return
-    if (open) {
-      setOpen(false)
-      return
-    }
-    setOpen(true)
-    if (suggested === null && item.ref_id) {
-      setLoadingTracks(true)
-      const tracks = await getTracksBySkillCategory(item.ref_id)
-      const withPills = await Promise.all(tracks.map((t) => getTrackWithPills(t.id)))
-      const map = new Map<string, Pill[]>()
-      tracks.forEach((t, idx) => map.set(t.id, withPills[idx].pills))
-      setTrackPillsMap(map)
-      setSuggested(tracks)
-      setLoadingTracks(false)
-    }
-  }
-
-  async function handleAdd(track: Track) {
-    setAddingId(track.id)
-    await addTrackToPlan(planId, track.id)
-    await onAdded()
-    setAddingId(null)
-  }
-
-  return (
-    <div className="py-2.5">
-      <div
-        className={`flex items-center gap-3 ${isSkill ? 'cursor-pointer' : ''}`}
-        onClick={toggle}
-        role={isSkill ? 'button' : undefined}
-      >
-        <StatusCircle status={item.status} />
-        <span className="flex-1 text-sm font-medium text-navy">{label}</span>
-        <span className="text-xs text-ink-soft">
-          {item.progress_current} / {item.progress_total}
-        </span>
-        {isSkill && <span className="text-xs text-ink-soft">{open ? '▲' : '▼'}</span>}
-      </div>
-
-      {isSkill && open && (
-        <div className="ml-7 mt-2 rounded-xl bg-bg p-3">
-          {loadingTracks && <p className="text-xs text-ink-soft">Buscando cursos…</p>}
-          {!loadingTracks && suggested && suggested.length === 0 && (
-            <p className="text-xs text-ink-soft">Nenhum curso vinculado a esta competência ainda.</p>
-          )}
-          {!loadingTracks && suggested && suggested.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Cursos sugeridos</p>
-              {suggested.map((track) => {
-                const pills = trackPillsMap.get(track.id) ?? []
-                const alreadyAdded = addedTrackIds.has(track.id)
-                const total = pills.length
-                // O andamento real vem do progresso de consumo do curso
-                // (user_progress), igual ao card do Dashboard — não do
-                // status do item do PDI, que só reflete a conclusão total.
-                const completedCount = pills.filter((p) => progress[p.id]?.status === 'completed').length
-                const startedCount = pills.filter((p) => progress[p.id]?.status !== undefined).length
-                const pct = total ? Math.round((completedCount / total) * 100) : 0
-                const status: 'completed' | 'in_progress' | 'not_started' =
-                  total > 0 && completedCount === total ? 'completed' : startedCount > 0 ? 'in_progress' : 'not_started'
-                const linkPillId =
-                  (pills.find((p) => progress[p.id]?.status !== 'completed') ?? pills[0])?.id ?? null
-
-                const content = (
-                  <>
-                    {track.thumbnail_url && (
-                      <img src={track.thumbnail_url} alt="" className="h-10 w-16 shrink-0 rounded object-cover" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-ink">{track.title}</span>
-                      {alreadyAdded && (
-                        <div className="mt-1">
-                          <div className="flex items-center justify-between text-[11px] font-semibold text-ink-soft">
-                            <span>{pct}% concluído</span>
-                          </div>
-                          <ProgressBar value={pct} />
-                        </div>
-                      )}
-                    </div>
-                    {alreadyAdded ? (
-                      <span
-                        className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold text-white ${TRACK_STATUS_COLOR[status]}`}
-                      >
-                        {TRACK_STATUS_LABEL[status]}
-                      </span>
-                    ) : (
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          handleAdd(track)
-                        }}
-                        disabled={addingId === track.id}
-                        className="shrink-0 rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-dark disabled:opacity-60"
-                      >
-                        {addingId === track.id ? 'Adicionando…' : '+ Adicionar ao PDI'}
-                      </button>
-                    )}
-                  </>
-                )
-
-                return linkPillId ? (
-                  <Link
-                    key={track.id}
-                    to={`/curso/${linkPillId}`}
-                    className="flex items-center gap-3 rounded-lg bg-surface p-2 transition hover:bg-navy-light/40"
-                  >
-                    {content}
-                  </Link>
-                ) : (
-                  <div key={track.id} className="flex items-center gap-3 rounded-lg bg-surface p-2">
-                    {content}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function StatusCircle({ status }: { status: PdiPlanItem['status'] }) {
-  if (status === 'concluido') {
-    return <span className="h-4 w-4 shrink-0 rounded-full bg-success" />
-  }
-  if (status === 'em_andamento') {
-    return (
-      <span className="h-4 w-4 shrink-0 rounded-full border-2 border-brand-red" style={{
-        background: 'conic-gradient(var(--color-brand-red) 50%, transparent 50%)',
-      }} />
-    )
-  }
-  return <span className="h-4 w-4 shrink-0 rounded-full border-2 border-gray-300" />
-}
+const MAX_PLAN_COMPETENCIES = 3
 
 function CreatePlanModal({
   userId,
-  programId,
+  categories,
   onClose,
   onCreated,
 }: {
   userId: string
-  programId: string | null
+  categories: SkillCategory[]
   onClose: () => void
   onCreated: () => void
 }) {
   const [title, setTitle] = useState('')
-  const [origin, setOrigin] = useState<'taxonomia' | 'vazio'>('taxonomia')
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+
+  function toggle(id: string) {
+    setSelectedIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id)
+      if (prev.length >= MAX_PLAN_COMPETENCIES) return prev
+      return [...prev, id]
+    })
+  }
 
   async function handleCreate() {
     setSaving(true)
-    await createPlan(userId, title || 'Plano pessoal', origin, programId)
+    await createPlan(userId, title || 'Plano pessoal', selectedIds)
     setSaving(false)
     onCreated()
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="card w-full max-w-md p-6">
+      <div className="card flex max-h-[90vh] w-full max-w-md flex-col p-6">
         <h3 className="text-lg font-bold text-ink">Criar novo plano pessoal</h3>
         <input
           className="mt-4 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
@@ -645,30 +368,41 @@ function CreatePlanModal({
           onChange={(e) => setTitle(e.target.value)}
         />
 
-        <div className="mt-4 space-y-2">
-          <label className="flex items-center gap-2 rounded-xl border-2 border-navy-light p-3 has-[:checked]:border-navy">
-            <input type="radio" checked={origin === 'taxonomia'} onChange={() => setOrigin('taxonomia')} />
-            <div>
-              <p className="text-sm font-semibold text-ink">Baseado na taxonomia do curso</p>
-              <p className="text-xs text-ink-soft">Pré-popula com as categorias de skill do seu curso</p>
-            </div>
-          </label>
-          <label className="flex items-center gap-2 rounded-xl border-2 border-navy-light p-3 has-[:checked]:border-navy">
-            <input type="radio" checked={origin === 'vazio'} onChange={() => setOrigin('vazio')} />
-            <div>
-              <p className="text-sm font-semibold text-ink">Do zero</p>
-              <p className="text-xs text-ink-soft">Comece um plano vazio e adicione itens manualmente</p>
-            </div>
-          </label>
+        <p className="mt-4 text-sm font-semibold text-ink">
+          Escolha até {MAX_PLAN_COMPETENCIES} competências pra este plano
+        </p>
+        <p className="text-xs text-ink-soft">
+          {selectedIds.length} de {MAX_PLAN_COMPETENCIES} selecionadas
+        </p>
+
+        <div className="mt-2 flex-1 space-y-2 overflow-y-auto">
+          {categories.map((cat) => (
+            <label
+              key={cat.id}
+              className="flex items-center gap-2 rounded-xl border-2 border-navy-light p-3 has-[:checked]:border-navy"
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(cat.id)}
+                onChange={() => toggle(cat.id)}
+                disabled={!selectedIds.includes(cat.id) && selectedIds.length >= MAX_PLAN_COMPETENCIES}
+              />
+              <div>
+                <p className="text-sm font-semibold text-ink">{cat.name}</p>
+                <p className="text-xs uppercase tracking-wide text-ink-soft">{cat.type}</p>
+              </div>
+            </label>
+          ))}
+          {categories.length === 0 && <p className="text-sm text-ink-soft">Nenhuma competência disponível pro seu curso.</p>}
         </div>
 
-        <div className="mt-6 flex gap-2">
+        <div className="mt-6 flex shrink-0 gap-2">
           <button onClick={onClose} className="flex-1 rounded-xl border border-navy-light py-2.5 font-semibold text-ink-soft">
             Cancelar
           </button>
           <button
             onClick={handleCreate}
-            disabled={saving}
+            disabled={saving || selectedIds.length === 0}
             className="flex-1 rounded-xl bg-brand-red py-2.5 font-bold text-white hover:bg-brand-red-dark disabled:opacity-60"
           >
             {saving ? 'Criando…' : 'Criar plano'}

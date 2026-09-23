@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   addFreeTextItemToCompetency,
   addTrackToCompetency,
-  cycleItemStatus,
   getCompetencyPlanItems,
   getTracksBySkillCategory,
+  getTrackWithPills,
+  getUserProgressMap,
+  setItemStatus,
+  setItemTargetDate,
   upsertSelfRating,
 } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { ProgressBar } from '../ProgressBar'
-import type { PdiJornadaBucket, PdiPlanItem, SkillCategory, SkillRating, Track } from '../../types/database'
+import type { PdiItemStatus, PdiJornadaBucket, PdiPlanItem, SkillCategory, SkillRating, Track } from '../../types/database'
 
 const TOTAL_STEPS = 5
 const STEP_LABELS = ['Competência', 'Autoavaliação', 'Objetivo', 'Preenchimento', 'Acompanhamento']
@@ -19,6 +23,12 @@ const BUCKET_INFO: Record<PdiJornadaBucket, { title: string; question: string }>
   mentoria: { title: '20% Troca de Conhecimento', question: 'Com quem você vai aprender ou trocar experiências?' },
   formacao: { title: '10% Aprendizagem Formal', question: 'Quais cursos, treinamentos ou leituras você vai realizar?' },
 }
+
+const STATUS_OPTIONS: { value: PdiItemStatus; label: string }[] = [
+  { value: 'nao_iniciado', label: 'Não iniciado' },
+  { value: 'em_andamento', label: 'Em andamento' },
+  { value: 'concluido', label: 'Concluído' },
+]
 
 function ChecklistRow({ done, label }: { done: boolean; label: string }) {
   return (
@@ -35,19 +45,61 @@ function ChecklistRow({ done, label }: { done: boolean; label: string }) {
   )
 }
 
-function StatusDot({ status, onClick }: { status: PdiPlanItem['status']; onClick?: () => void }) {
-  const base = 'h-4 w-4 shrink-0 rounded-full' + (onClick ? ' cursor-pointer' : '')
-  if (status === 'concluido') return <span onClick={onClick} className={`${base} bg-success`} />
-  if (status === 'em_andamento') {
-    return (
-      <span
-        onClick={onClick}
-        className={`${base} border-2 border-brand-red`}
-        style={{ background: 'conic-gradient(var(--color-brand-red) 50%, transparent 50%)' }}
-      />
-    )
-  }
-  return <span onClick={onClick} className={`${base} border-2 border-gray-300`} />
+/** Uma linha de item do bucket 70/20/10 — igual pra qualquer tipo de item
+ * (texto livre, curso avulso ou trilha). Curso/trilha tem o rótulo como
+ * link pra continuar o curso, e o status vem do progresso real (select
+ * desabilitado); texto livre é totalmente editável. A data-alvo é sempre
+ * editável, independente do bucket ou tipo. */
+function ItemEditRow({
+  label,
+  linkTo,
+  status,
+  targetDate,
+  editableStatus,
+  onStatusChange,
+  onDateChange,
+}: {
+  label: string
+  linkTo: string | null
+  status: PdiPlanItem['status']
+  targetDate: string | null
+  editableStatus: boolean
+  onStatusChange: (status: PdiItemStatus) => void
+  onDateChange: (date: string) => void
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg bg-bg p-2 sm:flex-row sm:items-center">
+      {linkTo ? (
+        <Link to={linkTo} className="min-w-0 flex-1 truncate text-sm font-medium text-navy hover:underline">
+          {label}
+        </Link>
+      ) : (
+        <span className="min-w-0 flex-1 truncate text-sm text-ink">{label}</span>
+      )}
+      <div className="flex shrink-0 gap-2">
+        <input
+          type="date"
+          value={targetDate ?? ''}
+          onChange={(e) => onDateChange(e.target.value)}
+          title="Data em que pretende concluir"
+          className="min-w-0 flex-1 rounded-lg border border-navy-light px-2 py-1 text-xs text-ink-soft outline-none focus:border-navy sm:flex-none"
+        />
+        <select
+          value={status}
+          disabled={!editableStatus}
+          onChange={(e) => onStatusChange(e.target.value as PdiItemStatus)}
+          title={editableStatus ? undefined : 'Definido automaticamente pelo progresso do curso'}
+          className="rounded-lg border border-navy-light px-2 py-1 text-xs text-ink disabled:opacity-60"
+        >
+          {STATUS_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  )
 }
 
 export function CompetencyWizard({
@@ -70,6 +122,7 @@ export function CompetencyWizard({
   const [objetivo, setObjetivo] = useState(rating?.objetivo ?? '')
   const [items, setItems] = useState<PdiPlanItem[]>([])
   const [labels, setLabels] = useState<Record<string, string>>({})
+  const [firstPillByTrack, setFirstPillByTrack] = useState<Record<string, string>>({})
   const [loadingItems, setLoadingItems] = useState(true)
   const [newTaskText, setNewTaskText] = useState<Record<PdiJornadaBucket, string>>({ pratica: '', mentoria: '', formacao: '' })
   const [suggested, setSuggested] = useState<Track[] | null>(null)
@@ -79,13 +132,30 @@ export function CompetencyWizard({
     setLoadingItems(true)
     const rows = await getCompetencyPlanItems(planId, category.id)
     setItems(rows)
+
     const pillIds = rows.filter((i) => i.item_type === 'pill' && i.ref_id).map((i) => i.ref_id as string)
+    const trackIds = rows.filter((i) => i.item_type === 'trilha' && i.ref_id).map((i) => i.ref_id as string)
+
+    const labelMap: Record<string, string> = {}
     if (pillIds.length) {
       const { data } = await supabase.from('pills').select('id,title').in('id', pillIds)
-      const map: Record<string, string> = {}
-      for (const row of (data as { id: string; title: string }[]) ?? []) map[row.id] = row.title
-      setLabels(map)
+      for (const row of (data as { id: string; title: string }[]) ?? []) labelMap[row.id] = row.title
     }
+    if (trackIds.length) {
+      const { data } = await supabase.from('tracks').select('id,title').in('id', trackIds)
+      for (const row of (data as { id: string; title: string }[]) ?? []) labelMap[row.id] = row.title
+
+      const progressMap = await getUserProgressMap(userId)
+      const pillMap: Record<string, string> = {}
+      const withPills = await Promise.all(trackIds.map((id) => getTrackWithPills(id)))
+      trackIds.forEach((trackId, idx) => {
+        const pills = withPills[idx].pills
+        const nextPill = pills.find((p) => progressMap[p.id]?.status !== 'completed') ?? pills[0]
+        if (nextPill) pillMap[trackId] = nextPill.id
+      })
+      setFirstPillByTrack(pillMap)
+    }
+    setLabels(labelMap)
     setLoadingItems(false)
   }
 
@@ -111,10 +181,15 @@ export function CompetencyWizard({
     onSaved()
   }
 
-  async function handleCycle(item: PdiPlanItem) {
-    await cycleItemStatus(planId, item.id, item.status)
+  async function handleStatusChange(item: PdiPlanItem, status: PdiItemStatus) {
+    await setItemStatus(planId, item.id, status)
     await loadItems()
     onSaved()
+  }
+
+  async function handleDateChange(item: PdiPlanItem, date: string) {
+    await setItemTargetDate(item.id, date || null)
+    await loadItems()
   }
 
   async function handleAddTask(bucket: PdiJornadaBucket) {
@@ -162,6 +237,15 @@ export function CompetencyWizard({
     if (item.item_type === 'tarefa_livre') return item.descricao ?? 'Tarefa'
     if (item.item_type === 'trilha' || item.item_type === 'pill') return labels[item.ref_id ?? ''] ?? item.ref_id ?? ''
     return item.descricao ?? ''
+  }
+
+  function itemLinkTo(item: PdiPlanItem): string | null {
+    if (item.item_type === 'pill' && item.ref_id) return `/curso/${item.ref_id}`
+    if (item.item_type === 'trilha' && item.ref_id) {
+      const pillId = firstPillByTrack[item.ref_id]
+      return pillId ? `/curso/${pillId}` : null
+    }
+    return null
   }
 
   function goNext() {
@@ -259,10 +343,16 @@ export function CompetencyWizard({
                     <p className="text-xs text-ink-soft">{BUCKET_INFO[bucket].question}</p>
                     <div className="mt-2 space-y-1.5">
                       {grouped[bucket].map((item) => (
-                        <div key={item.id} className="flex items-center gap-2 rounded-lg bg-bg p-2">
-                          <StatusDot status={item.status} onClick={() => handleCycle(item)} />
-                          <span className="flex-1 text-sm text-ink">{itemLabel(item)}</span>
-                        </div>
+                        <ItemEditRow
+                          key={item.id}
+                          label={itemLabel(item)}
+                          linkTo={itemLinkTo(item)}
+                          status={item.status}
+                          targetDate={item.target_date}
+                          editableStatus={item.item_type === 'tarefa_livre'}
+                          onStatusChange={(s) => handleStatusChange(item, s)}
+                          onDateChange={(d) => handleDateChange(item, d)}
+                        />
                       ))}
                       {grouped[bucket].length === 0 && <p className="text-xs text-ink-soft">Nenhum item ainda.</p>}
                     </div>
@@ -290,14 +380,19 @@ export function CompetencyWizard({
                   <p className="text-xs text-ink-soft">{BUCKET_INFO.formacao.question}</p>
 
                   <div className="mt-2 space-y-1.5">
-                    {grouped.formacao
-                      .filter((i) => i.item_type === 'tarefa_livre')
-                      .map((item) => (
-                        <div key={item.id} className="flex items-center gap-2 rounded-lg bg-bg p-2">
-                          <StatusDot status={item.status} onClick={() => handleCycle(item)} />
-                          <span className="flex-1 text-sm text-ink">{itemLabel(item)}</span>
-                        </div>
-                      ))}
+                    {grouped.formacao.map((item) => (
+                      <ItemEditRow
+                        key={item.id}
+                        label={itemLabel(item)}
+                        linkTo={itemLinkTo(item)}
+                        status={item.status}
+                        targetDate={item.target_date}
+                        editableStatus={item.item_type === 'tarefa_livre'}
+                        onStatusChange={(s) => handleStatusChange(item, s)}
+                        onDateChange={(d) => handleDateChange(item, d)}
+                      />
+                    ))}
+                    {grouped.formacao.length === 0 && <p className="text-xs text-ink-soft">Nenhum item ainda.</p>}
                   </div>
                   <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                     <input
@@ -317,34 +412,27 @@ export function CompetencyWizard({
 
                   <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-soft">Cursos sugeridos</p>
                   {suggested === null && <p className="mt-1 text-xs text-ink-soft">Buscando cursos…</p>}
-                  {suggested !== null && suggested.length === 0 && (
-                    <p className="mt-1 text-xs text-ink-soft">Nenhum curso vinculado a esta competência ainda.</p>
+                  {suggested !== null && suggested.filter((t) => !addedTrackIds.has(t.id)).length === 0 && (
+                    <p className="mt-1 text-xs text-ink-soft">Nenhum outro curso vinculado a esta competência.</p>
                   )}
                   <div className="mt-1 space-y-2">
-                    {(suggested ?? []).map((track) => {
-                      const alreadyAdded = addedTrackIds.has(track.id)
-                      return (
+                    {(suggested ?? [])
+                      .filter((t) => !addedTrackIds.has(t.id))
+                      .map((track) => (
                         <div key={track.id} className="flex items-center gap-3 rounded-lg bg-bg p-2">
                           {track.thumbnail_url && (
                             <img src={track.thumbnail_url} alt="" className="h-10 w-16 shrink-0 rounded object-cover" />
                           )}
                           <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{track.title}</span>
-                          {alreadyAdded ? (
-                            <span className="shrink-0 rounded-full bg-navy-light px-3 py-1.5 text-xs font-bold text-navy">
-                              Já adicionado
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => handleAddTrack(track.id)}
-                              disabled={addingTrackId === track.id}
-                              className="shrink-0 rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-dark disabled:opacity-60"
-                            >
-                              {addingTrackId === track.id ? 'Adicionando…' : '+ Adicionar ao PDI'}
-                            </button>
-                          )}
+                          <button
+                            onClick={() => handleAddTrack(track.id)}
+                            disabled={addingTrackId === track.id}
+                            className="shrink-0 rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-dark disabled:opacity-60"
+                          >
+                            {addingTrackId === track.id ? 'Adicionando…' : '+ Adicionar ao PDI'}
+                          </button>
                         </div>
-                      )
-                    })}
+                      ))}
                   </div>
                 </div>
               )}
