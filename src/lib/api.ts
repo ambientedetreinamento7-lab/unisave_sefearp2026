@@ -1148,6 +1148,67 @@ export async function getTracksBySkillCategory(skillCategoryId: string): Promise
   return (data as Track[]) ?? []
 }
 
+function namesOverlap(a: string, b: string): boolean {
+  const na = a.trim().toLowerCase()
+  const nb = b.trim().toLowerCase()
+  return na.includes(nb) || nb.includes(na)
+}
+
+/**
+ * Cursos avulsos do catálogo (pills com categories) que "casam" com uma
+ * competência do Painel 70/20/10 — evita depender do admin vincular
+ * manualmente cada trilha (tracks.skill_category_id, usado só por
+ * getTracksBySkillCategory acima). Casa por nome da categoria conter (ou
+ * ser contido n)o nome da competência — não precisa ser idêntico, ex.:
+ * categoria "Liderança" já sugere numa competência "Comunicação e
+ * Liderança", e uma pílula pode aparecer em mais de uma competência se os
+ * nomes se sobrepõem.
+ */
+export async function getCatalogPillsBySkillCategory(skillCategoryId: string): Promise<Pill[]> {
+  const { data: skill } = await supabase.from('skill_categories').select('name').eq('id', skillCategoryId).maybeSingle()
+  if (!skill) return []
+  const { data: allCategories } = await supabase.from('categories').select('id, name')
+  const matchingCategoryIds = ((allCategories as { id: string; name: string }[] | null) ?? [])
+    .filter((c) => namesOverlap(c.name, skill.name))
+    .map((c) => c.id)
+  if (matchingCategoryIds.length === 0) return []
+  const { data } = await supabase.from('pills').select('*').in('category_id', matchingCategoryIds)
+  return (data as Pill[]) ?? []
+}
+
+/** Adiciona um curso avulso do catálogo (pill) a uma competência — mesmo
+ * papel de addTrackToCompetency, mas pra uma pílula solta em vez de uma
+ * trilha inteira (progress_total sempre 1, já que é um item só). */
+export async function addPillToCompetency(planId: string, skillCategoryId: string, pillId: string): Promise<void> {
+  const { data: existing } = await supabase
+    .from('pdi_plan_items')
+    .select('id')
+    .eq('plan_id', planId)
+    .eq('item_type', 'pill')
+    .eq('ref_id', pillId)
+    .maybeSingle()
+  if (existing) return
+
+  const { count } = await supabase
+    .from('pdi_plan_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('plan_id', planId)
+  const orderIndex = count ?? 0
+
+  await supabase.from('pdi_plan_items').insert({
+    plan_id: planId,
+    item_type: 'pill' as const,
+    ref_id: pillId,
+    skill_category_id: skillCategoryId,
+    progress_current: 0,
+    progress_total: 1,
+    status: 'nao_iniciado' as const,
+    order_index: orderIndex,
+    jornada_bucket: 'formacao' as const,
+  })
+  await recomputePlanProgress(planId)
+}
+
 // ---- Meu PDI: painel de competências (Painel 70/20/10) ----
 
 export interface CompetencyPdiSummary {

@@ -57,7 +57,10 @@ create table skill_categories (
   id uuid primary key default gen_random_uuid(),
   program_id text not null references programs(id) on delete cascade,
   name text not null,
-  type skill_type not null
+  type skill_type not null,
+  -- Permite desativar uma competência sem apagar histórico (skill_ratings/
+  -- pdi_plan_items já vinculados) — getSkillCategories só lista as ativas.
+  ativo boolean not null default true
 );
 
 create table tracks (
@@ -425,6 +428,9 @@ create table skill_ratings (
   self_rating numeric,
   moderator_rating numeric,
   rated_at timestamptz not null default now(),
+  -- Objetivo em texto livre do aluno pra essa competência (Painel 70/20/10,
+  -- passo 3 do wizard) — independente da nota numérica de autoavaliação.
+  objetivo text,
   unique (user_id, skill_category_id)
 );
 

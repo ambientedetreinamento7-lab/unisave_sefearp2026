@@ -337,8 +337,6 @@ export interface PdiPlan {
   progress_pct: number
   created_at: string
   tier: PdiTier | null
-  /** Até 3 skill_categories.id escolhidas pelo aluno pra este plano —
-   * define quais cards aparecem no Painel 70/20/10. */
   competency_ids: string[]
 }
 
