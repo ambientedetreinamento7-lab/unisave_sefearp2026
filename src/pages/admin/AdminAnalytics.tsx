@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { AdminLayout } from './AdminLayout'
-import { getIssuedCertificates } from '../../lib/api'
+import { getIssuedCertificates, getNpsResponses } from '../../lib/api'
+import type { NpsResponseRow } from '../../lib/api'
 import { getLevels, getRules, levelForPoints } from '../../lib/gamification'
 import { TIER_LABEL } from '../../lib/pdiTier'
 import { supabase } from '../../lib/supabase'
@@ -53,17 +54,31 @@ function CsvButton({ filename, headers, rows }: { filename: string; headers: str
 
 const TIER_ORDER: PdiTier[] = ['abaixo', 'proximo', 'dentro', 'acima']
 
-type SubTab = 'geral' | 'cursos' | 'alunos' | 'pdi' | 'gamificacao' | 'comunidade' | 'certificados'
+type SubTab = 'geral' | 'cursos' | 'nps' | 'alunos' | 'pdi' | 'gamificacao' | 'comunidade' | 'certificados'
 
 const SUB_TABS: { key: SubTab; label: string }[] = [
   { key: 'geral', label: 'Visão Geral' },
   { key: 'cursos', label: 'Cursos' },
+  { key: 'nps', label: 'NPS' },
   { key: 'alunos', label: 'Alunos' },
   { key: 'pdi', label: 'PDI & Competências' },
   { key: 'gamificacao', label: 'Gamificação' },
   { key: 'comunidade', label: 'Comunidade' },
   { key: 'certificados', label: 'Certificados' },
 ]
+
+/** Promotores 9-10, Neutros 7-8, Detratores 0-6 — NPS = %Promotores -
+ * %Detratores, definição padrão de mercado. */
+function npsFromValues(values: number[]) {
+  if (values.length === 0) return { score: 0, promoters: 0, passives: 0, detractors: 0, total: 0 }
+  const promoters = values.filter((v) => v >= 9).length
+  const passives = values.filter((v) => v >= 7 && v <= 8).length
+  const detractors = values.filter((v) => v <= 6).length
+  const score = Math.round(((promoters - detractors) / values.length) * 100)
+  return { score, promoters, passives, detractors, total: values.length }
+}
+
+const NPS_BAR_COLOR = (score: number) => (score <= 6 ? '#ed1c24' : score <= 8 ? '#d9a441' : '#16a34a')
 
 type StudentRow = {
   id: string
@@ -93,6 +108,7 @@ export function AdminAnalytics() {
   const [skillGap, setSkillGap] = useState<
     { skill: string; autoavaliacao: number; moderador: number | null; gap: number | null }[]
   >([])
+  const [npsRows, setNpsRows] = useState<NpsResponseRow[]>([])
   const [pointsByRule, setPointsByRule] = useState<{ regra: string; eventos: number; pontosTotais: number }[]>([])
   const [levelDist, setLevelDist] = useState<{ nivel: string; alunos: number }[]>([])
   const [postsByType, setPostsByType] = useState<{ tipo: string; total: number; publicados: number; pendentes: number }[]>([])
@@ -139,6 +155,7 @@ export function AdminAnalytics() {
         levels,
         rules,
         issued,
+        nps,
       ] = await Promise.all([
         supabase.from('profiles').select('*').eq('role', 'aluno'),
         supabase.from('pdi_plans').select('*'),
@@ -157,8 +174,10 @@ export function AdminAnalytics() {
         getLevels(),
         getRules(),
         getIssuedCertificates(),
+        getNpsResponses(),
       ])
       setIssuedCertificates(issued)
+      setNpsRows(nps)
 
       const profilesArr = (profiles as Profile[]) ?? []
       const plansArr = (plans as PdiPlan[]) ?? []
@@ -362,6 +381,41 @@ export function AdminAnalytics() {
     }
     load()
   }, [])
+
+  const npsOverall = useMemo(() => npsFromValues(npsRows.map((r) => r.value)), [npsRows])
+
+  const npsDistribution = useMemo(() => {
+    const counts = new Map<number, number>()
+    for (let i = 0; i <= 10; i++) counts.set(i, 0)
+    for (const r of npsRows) counts.set(r.value, (counts.get(r.value) ?? 0) + 1)
+    return Array.from(counts.entries()).map(([nota, respostas]) => ({ nota: String(nota), respostas }))
+  }, [npsRows])
+
+  const npsByCourse = useMemo(() => {
+    const grouped = new Map<string, number[]>()
+    for (const r of npsRows) {
+      const key = r.trackTitle ?? r.pillTitle
+      const arr = grouped.get(key) ?? []
+      arr.push(r.value)
+      grouped.set(key, arr)
+    }
+    return Array.from(grouped.entries())
+      .map(([course, values]) => ({ course, ...npsFromValues(values) }))
+      .sort((a, b) => b.total - a.total)
+  }, [npsRows])
+
+  const npsByMonth = useMemo(() => {
+    const grouped = new Map<string, number[]>()
+    for (const r of npsRows) {
+      const key = r.submittedAt.slice(0, 7)
+      const arr = grouped.get(key) ?? []
+      arr.push(r.value)
+      grouped.set(key, arr)
+    }
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([mes, values]) => ({ mes, ...npsFromValues(values) }))
+  }, [npsRows])
 
   function toggleStudentSort(field: StudentSortField) {
     if (field === studentSortField) {
@@ -586,6 +640,120 @@ export function AdminAnalytics() {
               </table>
             </div>
           </div>
+        </div>
+      )}
+
+      {subTab === 'nps' && (
+        <div className="space-y-6">
+          {npsRows.length === 0 ? (
+            <div className="card p-5 text-sm text-ink-soft">
+              Nenhuma pergunta de recomendação (NPS) foi encontrada nas pesquisas de reação. Configure em{' '}
+              <span className="font-semibold text-ink">Admin → Quizzes → Reação</span> uma pergunta do tipo
+              "Recomendação (0-10)" com o texto "Em uma escala de 0 a 10, o quanto você recomendaria este curso para
+              um colega ou amigo?".
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <StatCard label="NPS geral" value={npsOverall.score} />
+                <StatCard
+                  label="Promotores"
+                  value={`${npsOverall.total ? Math.round((npsOverall.promoters / npsOverall.total) * 100) : 0}%`}
+                />
+                <StatCard
+                  label="Neutros"
+                  value={`${npsOverall.total ? Math.round((npsOverall.passives / npsOverall.total) * 100) : 0}%`}
+                />
+                <StatCard
+                  label="Detratores"
+                  value={`${npsOverall.total ? Math.round((npsOverall.detractors / npsOverall.total) * 100) : 0}%`}
+                />
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <div className="card p-5">
+                  <h2 className="font-bold text-ink">Distribuição das notas</h2>
+                  <div className="mt-4 h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={npsDistribution}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="nota" tick={{ fontSize: 11 }} />
+                        <YAxis allowDecimals={false} />
+                        <Tooltip />
+                        <Bar dataKey="respostas" radius={[6, 6, 0, 0]}>
+                          {npsDistribution.map((d) => (
+                            <Cell key={d.nota} fill={NPS_BAR_COLOR(Number(d.nota))} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="card p-5">
+                  <h2 className="font-bold text-ink">Evolução mensal do NPS</h2>
+                  <div className="mt-4 h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={npsByMonth}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                        <YAxis />
+                        <Tooltip />
+                        <Bar dataKey="score" fill="#1A3B6E" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card p-5">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-bold text-ink">NPS por curso</h2>
+                  <CsvButton
+                    filename="nps-por-curso.csv"
+                    headers={['Curso', 'Respostas', 'Promotores (%)', 'Neutros (%)', 'Detratores (%)', 'NPS']}
+                    rows={npsByCourse.map((r) => [
+                      r.course,
+                      r.total,
+                      Math.round((r.promoters / r.total) * 100),
+                      Math.round((r.passives / r.total) * 100),
+                      Math.round((r.detractors / r.total) * 100),
+                      r.score,
+                    ])}
+                  />
+                </div>
+                <div className="mt-4 max-h-96 overflow-y-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="text-xs uppercase text-ink-soft">
+                        <th className="pb-2">Curso</th>
+                        <th className="pb-2 text-right">Respostas</th>
+                        <th className="pb-2 text-right">Promotores</th>
+                        <th className="pb-2 text-right">Neutros</th>
+                        <th className="pb-2 text-right">Detratores</th>
+                        <th className="pb-2 text-right">NPS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {npsByCourse.map((r) => (
+                        <tr key={r.course} className="border-t border-navy-light/60">
+                          <td className="py-2 font-medium text-ink">{r.course}</td>
+                          <td className="py-2 text-right text-ink-soft">{r.total}</td>
+                          <td className="py-2 text-right text-ink-soft">{Math.round((r.promoters / r.total) * 100)}%</td>
+                          <td className="py-2 text-right text-ink-soft">{Math.round((r.passives / r.total) * 100)}%</td>
+                          <td className="py-2 text-right text-ink-soft">{Math.round((r.detractors / r.total) * 100)}%</td>
+                          <td className="py-2 text-right font-semibold text-navy">{r.score}</td>
+                        </tr>
+                      ))}
+                      {npsByCourse.length === 0 && (
+                        <tr><td colSpan={6} className="py-3 text-ink-soft">Sem dados ainda.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
