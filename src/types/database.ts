@@ -70,10 +70,8 @@ export interface Track {
   description: string | null
   icon: string | null
   primary_color: string | null
-  program_id: string | null
   diagnostic_profile: DiagnosticProfile | null
   category_id: string | null
-  skill_category_id: string | null
   objetivo_geral: string | null
   publico_alvo: string | null
   pre_requisitos: string | null
@@ -91,6 +89,16 @@ export interface Track {
   banner_enabled: boolean
   banner_start_at: string | null
   banner_end_at: string | null
+}
+
+export interface TrackProgram {
+  track_id: string
+  program_id: string
+}
+
+export interface TrackSkillCategory {
+  track_id: string
+  skill_category_id: string
 }
 
 export interface TrackPill {

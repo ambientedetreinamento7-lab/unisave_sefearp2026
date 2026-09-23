@@ -72,10 +72,10 @@ export function AdminCursoDetalhe() {
   const [bannerEnabled, setBannerEnabled] = useState(false)
   const [bannerStart, setBannerStart] = useState('')
   const [bannerEnd, setBannerEnd] = useState('')
-  const [programId, setProgramId] = useState('')
+  const [programIds, setProgramIds] = useState<string[]>([])
   const [profile, setProfile] = useState<DiagnosticProfile | ''>('')
   const [categoryId, setCategoryId] = useState('')
-  const [skillCategoryId, setSkillCategoryId] = useState('')
+  const [skillCategoryIds, setSkillCategoryIds] = useState<string[]>([])
   const [skillCategories, setSkillCategories] = useState<SkillCategory[]>([])
   const [teaserInput, setTeaserInput] = useState('')
   const [coverFile, setCoverFile] = useState<File | null>(null)
@@ -110,10 +110,16 @@ export function AdminCursoDetalhe() {
       setCertificateTemplates((certs as CertificateTemplate[]) ?? [])
       setSkillCategories((skills as SkillCategory[]) ?? [])
       if (!isNew && id) {
-        const { data: t } = await supabase.from('tracks').select('*').eq('id', id).single()
+        const [{ data: t }, { data: tp }, { data: tsc }] = await Promise.all([
+          supabase.from('tracks').select('*').eq('id', id).single(),
+          supabase.from('track_programs').select('program_id').eq('track_id', id),
+          supabase.from('track_skill_categories').select('skill_category_id').eq('track_id', id),
+        ])
         if (cancelled) return
         const row = t as Track | null
         setTrack(row)
+        setProgramIds(((tp as { program_id: string }[] | null) ?? []).map((r) => r.program_id))
+        setSkillCategoryIds(((tsc as { skill_category_id: string }[] | null) ?? []).map((r) => r.skill_category_id))
         if (row) {
           setTitle(row.title)
           setDescription(row.description ?? '')
@@ -131,10 +137,8 @@ export function AdminCursoDetalhe() {
           setBannerEnabled(row.banner_enabled)
           setBannerStart(toDatetimeLocal(row.banner_start_at))
           setBannerEnd(toDatetimeLocal(row.banner_end_at))
-          setProgramId(row.program_id ?? '')
           setProfile(row.diagnostic_profile ?? '')
           setCategoryId(row.category_id ?? '')
-          setSkillCategoryId(row.skill_category_id ?? '')
           setTeaserInput(row.teaser_vimeo_id ?? '')
         }
         await reloadAulas(id)
@@ -177,14 +181,13 @@ export function AdminCursoDetalhe() {
         banner_enabled: bannerEnabled,
         banner_start_at: fromDatetimeLocal(bannerStart),
         banner_end_at: fromDatetimeLocal(bannerEnd),
-        program_id: programId || null,
         diagnostic_profile: profile || null,
         category_id: categoryId || null,
-        skill_category_id: skillCategoryId || null,
         cover_url: coverUrl,
         thumbnail_url: thumbnailUrl,
         teaser_vimeo_id: parseVimeoId(teaserInput),
       }
+      let trackId = track?.id
       if (track) {
         const { error: saveError } = await supabase.from('tracks').update(payload).eq('id', track.id)
         if (saveError) throw saveError
@@ -192,9 +195,29 @@ export function AdminCursoDetalhe() {
       } else {
         const { data: newTrack, error: saveError } = await supabase.from('tracks').insert(payload).select('*').single()
         if (saveError) throw saveError
+        trackId = newTrack.id
         setTrack(newTrack as Track)
         navigate(`/admin/trilhas/${newTrack.id}`, { replace: true })
         await reloadAulas(newTrack.id)
+      }
+
+      if (trackId) {
+        const { error: delProgErr } = await supabase.from('track_programs').delete().eq('track_id', trackId)
+        if (delProgErr) throw delProgErr
+        if (programIds.length > 0) {
+          const { error: insProgErr } = await supabase
+            .from('track_programs')
+            .insert(programIds.map((programId) => ({ track_id: trackId, program_id: programId })))
+          if (insProgErr) throw insProgErr
+        }
+        const { error: delSkillErr } = await supabase.from('track_skill_categories').delete().eq('track_id', trackId)
+        if (delSkillErr) throw delSkillErr
+        if (skillCategoryIds.length > 0) {
+          const { error: insSkillErr } = await supabase
+            .from('track_skill_categories')
+            .insert(skillCategoryIds.map((skillCategoryId) => ({ track_id: trackId, skill_category_id: skillCategoryId })))
+          if (insSkillErr) throw insSkillErr
+        }
       }
     } catch (err) {
       const message = (err as { message?: string } | null)?.message
@@ -352,44 +375,63 @@ export function AdminCursoDetalhe() {
           </select>
 
           <label className="block text-xs font-semibold text-ink-soft">
-            Programa <span className="font-normal normal-case text-ink-soft/70">(opcional — pode vincular depois)</span>
-          </label>
-          <select
-            className="w-full rounded-xl border border-navy-light px-4 py-3"
-            value={programId}
-            onChange={(e) => {
-              setProgramId(e.target.value)
-              setSkillCategoryId('')
-            }}
-          >
-            <option value="">Não definido</option>
-            {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-
-          <label className="block text-xs font-semibold text-ink-soft">
-            Competência do PDI{' '}
+            Programas{' '}
             <span className="font-normal normal-case text-ink-soft/70">
-              (opcional — sugerido pro aluno ao clicar na competência em Meu PDI)
+              (opcional — este curso pode ser vinculado a mais de um programa)
             </span>
           </label>
-          {programId ? (
-            <select
-              className="w-full rounded-xl border border-navy-light px-4 py-3"
-              value={skillCategoryId}
-              onChange={(e) => setSkillCategoryId(e.target.value)}
-            >
-              <option value="">Nenhuma</option>
+          <div className="grid gap-1.5 rounded-xl border border-navy-light p-3 sm:grid-cols-2">
+            {programs.map((p) => (
+              <label key={p.id} className="flex items-center gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={programIds.includes(p.id)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setProgramIds([...programIds, p.id])
+                    } else {
+                      setProgramIds(programIds.filter((id) => id !== p.id))
+                      setSkillCategoryIds(
+                        skillCategoryIds.filter((id) => skillCategories.find((s) => s.id === id)?.program_id !== p.id),
+                      )
+                    }
+                  }}
+                />
+                {p.name}
+              </label>
+            ))}
+          </div>
+
+          <label className="block text-xs font-semibold text-ink-soft">
+            Competências do PDI{' '}
+            <span className="font-normal normal-case text-ink-soft/70">
+              (opcional — sugerido pro aluno ao clicar na competência em Meu PDI; pode marcar mais de uma se o curso
+              for parecido com várias)
+            </span>
+          </label>
+          {programIds.length > 0 ? (
+            <div className="grid gap-1.5 rounded-xl border border-navy-light p-3 sm:grid-cols-2">
               {skillCategories
-                .filter((s) => s.program_id === programId && (s.ativo || s.id === skillCategoryId))
+                .filter((s) => programIds.includes(s.program_id))
                 .map((s) => (
-                  <option key={s.id} value={s.id}>
+                  <label key={s.id} className="flex items-center gap-2 text-sm text-ink">
+                    <input
+                      type="checkbox"
+                      checked={skillCategoryIds.includes(s.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSkillCategoryIds([...skillCategoryIds, s.id])
+                        } else {
+                          setSkillCategoryIds(skillCategoryIds.filter((id) => id !== s.id))
+                        }
+                      }}
+                    />
                     {s.name}
-                    {!s.ativo ? ' (descontinuada)' : ''}
-                  </option>
+                  </label>
                 ))}
-            </select>
+            </div>
           ) : (
-            <p className="text-xs text-ink-soft">Escolha um programa acima para poder vincular uma competência.</p>
+            <p className="text-xs text-ink-soft">Escolha ao menos um programa acima para poder vincular competências.</p>
           )}
 
           <label className="block text-xs font-semibold text-ink-soft">

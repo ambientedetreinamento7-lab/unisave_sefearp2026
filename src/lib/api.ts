@@ -167,12 +167,15 @@ export async function getCatalogPills(
   diagnosticProfile: DiagnosticProfile | null,
 ): Promise<Pill[]> {
   if (!programId || !diagnosticProfile) return []
+  const { data: linkedTracks } = await supabase.from('track_programs').select('track_id').eq('program_id', programId)
+  const trackIds = ((linkedTracks as { track_id: string }[] | null) ?? []).map((r) => r.track_id)
+  if (trackIds.length === 0) return []
   const { data } = await supabase
     .from('track_pills')
-    .select('pills(*), tracks!inner(published, is_catalog, program_id, diagnostic_profile)')
+    .select('pills(*), tracks!inner(published, is_catalog, diagnostic_profile)')
+    .in('track_id', trackIds)
     .eq('tracks.published', true)
     .eq('tracks.is_catalog', true)
-    .eq('tracks.program_id', programId)
     .eq('tracks.diagnostic_profile', diagnosticProfile)
   return ((data as { pills: Pill }[] | null) ?? []).map((r) => r.pills).filter(Boolean)
 }
@@ -288,15 +291,27 @@ export async function getRecommendedPills(
   progress: Record<string, UserProgress>,
 ): Promise<Pill[]> {
   if (!programId || !diagnosticProfile) return []
-  const { data: track } = await supabase
+  const { data: linkedTracks } = await supabase.from('track_programs').select('track_id').eq('program_id', programId)
+  const trackIds = ((linkedTracks as { track_id: string }[] | null) ?? []).map((r) => r.track_id)
+  if (trackIds.length === 0) return []
+  const { data: tracks } = await supabase
     .from('tracks')
     .select('id')
-    .eq('program_id', programId)
+    .in('id', trackIds)
     .eq('diagnostic_profile', diagnosticProfile)
     .eq('published', true)
     .eq('is_catalog', false)
-    .maybeSingle()
-  if (!track) return []
+  const matches = (tracks as { id: string }[] | null) ?? []
+  if (matches.length === 0) return []
+  // Invariante confirmada: deve haver no máximo 1 trilha publicada por
+  // (programa, perfil) — se o admin cadastrar mais de uma por engano,
+  // pega a mais recente e avisa no console em vez de travar.
+  if (matches.length > 1) {
+    console.warn(
+      `Mais de uma trilha publicada encontrada para o par (programa=${programId}, perfil=${diagnosticProfile}); usando a mais recente.`,
+    )
+  }
+  const track = matches[matches.length - 1]
   const { pills } = await getTrackWithPills(track.id)
   return pills.filter((p) => progress[p.id]?.status !== 'completed')
 }
@@ -912,7 +927,7 @@ export async function addTrackToPlan(planId: string, trackId: string) {
     .eq('plan_id', planId)
   const orderIndex = count ?? 0
 
-  await supabase.from('pdi_plan_items').insert({
+  const { error } = await supabase.from('pdi_plan_items').insert({
     plan_id: planId,
     item_type: 'trilha' as const,
     ref_id: trackId,
@@ -922,6 +937,7 @@ export async function addTrackToPlan(planId: string, trackId: string) {
     order_index: orderIndex,
     jornada_bucket: bucketForIndex(orderIndex),
   })
+  if (error) throw error
 }
 
 /** Adds a single avulso curso (from the Biblioteca de Cursos) to a plan. */
@@ -941,7 +957,7 @@ export async function addPillToPlan(planId: string, pillId: string) {
     .eq('plan_id', planId)
   const orderIndex = count ?? 0
 
-  await supabase.from('pdi_plan_items').insert({
+  const { error } = await supabase.from('pdi_plan_items').insert({
     plan_id: planId,
     item_type: 'pill' as const,
     ref_id: pillId,
@@ -951,6 +967,7 @@ export async function addPillToPlan(planId: string, pillId: string) {
     order_index: orderIndex,
     jornada_bucket: bucketForIndex(orderIndex),
   })
+  if (error) throw error
 }
 
 /**
@@ -978,7 +995,7 @@ export async function addTrackToCompetency(planId: string, skillCategoryId: stri
     .eq('plan_id', planId)
   const orderIndex = count ?? 0
 
-  await supabase.from('pdi_plan_items').insert({
+  const { error } = await supabase.from('pdi_plan_items').insert({
     plan_id: planId,
     item_type: 'trilha' as const,
     ref_id: trackId,
@@ -989,6 +1006,7 @@ export async function addTrackToCompetency(planId: string, skillCategoryId: stri
     order_index: orderIndex,
     jornada_bucket: 'formacao' as const,
   })
+  if (error) throw error
   await recomputePlanProgress(planId)
 }
 
@@ -1011,7 +1029,7 @@ export async function addFreeTextItemToCompetency(
     .eq('plan_id', planId)
   const orderIndex = count ?? 0
 
-  await supabase.from('pdi_plan_items').insert({
+  const { error } = await supabase.from('pdi_plan_items').insert({
     plan_id: planId,
     item_type: 'tarefa_livre' as const,
     ref_id: null,
@@ -1023,6 +1041,7 @@ export async function addFreeTextItemToCompetency(
     order_index: orderIndex,
     jornada_bucket: bucket,
   })
+  if (error) throw error
   await recomputePlanProgress(planId)
 }
 
@@ -1144,7 +1163,10 @@ export async function getTracksBySkillCategory(skillCategoryId: string): Promise
   const { data: sameName } = await supabase.from('skill_categories').select('id').eq('name', skill.name)
   const ids = ((sameName as { id: string }[] | null) ?? []).map((s) => s.id)
   if (ids.length === 0) return []
-  const { data } = await supabase.from('tracks').select('*').in('skill_category_id', ids).eq('published', true)
+  const { data: links } = await supabase.from('track_skill_categories').select('track_id').in('skill_category_id', ids)
+  const trackIds = [...new Set(((links as { track_id: string }[] | null) ?? []).map((l) => l.track_id))]
+  if (trackIds.length === 0) return []
+  const { data } = await supabase.from('tracks').select('*').in('id', trackIds).eq('published', true)
   return (data as Track[]) ?? []
 }
 
@@ -1195,7 +1217,7 @@ export async function addPillToCompetency(planId: string, skillCategoryId: strin
     .eq('plan_id', planId)
   const orderIndex = count ?? 0
 
-  await supabase.from('pdi_plan_items').insert({
+  const { error } = await supabase.from('pdi_plan_items').insert({
     plan_id: planId,
     item_type: 'pill' as const,
     ref_id: pillId,
@@ -1206,6 +1228,7 @@ export async function addPillToCompetency(planId: string, skillCategoryId: strin
     order_index: orderIndex,
     jornada_bucket: 'formacao' as const,
   })
+  if (error) throw error
   await recomputePlanProgress(planId)
 }
 

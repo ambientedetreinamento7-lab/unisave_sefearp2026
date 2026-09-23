@@ -89,14 +89,28 @@ export function Estande() {
       // is_catalog=false: a Biblioteca de Cursos nunca deve ser sugerida
       // automaticamente aqui, só entra no PDI se o aluno adicionar um
       // curso avulso dela (spec: biblioteca de cursos).
-      const { data: trackRow } = await supabase
-        .from('tracks')
-        .select('id')
-        .eq('program_id', program)
-        .eq('diagnostic_profile', diagnostic_profile)
-        .eq('published', true)
-        .eq('is_catalog', false)
-        .maybeSingle()
+      const { data: linkedTracks } = await supabase.from('track_programs').select('track_id').eq('program_id', program)
+      const linkedTrackIds = ((linkedTracks as { track_id: string }[] | null) ?? []).map((r) => r.track_id)
+      let trackRow: { id: string } | null = null
+      if (linkedTrackIds.length > 0) {
+        const { data: trackRows } = await supabase
+          .from('tracks')
+          .select('id')
+          .in('id', linkedTrackIds)
+          .eq('diagnostic_profile', diagnostic_profile)
+          .eq('published', true)
+          .eq('is_catalog', false)
+        const matches = (trackRows as { id: string }[] | null) ?? []
+        // Invariante confirmada: no máximo 1 trilha publicada por (programa,
+        // perfil) — se o admin cadastrar mais de uma por engano, pega a mais
+        // recente e avisa no console em vez de travar o cadastro do lead.
+        if (matches.length > 1) {
+          console.warn(
+            `Mais de uma trilha publicada encontrada para o par (programa=${program}, perfil=${diagnostic_profile}); usando a mais recente.`,
+          )
+        }
+        trackRow = matches.length > 0 ? matches[matches.length - 1] : null
+      }
 
       // Meu PDI — Painel 70/20/10: resolve os rótulos das até-3 soft
       // skills escolhidas pros ids reais de skill_categories deste curso,

@@ -4,13 +4,14 @@ import { AdminLayout } from './AdminLayout'
 import { useConfirm } from '../../components/ConfirmDialog'
 import { formatCargaHoraria } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
-import type { Category, DashboardSection, Pill, Program, Track, TrackPill } from '../../types/database'
+import type { Category, DashboardSection, Pill, Program, Track, TrackPill, TrackProgram } from '../../types/database'
 
 export function AdminTrilhas() {
   const confirm = useConfirm()
   const [tracks, setTracks] = useState<Track[]>([])
   const [pills, setPills] = useState<Pill[]>([])
   const [trackPills, setTrackPills] = useState<TrackPill[]>([])
+  const [trackPrograms, setTrackPrograms] = useState<TrackProgram[]>([])
   const [programs, setPrograms] = useState<Program[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [sections, setSections] = useState<DashboardSection[]>([])
@@ -43,10 +44,11 @@ export function AdminTrilhas() {
   }
 
   async function reload() {
-    const [{ data: t }, { data: p }, { data: tp }, { data: prog }, { data: cat }, { data: sec }] = await Promise.all([
+    const [{ data: t }, { data: p }, { data: tp }, { data: tprog }, { data: prog }, { data: cat }, { data: sec }] = await Promise.all([
       supabase.from('tracks').select('*'),
       supabase.from('pills').select('*'),
       supabase.from('track_pills').select('*'),
+      supabase.from('track_programs').select('*'),
       supabase.from('programs').select('*'),
       supabase.from('categories').select('*').order('order_index'),
       supabase.from('dashboard_sections').select('*').order('order_index'),
@@ -54,6 +56,7 @@ export function AdminTrilhas() {
     setTracks((t as Track[]) ?? [])
     setPills((p as Pill[]) ?? [])
     setTrackPills((tp as TrackPill[]) ?? [])
+    setTrackPrograms((tprog as TrackProgram[]) ?? [])
     setPrograms((prog as Program[]) ?? [])
     setCategories((cat as Category[]) ?? [])
     setSections((sec as DashboardSection[]) ?? [])
@@ -105,6 +108,14 @@ export function AdminTrilhas() {
       return trackMatches || pillMatches
     })
   }, [tracks, trackPills, pillsById, search, trackFilter, categoryFilter, statusFilter])
+
+  function programNamesFor(trackId: string): string {
+    const names = trackPrograms
+      .filter((tp) => tp.track_id === trackId)
+      .map((tp) => programs.find((p) => p.id === tp.program_id)?.name)
+      .filter((n): n is string => Boolean(n))
+    return names.length > 0 ? names.join(', ') : ''
+  }
 
   function pillsFor(trackId: string): Pill[] {
     const q = search.trim().toLowerCase()
@@ -241,8 +252,8 @@ export function AdminTrilhas() {
                 )}
               </div>
               <p className="mt-1 text-xs text-ink-soft">
-                {track.program_id
-                  ? `${programs.find((p) => p.id === track.program_id)?.name} · ${track.diagnostic_profile ?? 'sem perfil'}`
+                {programNamesFor(track.id)
+                  ? `${programNamesFor(track.id)} · ${track.diagnostic_profile ?? 'sem perfil'}`
                   : 'Programa/perfil não definidos'}
                 {track.carga_horaria_total != null && <> · {formatCargaHoraria(track.carga_horaria_total)}</>}
                 {track.certificate_enabled && <> · 🎓 certificado</>}

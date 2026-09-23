@@ -69,12 +69,16 @@ create table tracks (
   description text,
   icon text,
   primary_color text,
-  -- Nulos até o curso passar pela etapa de vínculo a programa/perfil (spec:
-  -- criação de curso não deve obrigar programa/perfil de cara — isso é
-  -- preenchido depois, numa etapa separada). Enquanto nulo, o curso não
-  -- entra em nenhum match de trilha recomendada nem de Biblioteca por
-  -- perfil — só fica disponível pra quem o admin adicionar manualmente.
-  program_id text references programs(id) on delete cascade,
+  -- Perfil ainda é 1:1 (o quiz do /estande recomenda no máximo 1 trilha
+  -- por combinação programa×perfil — spec confirmada: se o admin cadastrar
+  -- por engano mais de uma trilha publicada pro mesmo par, a busca da
+  -- recomendação pega a mais recente, não é um erro tratado no schema).
+  -- Nulo até o curso passar pela etapa de vínculo a programa/perfil —
+  -- enquanto nulo, o curso não entra em nenhum match de trilha recomendada
+  -- nem de Biblioteca por perfil, só fica disponível pra quem o admin
+  -- adicionar manualmente. Programas (plural, ver track_programs abaixo) e
+  -- competências (ver track_skill_categories) são N:N — um curso pode
+  -- servir vários programas e sugerir em várias competências do PDI.
   diagnostic_profile diagnostic_profile,
   -- Curso metadata (spec: página admin de cursos).
   objetivo_geral text,
@@ -194,12 +198,25 @@ create table categories (
 alter table tracks add column category_id uuid references categories(id) on delete set null;
 create index on tracks (category_id);
 
--- Competência do PDI que este curso desenvolve (spec: Meu PDI sugerir
--- cursos ao clicar numa competência "0/4") — nulo até o admin escolher
--- uma, e só faz sentido depois de escolher o programa do curso, já que
--- skill_categories é escopado por program_id.
-alter table tracks add column skill_category_id uuid references skill_categories(id) on delete set null;
-create index on tracks (skill_category_id);
+-- Programas que este curso serve (spec: um curso pode pertencer a vários
+-- programas, não só 1) — substitui a antiga coluna tracks.program_id.
+create table track_programs (
+  track_id uuid not null references tracks(id) on delete cascade,
+  program_id text not null references programs(id) on delete cascade,
+  primary key (track_id, program_id)
+);
+create index on track_programs (program_id);
+
+-- Competências do PDI que este curso desenvolve (spec: Meu PDI sugerir
+-- cursos ao clicar numa competência "0/4") — um curso pode sugerir em
+-- várias competências, não só 1; substitui a antiga coluna
+-- tracks.skill_category_id.
+create table track_skill_categories (
+  track_id uuid not null references tracks(id) on delete cascade,
+  skill_category_id uuid not null references skill_categories(id) on delete cascade,
+  primary key (track_id, skill_category_id)
+);
+create index on track_skill_categories (skill_category_id);
 
 create table pills (
   id uuid primary key default gen_random_uuid(),
@@ -736,7 +753,7 @@ grant select on app_settings to anon, authenticated;
 -- INDEXES
 -- ============================================================
 create index on skill_categories (program_id);
-create index on tracks (program_id, diagnostic_profile);
+create index on tracks (diagnostic_profile);
 create index on pills (track_id);
 create index on pills (category_id);
 create index on pill_favorites (user_id);
@@ -876,6 +893,8 @@ alter table pdi_plan_items enable row level security;
 alter table curriculum_grid enable row level security;
 alter table scorm_library enable row level security;
 alter table track_pills enable row level security;
+alter table track_programs enable row level security;
+alter table track_skill_categories enable row level security;
 alter table social_posts enable row level security;
 alter table social_post_media enable row level security;
 alter table social_likes enable row level security;
@@ -920,6 +939,8 @@ create policy "catalog readable by all" on reaction_questions for select using (
 create policy "catalog readable by all" on curriculum_grid for select using (true);
 create policy "catalog readable by all" on scorm_library for select using (true);
 create policy "catalog readable by all" on track_pills for select using (true);
+create policy "catalog readable by all" on track_programs for select using (true);
+create policy "catalog readable by all" on track_skill_categories for select using (true);
 
 create policy "admin manages catalog" on programs for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
@@ -963,6 +984,10 @@ $$;
 
 grant execute on function public.increment_pill_access_count(uuid) to authenticated;
 create policy "admin manages track_pills" on track_pills for all
+  using (current_role_is('admin')) with check (current_role_is('admin'));
+create policy "admin manages track_programs" on track_programs for all
+  using (current_role_is('admin')) with check (current_role_is('admin'));
+create policy "admin manages track_skill_categories" on track_skill_categories for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
 create policy "admin manages quizzes" on quizzes for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
@@ -1392,7 +1417,7 @@ select id, 'Gestão do Tempo e Autogestão', 'comportamental'::skill_type from p
 
 -- One example track per program x profile combination (Admin can add the
 -- remaining ones later — not all 12 combinations need to exist).
-insert into tracks (title, description, program_id, diagnostic_profile)
+insert into tracks (title, description, diagnostic_profile)
 select
   p.name || ' — ' || case dp
     when 'autogestao' then 'Autogestão & Equilíbrio'
@@ -1400,10 +1425,24 @@ select
     when 'lideranca' then 'Liderança & Mercado'
   end,
   'Trilha inicial gerada a partir do quiz PDI Express.',
-  p.id,
   dp::diagnostic_profile
 from programs p
 cross join (values ('autogestao'), ('tech_ia'), ('lideranca')) as profiles_seed(dp);
+
+-- Vincula cada trilha semente ao programa de origem (uma trilha por
+-- programa x perfil ainda, mas agora via tabela de junção — o admin
+-- pode adicionar mais programas depois).
+insert into track_programs (track_id, program_id)
+select t.id, p.id
+from tracks t
+join programs p on t.title = p.name || ' — ' || case t.diagnostic_profile
+  when 'autogestao' then 'Autogestão & Equilíbrio'
+  when 'tech_ia' then 'Tech & IA'
+  when 'lideranca' then 'Liderança & Mercado'
+end
+where not exists (
+  select 1 from track_programs tp where tp.track_id = t.id and tp.program_id = p.id
+);
 
 -- Vincula cada uma dessas 12 trilhas semente à competência do PDI
 -- correspondente ao seu perfil diagnóstico (spec: Meu PDI sugerir cursos
@@ -1412,15 +1451,19 @@ cross join (values ('autogestao'), ('tech_ia'), ('lideranca')) as profiles_seed(
 -- "Análise de Dados e Tecnologia", liderança → "Comunicação e
 -- Liderança". "Ética e Responsabilidade Socioambiental" fica sem trilha
 -- padrão — não há um perfil do quiz que mapeie pra ela.
-update tracks set skill_category_id = sc.id
-from skill_categories sc
-where sc.program_id = tracks.program_id
-  and sc.name = case tracks.diagnostic_profile
+insert into track_skill_categories (track_id, skill_category_id)
+select t.id, sc.id
+from tracks t
+join track_programs tp on tp.track_id = t.id
+join skill_categories sc on sc.program_id = tp.program_id
+  and sc.name = case t.diagnostic_profile
     when 'autogestao' then 'Gestão do Tempo e Autogestão'
     when 'tech_ia' then 'Análise de Dados e Tecnologia'
     when 'lideranca' then 'Comunicação e Liderança'
   end
-  and tracks.skill_category_id is null;
+where not exists (
+  select 1 from track_skill_categories tsc where tsc.track_id = t.id and tsc.skill_category_id = sc.id
+);
 
 -- ============================================================
 -- SEED DATA — Biblioteca de cursos oficiais (spec item 1)
@@ -1430,14 +1473,21 @@ where sc.program_id = tracks.program_id
 -- /admin/trilhas. Ficam todos numa trilha catálogo dedicada para não
 -- forçar um encaixe arbitrário em programa/perfil; o admin pode
 -- reorganizar depois.
-insert into tracks (title, description, program_id, diagnostic_profile, is_catalog)
+insert into tracks (title, description, diagnostic_profile, is_catalog)
 values (
   'Biblioteca de Cursos',
   'Catálogo geral de cursos oficiais — organize por trilha específica conforme necessário.',
-  'administracao',
   'autogestao',
   true
 );
+
+insert into track_programs (track_id, program_id)
+select t.id, 'administracao'
+from tracks t
+where t.title = 'Biblioteca de Cursos'
+  and not exists (
+    select 1 from track_programs tp where tp.track_id = t.id and tp.program_id = 'administracao'
+  );
 
 insert into pills (track_id, title, axis, description, duration, content_type, content_url)
 select t.id, v.title, v.axis,
