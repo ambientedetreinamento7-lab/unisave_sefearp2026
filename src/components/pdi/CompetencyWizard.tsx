@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   addFreeTextItemToCompetency,
-  addPillToCompetency,
-  getCatalogPillsBySkillCategory,
+  addTrackToCompetency,
   getCompetencyPlanItems,
   getTrackWithPills,
+  getTracksBySkillCategory,
   getUserProgressMap,
   setItemStatus,
   setItemTargetDate,
@@ -13,7 +13,7 @@ import {
 } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { ProgressBar } from '../ProgressBar'
-import type { PdiItemStatus, PdiJornadaBucket, PdiPlanItem, Pill, SkillCategory, SkillRating } from '../../types/database'
+import type { PdiItemStatus, PdiJornadaBucket, PdiPlanItem, SkillCategory, SkillRating, Track } from '../../types/database'
 
 const TOTAL_STEPS = 5
 const STEP_LABELS = ['Competência', 'Autoavaliação', 'Objetivo', 'Preenchimento', 'Acompanhamento']
@@ -125,8 +125,8 @@ export function CompetencyWizard({
   const [firstPillByTrack, setFirstPillByTrack] = useState<Record<string, string>>({})
   const [loadingItems, setLoadingItems] = useState(true)
   const [newTaskText, setNewTaskText] = useState<Record<PdiJornadaBucket, string>>({ pratica: '', mentoria: '', formacao: '' })
-  const [suggested, setSuggested] = useState<Pill[] | null>(null)
-  const [addingPillId, setAddingPillId] = useState<string | null>(null)
+  const [suggested, setSuggested] = useState<Track[] | null>(null)
+  const [addingTrackId, setAddingTrackId] = useState<string | null>(null)
 
   async function loadItems() {
     setLoadingItems(true)
@@ -166,7 +166,7 @@ export function CompetencyWizard({
 
   useEffect(() => {
     if (step !== 3 || suggested !== null) return
-    getCatalogPillsBySkillCategory(category.id).then(setSuggested)
+    getTracksBySkillCategory(category.id).then(setSuggested)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
 
@@ -201,12 +201,12 @@ export function CompetencyWizard({
     onSaved()
   }
 
-  async function handleAddPill(pillId: string) {
-    setAddingPillId(pillId)
-    await addPillToCompetency(planId, category.id, pillId)
+  async function handleAddTrack(trackId: string) {
+    setAddingTrackId(trackId)
+    await addTrackToCompetency(planId, category.id, trackId)
     await loadItems()
     onSaved()
-    setAddingPillId(null)
+    setAddingTrackId(null)
   }
 
   const grouped = useMemo(() => {
@@ -215,9 +215,9 @@ export function CompetencyWizard({
     return g
   }, [items])
 
-  const addedPillIds = useMemo(() => {
+  const addedTrackIds = useMemo(() => {
     const set = new Set<string>()
-    for (const i of items) if (i.item_type === 'pill' && i.ref_id) set.add(i.ref_id)
+    for (const i of items) if (i.item_type === 'trilha' && i.ref_id) set.add(i.ref_id)
     return set
   }, [items])
 
@@ -412,24 +412,24 @@ export function CompetencyWizard({
 
                   <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-soft">Cursos sugeridos</p>
                   {suggested === null && <p className="mt-1 text-xs text-ink-soft">Buscando cursos…</p>}
-                  {suggested !== null && suggested.filter((p) => !addedPillIds.has(p.id)).length === 0 && (
+                  {suggested !== null && suggested.filter((t) => !addedTrackIds.has(t.id)).length === 0 && (
                     <p className="mt-1 text-xs text-ink-soft">Nenhum curso do catálogo vinculado a esta competência.</p>
                   )}
                   <div className="mt-1 space-y-2">
                     {(suggested ?? [])
-                      .filter((p) => !addedPillIds.has(p.id))
-                      .map((pill) => (
-                        <div key={pill.id} className="flex items-center gap-3 rounded-lg bg-bg p-2">
-                          {pill.thumbnail_url && (
-                            <img src={pill.thumbnail_url} alt="" className="h-10 w-16 shrink-0 rounded object-cover" />
+                      .filter((t) => !addedTrackIds.has(t.id))
+                      .map((track) => (
+                        <div key={track.id} className="flex items-center gap-3 rounded-lg bg-bg p-2">
+                          {track.thumbnail_url && (
+                            <img src={track.thumbnail_url} alt="" className="h-10 w-16 shrink-0 rounded object-cover" />
                           )}
-                          <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{pill.title}</span>
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{track.title}</span>
                           <button
-                            onClick={() => handleAddPill(pill.id)}
-                            disabled={addingPillId === pill.id}
+                            onClick={() => handleAddTrack(track.id)}
+                            disabled={addingTrackId === track.id}
                             className="shrink-0 rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-dark disabled:opacity-60"
                           >
-                            {addingPillId === pill.id ? 'Adicionando…' : '+ Adicionar ao PDI'}
+                            {addingTrackId === track.id ? 'Adicionando…' : '+ Adicionar ao PDI'}
                           </button>
                         </div>
                       ))}
