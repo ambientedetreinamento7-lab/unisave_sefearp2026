@@ -1,3 +1,11 @@
+/** auth.users guarda o e-mail sempre em minúsculas (GoTrue normaliza) —
+ * sem aplicar o mesmo aqui antes de mandar pra qualquer RPC/chamada de
+ * auth, "Ana@x.com" e "ana@x.com" viram duas contas/leads diferentes em
+ * vez de uma só (spec: mesmo e-mail nunca pode virar mais de uma conta). */
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase()
+}
+
 /** Storage keys do Supabase (S3-compatible) rejeitam espaço, acento e
  * outros caracteres fora de [a-zA-Z0-9._-] com "Invalid key" — sanitiza o
  * nome original do arquivo antes de compor o path de upload. */

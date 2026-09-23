@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { HeroBrandBar } from '../../components/HeroBrandBar'
 import { usePlatformSettings } from '../../context/PlatformSettingsContext'
+import { normalizeEmail } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 
 export function RecuperarSenha() {
@@ -32,7 +33,7 @@ export function RecuperarSenha() {
     setError('')
 
     const { error: rpcError } = await supabase.rpc('reset_password_with_birth_date', {
-      p_email: email,
+      p_email: normalizeEmail(email),
       p_birth_date: birthDate,
       p_new_password: password,
     })
@@ -106,50 +107,65 @@ export function RecuperarSenha() {
             confirmação. Esse caminho só funciona se você já preencheu sua data de nascimento em Meu Perfil.
           </p>
 
-          <input
-            className="mt-5 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
-            placeholder="E-mail"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-
-          <label className="mt-3 block text-xs font-semibold text-ink-soft">Data de nascimento</label>
-          <input
-            className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
-            type="date"
-            value={birthDate}
-            onChange={(e) => setBirthDate(e.target.value)}
-          />
-
-          <label className="mt-3 block text-xs font-semibold text-ink-soft">Nova senha</label>
-          <input
-            className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
-            placeholder="Nova senha"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-
-          <label className="mt-3 block text-xs font-semibold text-ink-soft">Confirmar nova senha</label>
-          <input
-            className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
-            placeholder="Confirmar nova senha"
-            type="password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && submit()}
-          />
-
-          {error && <p className="mt-3 text-sm text-brand-red">{error}</p>}
-
-          <button
-            onClick={submit}
-            disabled={saving || !email || !birthDate || !password || !confirm}
-            className="mt-5 w-full rounded-xl bg-brand-red py-3 font-bold text-white transition hover:bg-brand-red-dark disabled:opacity-60"
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              submit()
+            }}
           >
-            {saving ? 'Verificando…' : 'Trocar senha'}
-          </button>
+            <input
+              className="mt-5 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
+              placeholder="E-mail"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+
+            <label className="mt-3 block text-xs font-semibold text-ink-soft">Data de nascimento</label>
+            <input
+              className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
+              type="date"
+              value={birthDate}
+              onChange={(e) => setBirthDate(e.target.value)}
+            />
+
+            <label className="mt-3 block text-xs font-semibold text-ink-soft">Nova senha</label>
+            <input
+              className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
+              placeholder="Nova senha"
+              type="password"
+              autoComplete="new-password"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+
+            <label className="mt-3 block text-xs font-semibold text-ink-soft">Confirmar nova senha</label>
+            <input
+              className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
+              placeholder="Confirmar nova senha"
+              type="password"
+              autoComplete="new-password"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+            />
+
+            {error && <p className="mt-3 text-sm text-brand-red">{error}</p>}
+
+            <button
+              type="submit"
+              disabled={saving || !email || !birthDate || !password || !confirm}
+              className="mt-5 w-full rounded-xl bg-brand-red py-3 font-bold text-white transition hover:bg-brand-red-dark disabled:opacity-60"
+            >
+              {saving ? 'Verificando…' : 'Trocar senha'}
+            </button>
+          </form>
 
           <p className="mt-4 text-center text-sm text-ink-soft">
             Prefere usar o e-mail?{' '}

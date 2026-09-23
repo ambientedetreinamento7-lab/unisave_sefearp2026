@@ -13,9 +13,7 @@ create type pill_status as enum ('not_started', 'in_progress', 'completed');
 create type skill_type as enum ('tecnica', 'comportamental', 'etica');
 create type content_type as enum ('video', 'iframe', 'scorm', 'reaction');
 create type pdi_plan_type as enum ('trilha_evento', 'plano_pessoal', 'plano_institucional');
--- 'tarefa_livre' (Meu PDI — Painel 70/20/10) é um item sem curso/trilha por
--- trás: texto livre digitado pelo aluno (ver pdi_plan_items.descricao).
-create type pdi_item_type as enum ('skill_category', 'pill', 'trilha', 'tarefa_livre');
+create type pdi_item_type as enum ('skill_category', 'pill', 'trilha');
 create type pdi_item_status as enum ('nao_iniciado', 'em_andamento', 'concluido');
 -- Faixa de desempenho (spec: metodologia de PDI 70-20-10), recalculada no
 -- client (src/lib/pdiTier.ts) sempre que o Balanço de Competências muda.
@@ -57,12 +55,7 @@ create table skill_categories (
   id uuid primary key default gen_random_uuid(),
   program_id text not null references programs(id) on delete cascade,
   name text not null,
-  type skill_type not null,
-  -- Meu PDI — taxonomia de 10 soft skills (2026): categorias antigas
-  -- ficam com ativo=false em vez de apagadas — alunos que já têm
-  -- skill_ratings/pdi_plan_items apontando pra elas não perdem histórico;
-  -- só param de aparecer nas telas de seleção (onboarding, novo plano).
-  ativo boolean not null default true
+  type skill_type not null
 );
 
 create table tracks (
@@ -430,9 +423,6 @@ create table skill_ratings (
   self_rating numeric,
   moderator_rating numeric,
   rated_at timestamptz not null default now(),
-  -- Objetivo em texto livre do aluno pra essa competência (Meu PDI —
-  -- Painel 70/20/10, passo 3 do wizard de competência).
-  objetivo text,
   unique (user_id, skill_category_id)
 );
 
@@ -445,44 +435,21 @@ create table pdi_plans (
   progress_pct numeric not null default 0,
   created_at timestamptz not null default now(),
   -- Faixa de desempenho atual do plano (spec: metodologia de PDI 70-20-10).
-  tier pdi_tier,
-  -- Até 3 competências (skill_categories.id) escolhidas pelo aluno pra
-  -- este plano — define quais cards aparecem no Painel 70/20/10. O
-  -- primeiro plano nasce com as competências escolhidas no PDI Express
-  -- ("maior desafio"); qualquer plano novo repete essa escolha.
-  competency_ids uuid[] not null default '{}',
-  constraint pdi_plans_competency_ids_max3 check (array_length(competency_ids, 1) is null or array_length(competency_ids, 1) <= 3)
+  tier pdi_tier
 );
 
 create table pdi_plan_items (
   id uuid primary key default gen_random_uuid(),
   plan_id uuid not null references pdi_plans(id) on delete cascade,
   item_type pdi_item_type not null,
-  -- Nulo só quando item_type='tarefa_livre' (item de texto livre, sem
-  -- curso/trilha/categoria por trás) — ver check abaixo.
-  ref_id uuid,
+  ref_id uuid not null,
   progress_current int not null default 0,
   progress_total int not null default 4,
   status pdi_item_status not null default 'nao_iniciado',
   order_index int not null default 0,
   -- Classificação 70-20-10 (spec: metodologia de PDI 70-20-10).
-  jornada_bucket pdi_jornada_bucket,
-  -- Competência de origem do item (Meu PDI — Painel 70/20/10) — liga o
-  -- item de volta à competência que o sugeriu, pra poder agrupar/computar
-  -- % Preenchimento e % Evolução por competência no grid.
-  skill_category_id uuid references skill_categories(id) on delete cascade,
-  -- Texto livre do item (bucket prática/troca de conhecimento, ou "outra
-  -- tarefa" no bucket de aprendizagem formal) — item_type='tarefa_livre'.
-  descricao text,
-  -- Data em que o aluno pretende concluir o item (qualquer bucket/tipo) —
-  -- só uma meta pessoal, não afeta o cálculo de Preenchimento/Evolução.
-  target_date date,
-  constraint pdi_plan_items_ref_id_check check (
-    (item_type = 'tarefa_livre' and ref_id is null)
-    or (item_type <> 'tarefa_livre' and ref_id is not null)
-  )
+  jornada_bucket pdi_jornada_bucket
 );
-create index on pdi_plan_items (skill_category_id);
 
 -- Rede social interna — Fase A (feed base: texto/imagem/carrossel, curtir,
 -- comentar, duas abas, moderação) + Fase B (enquete). Vídeo (Vimeo) e
@@ -790,13 +757,19 @@ create index on profiles (total_points desc);
 -- auth.users row (same email), reassign the profile's id to the auth user
 -- id so `auth.uid() = profiles.id` holds for all future RLS checks. The
 -- `on update cascade` FKs above carry every progress/plan row along.
+-- Compara por lower(email): auth.users guarda o e-mail sempre em
+-- minúsculas (GoTrue normaliza), mas o lead do /estande podia ter sido
+-- capturado com a caixa que o visitante digitou — sem o lower() nos dois
+-- lados, esse casamento falhava silenciosamente e cada cadastro deixava
+-- pra trás um profiles órfão (claimed=false) com todos os dados do quiz,
+-- enquanto a conta de verdade nascia com um profiles novo e vazio.
 create or replace function sync_profile_with_auth()
 returns trigger language plpgsql security definer
 set search_path = public
 as $$
 begin
-  update profiles set id = new.id, claimed = true
-  where email = new.email and id <> new.id;
+  update profiles set id = new.id, claimed = true, email = new.email
+  where lower(email) = lower(new.email) and id <> new.id;
 
   insert into profiles (id, name, email, role, claimed)
   values (new.id, coalesce(new.raw_user_meta_data ->> 'name', split_part(new.email, '@', 1)), new.email, 'aluno', true)
@@ -809,6 +782,23 @@ $$;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function sync_profile_with_auth();
+
+-- profiles.email já é "unique" (case-sensitive) — isso não pega
+-- "Ana@x.com" vs "ana@x.com" como duplicata. O cliente e as RPCs acima já
+-- normalizam pra minúsculas antes de gravar/comparar, então isso evita
+-- NOVAS duplicatas de caixa. Pra fechar de vez com uma trava no banco (e
+-- pegar linhas antigas que já divergem), rode manualmente, NESTA ORDEM,
+-- só depois de checar que a primeira query abaixo não retorna nada (ou
+-- decidir manualmente o que fazer com o que ela retornar):
+--
+--   -- 1. Ver se já existem duplicatas de caixa hoje:
+--   select lower(email) as email_lower, array_agg(id) as profile_ids, array_agg(claimed) as claimed_flags
+--   from profiles group by lower(email) having count(*) > 1;
+--
+--   -- 2. Só depois de resolver manualmente o que a query acima retornar
+--   -- (normalmente: apagar o lead órfão claimed=false e manter o
+--   -- claimed=true), criar a trava definitiva:
+--   create unique index profiles_email_lower_key on profiles (lower(email));
 
 -- Exclusão direta em auth.users (ex.: pela aba Authentication do
 -- Supabase, sem passar pelo admin_delete_user abaixo) não tinha efeito
@@ -999,18 +989,19 @@ create or replace function public.capture_estande_lead(
   p_curriculum_period text,
   p_diagnostic_profile diagnostic_profile,
   p_selected_track_id uuid,
-  p_birth_date date default null,
-  -- Meu PDI — Painel 70/20/10: até 3 skill_categories.id escolhidas no
-  -- passo "maior desafio", pra já nascer o primeiro plano com esses cards.
-  p_desafio_skill_ids uuid[] default '{}'
+  p_birth_date date default null
 ) returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  v_profile_id uuid;
 begin
+  -- Normaliza pra minúsculas antes de gravar — o cliente já manda
+  -- normalizado, mas isso garante que qualquer chamada direta à RPC
+  -- também não crie um lead duplicado por diferença de caixa (spec:
+  -- mesmo e-mail nunca pode virar mais de uma conta).
+  p_email := lower(trim(p_email));
+
   insert into profiles (
     name, email, phone_whatsapp, program_id, curriculum_period,
     diagnostic_profile, selected_track_id, role, birth_date
@@ -1027,21 +1018,12 @@ begin
     diagnostic_profile = excluded.diagnostic_profile,
     selected_track_id = excluded.selected_track_id,
     birth_date = coalesce(excluded.birth_date, profiles.birth_date)
-  where profiles.claimed = false
-  returning id into v_profile_id;
-
-  -- Cria o primeiro plano só se o aluno ainda não tiver nenhum — reenvio
-  -- idempotente do mesmo quiz (withRetry) não deve duplicar o plano.
-  if v_profile_id is not null and array_length(p_desafio_skill_ids, 1) > 0 then
-    insert into pdi_plans (user_id, title, type, competency_ids)
-    select v_profile_id, 'Meu primeiro plano', 'plano_pessoal', p_desafio_skill_ids
-    where not exists (select 1 from pdi_plans where user_id = v_profile_id);
-  end if;
+  where profiles.claimed = false;
 end;
 $$;
 
 grant execute on function public.capture_estande_lead(
-  text, text, text, text, text, diagnostic_profile, uuid, date, uuid[]
+  text, text, text, text, text, diagnostic_profile, uuid, date
 ) to anon;
 
 -- Recuperação de senha sem e-mail: confere e-mail + data de nascimento
@@ -1063,7 +1045,7 @@ declare
   v_profile profiles%rowtype;
 begin
   select * into v_profile from profiles
-  where email = p_email and claimed = true
+  where lower(email) = lower(trim(p_email)) and claimed = true
   for update;
 
   if not found then
@@ -1377,42 +1359,15 @@ insert into programs (id, name, mission, framework_reference, color_accent) valu
   ('economicas', 'Ciências Econômicas', 'Formar analistas capazes de interpretar cenários e tomar decisões orientadas a dados.', 'PPP Ciências Econômicas', '#1A3B6E'),
   ('financas', 'Finanças', 'Formar especialistas em análise, planejamento e gestão de recursos financeiros.', 'PPP Finanças', '#1A3B6E');
 
--- Taxonomia antiga por PPP — mantida (ativo=false) só por causa de
--- skill_ratings/pdi_plan_items de alunos reais que já apontam pra ela;
--- não aparece mais em nenhuma tela de seleção nova.
-insert into skill_categories (program_id, name, type, ativo)
-select id, 'Ética e Responsabilidade Socioambiental', 'etica'::skill_type, false from programs
-union all
-select id, 'Comunicação e Liderança', 'comportamental'::skill_type, false from programs
-union all
-select id, 'Análise de Dados e Tecnologia', 'tecnica'::skill_type, false from programs
-union all
-select id, 'Gestão do Tempo e Autogestão', 'comportamental'::skill_type, false from programs;
-
--- Meu PDI — taxonomia de 10 soft skills (2026), compartilhada por todos
--- os cursos: mesmas 10 linhas semeadas uma vez por curso (reaproveita o
--- casamento por nome já usado em getTracksBySkillCategory, em vez de
--- mudar program_id pra nullable) — spec: PDI Express, "maior desafio".
+-- Example skill taxonomy per program (adjust with the real PPP taxonomy).
 insert into skill_categories (program_id, name, type)
-select id, 'Gestão de Tempo', 'comportamental'::skill_type from programs
+select id, 'Ética e Responsabilidade Socioambiental', 'etica'::skill_type from programs
 union all
-select id, 'Inteligência Emocional', 'comportamental'::skill_type from programs
+select id, 'Comunicação e Liderança', 'comportamental'::skill_type from programs
 union all
-select id, 'Lógica e Dados', 'tecnica'::skill_type from programs
+select id, 'Análise de Dados e Tecnologia', 'tecnica'::skill_type from programs
 union all
-select id, 'IA e Inovação', 'tecnica'::skill_type from programs
-union all
-select id, 'Comunicação', 'comportamental'::skill_type from programs
-union all
-select id, 'Liderança', 'comportamental'::skill_type from programs
-union all
-select id, 'Trabalho em Equipe e Colaboração', 'comportamental'::skill_type from programs
-union all
-select id, 'Atendimento ao Cliente', 'comportamental'::skill_type from programs
-union all
-select id, 'Resolução de Problemas', 'tecnica'::skill_type from programs
-union all
-select id, 'Adaptabilidade e Gestão da Mudança', 'comportamental'::skill_type from programs;
+select id, 'Gestão do Tempo e Autogestão', 'comportamental'::skill_type from programs;
 
 -- One example track per program x profile combination (Admin can add the
 -- remaining ones later — not all 12 combinations need to exist).

@@ -35,18 +35,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function loadProfile(userId: string) {
     const seq = ++loadSeq.current
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
-    if (seq !== loadSeq.current) return
-    setProfile((data as Profile) ?? null)
+    try {
+      const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
+      if (seq !== loadSeq.current) return
+      setProfile((data as Profile) ?? null)
+    } catch {
+      // Falha de rede ao buscar o profile (ex.: app reaberto ainda sem
+      // conexão) não pode deixar "loading" preso pra sempre — melhor
+      // seguir com profile null (RouteGuard manda pro /entrar) do que
+      // travar a tela em branco/preta sem reação nenhuma.
+      if (seq === loadSeq.current) setProfile(null)
+    }
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data }) => {
-      setSession(data.session)
-      sessionUserIdRef.current = data.session?.user.id ?? null
-      if (data.session) await loadProfile(data.session.user.id)
-      setLoading(false)
-    })
+    supabase.auth
+      .getSession()
+      .then(async ({ data }) => {
+        setSession(data.session)
+        sessionUserIdRef.current = data.session?.user.id ?? null
+        if (data.session) await loadProfile(data.session.user.id)
+      })
+      .catch(() => {
+        setSession(null)
+        sessionUserIdRef.current = null
+      })
+      .finally(() => setLoading(false))
 
     // "loading" precisa cobrir qualquer troca de sessão, não só a carga
     // inicial do app — senão RouteGuard renderiza a rota de destino com

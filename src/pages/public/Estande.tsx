@@ -6,6 +6,7 @@ import { Icon } from '../../components/Icon'
 import { usePlatformSettings } from '../../context/PlatformSettingsContext'
 import { MAX_DESAFIO_SKILLS, PROGRAMS, QUIZ_QUESTIONS, computeProfile, type ProgramSlug } from '../../lib/quiz'
 import { getSkillCategoryIdsByNames } from '../../lib/api'
+import { normalizeEmail } from '../../lib/format'
 import { isRateLimitError, withRetry } from '../../lib/retry'
 import { getSignupSettings } from '../../lib/settings'
 import { supabase } from '../../lib/supabase'
@@ -26,7 +27,7 @@ export function Estande() {
   const [objetivo, setObjetivo] = useState('')
 
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
+  const [rawEmail, setRawEmail] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
   const [birthDate, setBirthDate] = useState('')
   const [termsAccepted, setTermsAccepted] = useState(false)
@@ -65,7 +66,7 @@ export function Estande() {
   }
 
   async function submit() {
-    if (!name || !email || !program) {
+    if (!name || !rawEmail || !program) {
       setError('Preencha nome, e-mail e curso antes de continuar.')
       return
     }
@@ -81,6 +82,7 @@ export function Estande() {
     setError('')
 
     try {
+      const email = normalizeEmail(rawEmail)
       const diagnostic_profile = computeProfile({ desafio, objetivo })
 
       const { data: programRow } = await supabase.from('programs').select('id').eq('id', program).maybeSingle()
@@ -268,6 +270,12 @@ export function Estande() {
 
           {step === 4 && (
             <StepBlock title="Quase lá!" subtitle="Informe seus dados para receber seu PDI e o acesso à sua trilha.">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  submit()
+                }}
+              >
               <div className="flex flex-col gap-3">
                 <input
                   className="w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
@@ -279,8 +287,9 @@ export function Estande() {
                   className="w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
                   placeholder="E-mail"
                   type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={rawEmail}
+                  onChange={(e) => setRawEmail(e.target.value)}
+                  autoComplete="email"
                 />
                 <input
                   className="w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
@@ -334,13 +343,14 @@ export function Estande() {
               )}
               {error && <p className="mt-3 text-sm text-brand-red">{error}</p>}
               <button
-                onClick={submit}
+                type="submit"
                 disabled={submitting || (signup?.requireTermsAcceptance && !termsAccepted) || (security.birthDateResetEnabled && !birthDate)}
                 className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-red py-3 font-bold text-white transition hover:bg-brand-red-dark disabled:opacity-60"
               >
                 {submitting ? 'Enviando…' : 'Gerar meu PDI'}
                 {!submitting && <Icon name="arrow-right" size={16} />}
               </button>
+              </form>
             </StepBlock>
           )}
 

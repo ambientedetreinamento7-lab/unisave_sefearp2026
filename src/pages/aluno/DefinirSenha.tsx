@@ -53,31 +53,45 @@ export function DefinirSenha() {
             link por e-mail toda vez.
           </p>
 
-          <input
-            className="mt-5 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
-            placeholder="Nova senha"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <input
-            className="mt-3 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
-            placeholder="Confirmar senha"
-            type="password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && submit()}
-          />
-
-          {error && <p className="mt-3 text-sm text-brand-red">{error}</p>}
-
-          <button
-            onClick={submit}
-            disabled={saving || !password || !confirm}
-            className="mt-5 w-full rounded-xl bg-brand-red py-3 font-bold text-white transition hover:bg-brand-red-dark disabled:opacity-60"
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              submit()
+            }}
           >
-            {saving ? 'Salvando…' : 'Salvar e continuar'}
-          </button>
+            <input
+              className="mt-5 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
+              placeholder="Nova senha"
+              type="password"
+              autoComplete="new-password"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <input
+              className="mt-3 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
+              placeholder="Confirmar senha"
+              type="password"
+              autoComplete="new-password"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+            />
+
+            {error && <p className="mt-3 text-sm text-brand-red">{error}</p>}
+
+            <button
+              type="submit"
+              disabled={saving || !password || !confirm}
+              className="mt-5 w-full rounded-xl bg-brand-red py-3 font-bold text-white transition hover:bg-brand-red-dark disabled:opacity-60"
+            >
+              {saving ? 'Salvando…' : 'Salvar e continuar'}
+            </button>
+          </form>
 
           <button onClick={signOut} className="mt-4 w-full text-center text-sm font-medium text-ink-soft hover:text-navy">
             Sair

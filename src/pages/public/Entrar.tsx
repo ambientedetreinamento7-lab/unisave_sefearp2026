@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { HeroBrandBar } from '../../components/HeroBrandBar'
 import { usePlatformSettings } from '../../context/PlatformSettingsContext'
+import { normalizeEmail } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 
 export function Entrar() {
@@ -21,7 +23,7 @@ export function Entrar() {
     setLoading(true)
     setStatus('idle')
     const { error } = await supabase.auth.signInWithOtp({
-      email,
+      email: normalizeEmail(email),
       options: { emailRedirectTo: `${window.location.origin}/dashboard` },
     })
     setLoading(false)
@@ -36,7 +38,7 @@ export function Entrar() {
   async function handlePassword() {
     setLoading(true)
     setStatus('idle')
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { error } = await supabase.auth.signInWithPassword({ email: normalizeEmail(email), password })
     setLoading(false)
     if (error) {
       setErrorMsg(error.message)
@@ -44,6 +46,13 @@ export function Entrar() {
     } else {
       window.location.href = '/dashboard'
     }
+  }
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (loading || !email) return
+    if (mode === 'magic') handleMagicLink()
+    else handlePassword()
   }
 
   return (
@@ -93,38 +102,43 @@ export function Entrar() {
             </p>
           )}
 
-          <input
-            className="mb-3 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
-            placeholder="E-mail"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !loading && email && (mode === 'magic' ? handleMagicLink() : handlePassword())}
-          />
-
-          {mode === 'senha' && (
+          <form onSubmit={handleSubmit}>
             <input
               className="mb-3 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
-              placeholder="Senha"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !loading && email && handlePassword()}
+              placeholder="E-mail"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
-          )}
 
-          {status === 'sent' && (
-            <p className="mb-3 text-sm text-success">Link mágico enviado! Confira seu e-mail.</p>
-          )}
-          {status === 'error' && <p className="mb-3 text-sm text-brand-red">{errorMsg}</p>}
+            {mode === 'senha' && (
+              <input
+                className="mb-3 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
+                placeholder="Senha"
+                type="password"
+                autoComplete="current-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            )}
 
-          <button
-            onClick={mode === 'magic' ? handleMagicLink : handlePassword}
-            disabled={loading || !email}
-            className="w-full rounded-xl bg-brand-red py-3 font-bold text-white transition hover:bg-brand-red-dark disabled:opacity-60"
-          >
-            {loading ? 'Enviando…' : mode === 'magic' ? 'Enviar link mágico' : 'Entrar'}
-          </button>
+            {status === 'sent' && (
+              <p className="mb-3 text-sm text-success">Link mágico enviado! Confira seu e-mail.</p>
+            )}
+            {status === 'error' && <p className="mb-3 text-sm text-brand-red">{errorMsg}</p>}
+
+            <button
+              type="submit"
+              disabled={loading || !email}
+              className="w-full rounded-xl bg-brand-red py-3 font-bold text-white transition hover:bg-brand-red-dark disabled:opacity-60"
+            >
+              {loading ? 'Enviando…' : mode === 'magic' ? 'Enviar link mágico' : 'Entrar'}
+            </button>
+          </form>
 
           <p className="mt-4 text-center text-sm text-ink-soft">
             Ainda não fez o quiz?{' '}

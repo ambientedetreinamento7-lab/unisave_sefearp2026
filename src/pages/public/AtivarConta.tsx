@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { HeroBrandBar } from '../../components/HeroBrandBar'
 import { useAuth } from '../../context/AuthContext'
+import { normalizeEmail } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 
 const DEFAULT_PASSWORD = 'Mudar@123'
@@ -26,6 +27,12 @@ export function AtivarConta() {
       setError('A nova senha precisa ter pelo menos 6 caracteres.')
       return
     }
+    // A senha inicial é pública (está escrita nesta própria tela) — deixar
+    // o aluno "trocar" pra ela de novo não protege a conta de ninguém.
+    if (password === DEFAULT_PASSWORD) {
+      setError('A nova senha não pode ser igual à senha inicial (Mudar@123). Escolha uma senha diferente.')
+      return
+    }
     if (password !== confirm) {
       setError('As senhas não coincidem.')
       return
@@ -33,8 +40,9 @@ export function AtivarConta() {
     setSaving(true)
     setError('')
 
+    const normalizedEmail = normalizeEmail(email)
     const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
+      email: normalizedEmail,
       password: DEFAULT_PASSWORD,
     })
     if (signInError || !signInData.session) {
@@ -76,43 +84,58 @@ export function AtivarConta() {
             senha nova para continuar.
           </p>
 
-          <label className="mt-5 block text-xs font-semibold text-ink-soft">E-mail</label>
-          <input
-            className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
-            placeholder="E-mail"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-
-          <label className="mt-3 block text-xs font-semibold text-ink-soft">Nova senha</label>
-          <input
-            className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
-            placeholder="Nova senha"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-
-          <label className="mt-3 block text-xs font-semibold text-ink-soft">Confirmar nova senha</label>
-          <input
-            className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
-            placeholder="Confirmar nova senha"
-            type="password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && submit()}
-          />
-
-          {error && <p className="mt-3 text-sm text-brand-red">{error}</p>}
-
-          <button
-            onClick={submit}
-            disabled={saving || !email || !password || !confirm}
-            className="mt-5 w-full rounded-xl bg-brand-red py-3 font-bold text-white transition hover:bg-brand-red-dark disabled:opacity-60"
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              submit()
+            }}
           >
-            {saving ? 'Ativando…' : 'Ativar conta e entrar'}
-          </button>
+            <label className="mt-5 block text-xs font-semibold text-ink-soft">E-mail</label>
+            <input
+              className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
+              placeholder="E-mail"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+
+            <label className="mt-3 block text-xs font-semibold text-ink-soft">Nova senha</label>
+            <input
+              className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
+              placeholder="Nova senha"
+              type="password"
+              autoComplete="new-password"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+
+            <label className="mt-3 block text-xs font-semibold text-ink-soft">Confirmar nova senha</label>
+            <input
+              className="mt-1 w-full rounded-xl border border-navy-light px-4 py-3 outline-none focus:border-navy"
+              placeholder="Confirmar nova senha"
+              type="password"
+              autoComplete="new-password"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+            />
+
+            {error && <p className="mt-3 text-sm text-brand-red">{error}</p>}
+
+            <button
+              type="submit"
+              disabled={saving || !email || !password || !confirm}
+              className="mt-5 w-full rounded-xl bg-brand-red py-3 font-bold text-white transition hover:bg-brand-red-dark disabled:opacity-60"
+            >
+              {saving ? 'Ativando…' : 'Ativar conta e entrar'}
+            </button>
+          </form>
         </div>
       </div>
     </div>
