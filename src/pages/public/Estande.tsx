@@ -4,7 +4,8 @@ import { BirthDateSelect } from '../../components/BirthDateSelect'
 import { HeroBrandBar } from '../../components/HeroBrandBar'
 import { Icon } from '../../components/Icon'
 import { usePlatformSettings } from '../../context/PlatformSettingsContext'
-import { PROGRAMS, QUIZ_QUESTIONS, computeProfile, type ProgramSlug } from '../../lib/quiz'
+import { MAX_DESAFIO_SKILLS, PROGRAMS, QUIZ_QUESTIONS, computeProfile, type ProgramSlug } from '../../lib/quiz'
+import { getSkillCategoryIdsByNames } from '../../lib/api'
 import { isRateLimitError, withRetry } from '../../lib/retry'
 import { getSignupSettings } from '../../lib/settings'
 import { supabase } from '../../lib/supabase'
@@ -21,7 +22,7 @@ export function Estande() {
   const [step, setStep] = useState<Step>(0)
   const [program, setProgram] = useState<ProgramSlug | ''>('')
   const [fase, setFase] = useState('')
-  const [desafio, setDesafio] = useState('')
+  const [desafio, setDesafio] = useState<string[]>([])
   const [objetivo, setObjetivo] = useState('')
 
   const [name, setName] = useState('')
@@ -36,7 +37,6 @@ export function Estande() {
     getSignupSettings().then(setSignup)
   }, [])
 
-  const answers = { fase, desafio, objetivo }
   const pct = Math.round(((step + 1) / TOTAL_STEPS) * 100)
 
   function pickProgram(slug: ProgramSlug) {
@@ -44,11 +44,24 @@ export function Estande() {
     setStep(1)
   }
 
-  function pickOption(qId: 'fase' | 'desafio' | 'objetivo', value: string) {
+  function isOptionSelected(qId: 'fase' | 'desafio' | 'objetivo', value: string): boolean {
+    if (qId === 'fase') return fase === value
+    if (qId === 'desafio') return desafio.includes(value)
+    return objetivo === value
+  }
+
+  function pickOption(qId: 'fase' | 'objetivo', value: string) {
     if (qId === 'fase') setFase(value)
-    if (qId === 'desafio') setDesafio(value)
     if (qId === 'objetivo') setObjetivo(value)
     setStep((s) => (s + 1) as Step)
+  }
+
+  function toggleDesafio(value: string) {
+    setDesafio((prev) => {
+      if (prev.includes(value)) return prev.filter((v) => v !== value)
+      if (prev.length >= MAX_DESAFIO_SKILLS) return prev
+      return [...prev, value]
+    })
   }
 
   async function submit() {
@@ -83,6 +96,14 @@ export function Estande() {
         .eq('is_catalog', false)
         .maybeSingle()
 
+      // Meu PDI — Painel 70/20/10: resolve os rótulos das até-3 soft
+      // skills escolhidas pros ids reais de skill_categories deste curso,
+      // pra já nascer o primeiro plano com esses cards.
+      const desafioLabels = desafio
+        .map((value) => QUIZ_QUESTIONS.find((q) => q.id === 'desafio')?.options.find((o) => o.value === value)?.label)
+        .filter((label): label is string => Boolean(label))
+      const desafioSkillIds = await getSkillCategoryIdsByNames(programRow?.id ?? program, desafioLabels)
+
       // A SECURITY DEFINER RPC does this insert/update server-side instead of a
       // client-side upsert: Postgres evaluates the UPDATE RLS policy even for a
       // brand-new row on INSERT ... ON CONFLICT DO UPDATE, which made the plain
@@ -100,6 +121,7 @@ export function Estande() {
           p_diagnostic_profile: diagnostic_profile,
           p_selected_track_id: trackRow?.id ?? null,
           p_birth_date: birthDate || null,
+          p_desafio_skill_ids: desafioSkillIds,
         })
         if (captureError) throw captureError
       })
@@ -211,18 +233,36 @@ export function Estande() {
 
           {step >= 1 && step <= 3 && (
             <StepBlock title={QUIZ_QUESTIONS[step - 1].question} subtitle={QUIZ_QUESTIONS[step - 1].subtitle}>
+              {QUIZ_QUESTIONS[step - 1].id === 'desafio' && (
+                <p className="mb-3 text-xs font-semibold text-ink-soft">
+                  {desafio.length} de {MAX_DESAFIO_SKILLS} selecionadas
+                </p>
+              )}
               <div className="flex flex-col gap-3">
-                {QUIZ_QUESTIONS[step - 1].options.map((opt) => (
-                  <OptionRow
-                    key={opt.value}
-                    icon={opt.icon}
-                    title={opt.label}
-                    subtitle={opt.subtitle}
-                    selected={answers[QUIZ_QUESTIONS[step - 1].id] === opt.value}
-                    onClick={() => pickOption(QUIZ_QUESTIONS[step - 1].id, opt.value)}
-                  />
-                ))}
+                {QUIZ_QUESTIONS[step - 1].options.map((opt) => {
+                  const qId = QUIZ_QUESTIONS[step - 1].id
+                  return (
+                    <OptionRow
+                      key={opt.value}
+                      icon={opt.icon}
+                      title={opt.label}
+                      subtitle={opt.subtitle}
+                      selected={isOptionSelected(qId, opt.value)}
+                      onClick={() => (qId === 'desafio' ? toggleDesafio(opt.value) : pickOption(qId, opt.value))}
+                    />
+                  )
+                })}
               </div>
+              {QUIZ_QUESTIONS[step - 1].id === 'desafio' && (
+                <button
+                  onClick={() => setStep((s) => (s + 1) as Step)}
+                  disabled={desafio.length === 0}
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-red py-3 font-bold text-white transition hover:bg-brand-red-dark disabled:opacity-40"
+                >
+                  Continuar
+                  <Icon name="arrow-right" size={16} />
+                </button>
+              )}
             </StepBlock>
           )}
 
