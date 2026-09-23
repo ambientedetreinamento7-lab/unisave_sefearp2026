@@ -382,19 +382,38 @@ export function AdminAnalytics() {
     load()
   }, [])
 
-  const npsOverall = useMemo(() => npsFromValues(npsRows.map((r) => r.value)), [npsRows])
+  const [npsCourseFilter, setNpsCourseFilter] = useState('')
+
+  const npsCourseOf = (r: NpsResponseRow) => r.trackTitle ?? r.pillTitle
+
+  const npsCourseOptions = useMemo(
+    () => Array.from(new Set(npsRows.map(npsCourseOf))).sort((a, b) => a.localeCompare(b)),
+    [npsRows],
+  )
+
+  const filteredNpsRows = useMemo(
+    () => (npsCourseFilter ? npsRows.filter((r) => npsCourseOf(r) === npsCourseFilter) : npsRows),
+    [npsRows, npsCourseFilter],
+  )
+
+  const npsOverall = useMemo(() => npsFromValues(filteredNpsRows.map((r) => r.value)), [filteredNpsRows])
+
+  const npsAverageScore = useMemo(() => {
+    if (filteredNpsRows.length === 0) return 0
+    return Math.round((filteredNpsRows.reduce((sum, r) => sum + r.value, 0) / filteredNpsRows.length) * 10) / 10
+  }, [filteredNpsRows])
 
   const npsDistribution = useMemo(() => {
     const counts = new Map<number, number>()
     for (let i = 0; i <= 10; i++) counts.set(i, 0)
-    for (const r of npsRows) counts.set(r.value, (counts.get(r.value) ?? 0) + 1)
+    for (const r of filteredNpsRows) counts.set(r.value, (counts.get(r.value) ?? 0) + 1)
     return Array.from(counts.entries()).map(([nota, respostas]) => ({ nota: String(nota), respostas }))
-  }, [npsRows])
+  }, [filteredNpsRows])
 
   const npsByCourse = useMemo(() => {
     const grouped = new Map<string, number[]>()
-    for (const r of npsRows) {
-      const key = r.trackTitle ?? r.pillTitle
+    for (const r of filteredNpsRows) {
+      const key = npsCourseOf(r)
       const arr = grouped.get(key) ?? []
       arr.push(r.value)
       grouped.set(key, arr)
@@ -402,11 +421,11 @@ export function AdminAnalytics() {
     return Array.from(grouped.entries())
       .map(([course, values]) => ({ course, ...npsFromValues(values) }))
       .sort((a, b) => b.total - a.total)
-  }, [npsRows])
+  }, [filteredNpsRows])
 
   const npsByMonth = useMemo(() => {
     const grouped = new Map<string, number[]>()
-    for (const r of npsRows) {
+    for (const r of filteredNpsRows) {
       const key = r.submittedAt.slice(0, 7)
       const arr = grouped.get(key) ?? []
       arr.push(r.value)
@@ -415,7 +434,29 @@ export function AdminAnalytics() {
     return Array.from(grouped.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([mes, values]) => ({ mes, ...npsFromValues(values) }))
-  }, [npsRows])
+  }, [filteredNpsRows])
+
+  const npsStudentRows = useMemo(
+    () =>
+      [...filteredNpsRows].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)),
+    [filteredNpsRows],
+  )
+
+  const npsDetailedCsv = useMemo(() => {
+    const questionTexts = Array.from(new Set(filteredNpsRows.flatMap((r) => r.otherAnswers.map((a) => a.questionText))))
+    const headers = ['Aluno', 'Curso', 'Nota NPS', 'Data', ...questionTexts]
+    const rows = filteredNpsRows.map((r) => {
+      const answerByQuestion = new Map(r.otherAnswers.map((a) => [a.questionText, a.valueNumber ?? a.valueText ?? '']))
+      return [
+        r.userName,
+        npsCourseOf(r),
+        r.value,
+        new Date(r.submittedAt).toLocaleDateString('pt-BR'),
+        ...questionTexts.map((q) => answerByQuestion.get(q) ?? ''),
+      ]
+    })
+    return { headers, rows }
+  }, [filteredNpsRows])
 
   function toggleStudentSort(field: StudentSortField) {
     if (field === studentSortField) {
@@ -654,8 +695,25 @@ export function AdminAnalytics() {
             </div>
           ) : (
             <>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="flex items-center justify-between gap-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-ink">
+                  Curso
+                  <select
+                    className="rounded-lg border border-navy-light px-3 py-2 text-sm"
+                    value={npsCourseFilter}
+                    onChange={(e) => setNpsCourseFilter(e.target.value)}
+                  >
+                    <option value="">Todos os cursos</option>
+                    {npsCourseOptions.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <StatCard label="NPS geral" value={npsOverall.score} />
+                <StatCard label="Nota média (0-10)" value={npsAverageScore} />
                 <StatCard
                   label="Promotores"
                   value={`${npsOverall.total ? Math.round((npsOverall.promoters / npsOverall.total) * 100) : 0}%`}
@@ -749,6 +807,63 @@ export function AdminAnalytics() {
                         <tr><td colSpan={6} className="py-3 text-ink-soft">Sem dados ainda.</td></tr>
                       )}
                     </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="card p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="font-bold text-ink">Notas por aluno</h2>
+                    <p className="mt-1 text-xs text-ink-soft">
+                      Nota média{npsCourseFilter ? ` em "${npsCourseFilter}"` : ' (todos os cursos)'}:{' '}
+                      <span className="font-semibold text-navy">{npsAverageScore}</span> / 10
+                    </p>
+                  </div>
+                  <CsvButton
+                    filename="notas-nps-por-aluno.csv"
+                    headers={npsDetailedCsv.headers}
+                    rows={npsDetailedCsv.rows}
+                  />
+                </div>
+                <div className="mt-4 max-h-96 overflow-y-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="text-xs uppercase text-ink-soft">
+                        <th className="pb-2">Aluno</th>
+                        <th className="pb-2">Curso</th>
+                        <th className="pb-2 text-right">Nota</th>
+                        <th className="pb-2 text-right">Data</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {npsStudentRows.map((r) => (
+                        <tr key={r.responseId} className="border-t border-navy-light/60">
+                          <td className="py-2 font-medium text-ink">{r.userName}</td>
+                          <td className="py-2 text-ink-soft">{r.trackTitle ?? r.pillTitle}</td>
+                          <td
+                            className={`py-2 text-right font-semibold ${
+                              r.value <= 6 ? 'text-brand-red' : r.value <= 8 ? 'text-gold' : 'text-success'
+                            }`}
+                          >
+                            {r.value}
+                          </td>
+                          <td className="py-2 text-right text-ink-soft">{new Date(r.submittedAt).toLocaleDateString('pt-BR')}</td>
+                        </tr>
+                      ))}
+                      {npsStudentRows.length === 0 && (
+                        <tr><td colSpan={4} className="py-3 text-ink-soft">Sem dados ainda.</td></tr>
+                      )}
+                    </tbody>
+                    {npsStudentRows.length > 0 && (
+                      <tfoot>
+                        <tr className="border-t-2 border-navy-light font-semibold">
+                          <td className="py-2 text-ink" colSpan={2}>Média</td>
+                          <td className="py-2 text-right text-navy">{npsAverageScore}</td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
               </div>
