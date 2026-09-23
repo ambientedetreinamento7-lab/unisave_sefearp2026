@@ -27,12 +27,15 @@ import type {
 } from '../../types/database'
 
 function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
+  // Excel em pt-BR usa "," como separador decimal, então espera ";" como
+  // separador de campo do CSV — com "," ele joga tudo numa coluna só. O
+  // BOM força a leitura como UTF-8, sem isso os acentos quebram.
   const escape = (v: string | number) => {
     const s = String(v)
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
-  const csv = [headers, ...rows].map((row) => row.map(escape).join(',')).join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const csv = [headers, ...rows].map((row) => row.map(escape).join(';')).join('\r\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
