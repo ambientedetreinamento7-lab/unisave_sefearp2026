@@ -1170,32 +1170,36 @@ export async function getTracksBySkillCategory(skillCategoryId: string): Promise
   return (data as Track[]) ?? []
 }
 
-function namesOverlap(a: string, b: string): boolean {
-  const na = a.trim().toLowerCase()
-  const nb = b.trim().toLowerCase()
-  return na.includes(nb) || nb.includes(na)
-}
-
 /**
- * Cursos avulsos do catálogo (pills com categories) que "casam" com uma
- * competência do Painel 70/20/10 — evita depender do admin vincular
- * manualmente cada trilha (tracks.skill_category_id, usado só por
- * getTracksBySkillCategory acima). Casa por nome da categoria conter (ou
- * ser contido n)o nome da competência — não precisa ser idêntico, ex.:
- * categoria "Liderança" já sugere numa competência "Comunicação e
- * Liderança", e uma pílula pode aparecer em mais de uma competência se os
- * nomes se sobrepõem.
+ * Cursos do catálogo que o admin vinculou explicitamente a uma competência
+ * do Painel 70/20/10 (checkboxes "Competências do PDI" em Admin > Cursos,
+ * gravadas em track_skill_categories). Casa por nome da competência, não só
+ * o id exato, porque skill_categories tem uma linha por programa com o
+ * mesmo nome — um curso vinculado à linha de um programa deve sugerir
+ * igual pros alunos dos outros programas com a mesma competência.
  */
 export async function getCatalogPillsBySkillCategory(skillCategoryId: string): Promise<Pill[]> {
   const { data: skill } = await supabase.from('skill_categories').select('name').eq('id', skillCategoryId).maybeSingle()
   if (!skill) return []
-  const { data: allCategories } = await supabase.from('categories').select('id, name')
-  const matchingCategoryIds = ((allCategories as { id: string; name: string }[] | null) ?? [])
-    .filter((c) => namesOverlap(c.name, skill.name))
-    .map((c) => c.id)
-  if (matchingCategoryIds.length === 0) return []
-  const { data } = await supabase.from('pills').select('*').in('category_id', matchingCategoryIds)
-  return (data as Pill[]) ?? []
+  const { data: sameName } = await supabase.from('skill_categories').select('id').eq('name', skill.name)
+  const ids = ((sameName as { id: string }[] | null) ?? []).map((s) => s.id)
+  if (ids.length === 0) return []
+  const { data: links } = await supabase.from('track_skill_categories').select('track_id').in('skill_category_id', ids)
+  const trackIds = [...new Set(((links as { track_id: string }[] | null) ?? []).map((l) => l.track_id))]
+  if (trackIds.length === 0) return []
+  const { data } = await supabase
+    .from('track_pills')
+    .select('pills(*), tracks!inner(published)')
+    .in('track_id', trackIds)
+    .eq('tracks.published', true)
+  const seen = new Set<string>()
+  const pills: Pill[] = []
+  for (const row of (data as { pills: Pill }[] | null) ?? []) {
+    if (!row.pills || seen.has(row.pills.id)) continue
+    seen.add(row.pills.id)
+    pills.push(row.pills)
+  }
+  return pills
 }
 
 /** Adiciona um curso avulso do catálogo (pill) a uma competência — mesmo

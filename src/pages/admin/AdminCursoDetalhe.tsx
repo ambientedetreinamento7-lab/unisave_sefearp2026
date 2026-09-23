@@ -411,24 +411,35 @@ export function AdminCursoDetalhe() {
           </label>
           {programIds.length > 0 ? (
             <div className="grid gap-1.5 rounded-xl border border-navy-light p-3 sm:grid-cols-2">
-              {skillCategories
-                .filter((s) => programIds.includes(s.program_id))
-                .map((s) => (
-                  <label key={s.id} className="flex items-center gap-2 text-sm text-ink">
+              {(() => {
+                // skill_categories tem uma linha por programa com o mesmo
+                // nome — agrupa por nome pra não mostrar "Liderança"
+                // repetida uma vez por programa selecionado; marcar/desmarcar
+                // afeta todas as linhas com aquele nome dos programas atuais
+                // de uma vez (é a mesma competência, só que 1 registro por
+                // programa no banco).
+                const groups = new Map<string, string[]>()
+                for (const s of skillCategories) {
+                  if (!programIds.includes(s.program_id)) continue
+                  groups.set(s.name, [...(groups.get(s.name) ?? []), s.id])
+                }
+                return [...groups.entries()].map(([name, ids]) => (
+                  <label key={name} className="flex items-center gap-2 text-sm text-ink">
                     <input
                       type="checkbox"
-                      checked={skillCategoryIds.includes(s.id)}
+                      checked={ids.some((id) => skillCategoryIds.includes(id))}
                       onChange={(e) => {
                         if (e.target.checked) {
-                          setSkillCategoryIds([...skillCategoryIds, s.id])
+                          setSkillCategoryIds([...new Set([...skillCategoryIds, ...ids])])
                         } else {
-                          setSkillCategoryIds(skillCategoryIds.filter((id) => id !== s.id))
+                          setSkillCategoryIds(skillCategoryIds.filter((id) => !ids.includes(id)))
                         }
                       }}
                     />
-                    {s.name}
+                    {name}
                   </label>
-                ))}
+                ))
+              })()}
             </div>
           ) : (
             <p className="text-xs text-ink-soft">Escolha ao menos um programa acima para poder vincular competências.</p>
