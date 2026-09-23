@@ -648,13 +648,25 @@ export async function getReactionSurveyResponses(surveyId: string): Promise<
   }))
 }
 
+export interface NpsOtherAnswer {
+  questionText: string
+  valueNumber: number | null
+  valueText: string | null
+}
+
 export interface NpsResponseRow {
+  responseId: string
   value: number
   submittedAt: string
+  userId: string
+  userName: string
   pillId: string
   pillTitle: string
   trackId: string | null
   trackTitle: string | null
+  /** Demais perguntas da mesma pesquisa (likert, texto aberto etc.),
+   * ordenadas por order_index — pro CSV detalhado, não pro cálculo de NPS. */
+  otherAnswers: NpsOtherAnswer[]
 }
 
 const NPS_QUESTION_ANCHOR = 'recomendaria este curso'
@@ -665,7 +677,8 @@ function normalizeQuestionText(s: string) {
 
 /** Respostas da pergunta de recomendação (0-10, "quanto recomendaria este
  * curso") em todas as pesquisas de reação — não uma survey específica —
- * já com curso (pill/track) e data, prontas pro cálculo de NPS. Filtra por
+ * já com curso (pill/track), aluno e data, prontas pro cálculo de NPS, mais
+ * as demais respostas da mesma pesquisa (pro CSV detalhado). Filtra por
  * question_type='nps' + texto contendo a âncora, não por um ID fixo,
  * porque cada survey cadastra sua própria cópia da pergunta. */
 export async function getNpsResponses(): Promise<NpsResponseRow[]> {
@@ -680,37 +693,79 @@ export async function getNpsResponses(): Promise<NpsResponseRow[]> {
   )
   if (npsQuestionIds.size === 0) return []
 
-  const { data: answers } = await supabase
+  const { data: npsAnswers } = await supabase
     .from('reaction_answers')
     .select('response_id, question_id, value_number')
     .in('question_id', Array.from(npsQuestionIds))
     .not('value_number', 'is', null)
-  const answersArr = (answers as { response_id: string; question_id: string; value_number: number }[]) ?? []
-  if (answersArr.length === 0) return []
+  const npsAnswersArr = (npsAnswers as { response_id: string; question_id: string; value_number: number }[]) ?? []
+  if (npsAnswersArr.length === 0) return []
 
   const { data: responses } = await supabase
     .from('reaction_responses')
-    .select('id, submitted_at, pill_id, pills(title, track_id, tracks(title))')
-    .in('id', answersArr.map((a) => a.response_id))
+    .select('id, survey_id, submitted_at, pill_id, user_id, pills(title, track_id, tracks(title)), profiles(name)')
+    .in(
+      'id',
+      npsAnswersArr.map((a) => a.response_id),
+    )
   type ResponseRow = {
     id: string
+    survey_id: string
     submitted_at: string
     pill_id: string
+    user_id: string
     pills: { title: string; track_id: string | null; tracks: { title: string } | null } | null
+    profiles: { name: string } | null
   }
-  const responseMap = new Map(((responses as ResponseRow[]) ?? []).map((r) => [r.id, r]))
+  const responseRows = (responses as unknown as ResponseRow[]) ?? []
+  const responseMap = new Map(responseRows.map((r) => [r.id, r]))
 
-  return answersArr
+  // Todas as perguntas (não só NPS) das pesquisas envolvidas, ordenadas —
+  // pro CSV detalhado trazer cada resposta com o texto certo da pergunta.
+  const surveyIds = [...new Set(responseRows.map((r) => r.survey_id))]
+  const { data: allQuestions } = surveyIds.length
+    ? await supabase
+        .from('reaction_questions')
+        .select('id, question_text, survey_id')
+        .in('survey_id', surveyIds)
+        .order('order_index')
+    : { data: [] }
+  const questionMap = new Map(
+    ((allQuestions as { id: string; question_text: string; survey_id: string }[]) ?? []).map((q) => [q.id, q]),
+  )
+
+  const { data: allAnswers } = await supabase
+    .from('reaction_answers')
+    .select('response_id, question_id, value_number, value_text')
+    .in(
+      'response_id',
+      responseRows.map((r) => r.id),
+    )
+  const otherAnswersByResponse = new Map<string, NpsOtherAnswer[]>()
+  for (const a of (allAnswers as { response_id: string; question_id: string; value_number: number | null; value_text: string | null }[] | null) ?? []) {
+    if (npsQuestionIds.has(a.question_id)) continue
+    const question = questionMap.get(a.question_id)
+    if (!question) continue
+    const arr = otherAnswersByResponse.get(a.response_id) ?? []
+    arr.push({ questionText: question.question_text, valueNumber: a.value_number, valueText: a.value_text })
+    otherAnswersByResponse.set(a.response_id, arr)
+  }
+
+  return npsAnswersArr
     .map((a) => {
       const r = responseMap.get(a.response_id)
       if (!r) return null
       return {
+        responseId: r.id,
         value: a.value_number,
         submittedAt: r.submitted_at,
+        userId: r.user_id,
+        userName: r.profiles?.name ?? '—',
         pillId: r.pill_id,
         pillTitle: r.pills?.title ?? '—',
         trackId: r.pills?.track_id ?? null,
         trackTitle: r.pills?.tracks?.title ?? null,
+        otherAnswers: otherAnswersByResponse.get(r.id) ?? [],
       }
     })
     .filter((x): x is NpsResponseRow => x !== null)
