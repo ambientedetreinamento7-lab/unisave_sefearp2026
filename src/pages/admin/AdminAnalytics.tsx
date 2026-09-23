@@ -442,21 +442,34 @@ export function AdminAnalytics() {
     [filteredNpsRows],
   )
 
-  const npsDetailedCsv = useMemo(() => {
-    const questionTexts = Array.from(new Set(filteredNpsRows.flatMap((r) => r.otherAnswers.map((a) => a.questionText))))
-    const headers = ['Aluno', 'Curso', 'Nota NPS', 'Data', ...questionTexts]
-    const rows = filteredNpsRows.map((r) => {
-      const answerByQuestion = new Map(r.otherAnswers.map((a) => [a.questionText, a.valueNumber ?? a.valueText ?? '']))
-      return [
-        r.userName,
-        npsCourseOf(r),
-        r.value,
-        new Date(r.submittedAt).toLocaleDateString('pt-BR'),
-        ...questionTexts.map((q) => answerByQuestion.get(q) ?? ''),
-      ]
-    })
-    return { headers, rows }
-  }, [filteredNpsRows])
+  const npsQuestionColumns = useMemo(
+    () => Array.from(new Set(filteredNpsRows.flatMap((r) => r.otherAnswers.map((a) => a.questionText)))),
+    [filteredNpsRows],
+  )
+
+  const npsDetailedRows = useMemo(
+    () =>
+      npsStudentRows.map((r) => {
+        const answerByQuestion = new Map(r.otherAnswers.map((a) => [a.questionText, a.valueNumber ?? a.valueText ?? '']))
+        return {
+          responseId: r.responseId,
+          userName: r.userName,
+          course: npsCourseOf(r),
+          value: r.value,
+          date: new Date(r.submittedAt).toLocaleDateString('pt-BR'),
+          answers: npsQuestionColumns.map((q) => answerByQuestion.get(q) ?? ''),
+        }
+      }),
+    [npsStudentRows, npsQuestionColumns],
+  )
+
+  const npsDetailedCsv = useMemo(
+    () => ({
+      headers: ['Aluno', 'Curso', 'Nota NPS', 'Data', ...npsQuestionColumns],
+      rows: npsDetailedRows.map((r) => [r.userName, r.course, r.value, r.date, ...r.answers]),
+    }),
+    [npsDetailedRows, npsQuestionColumns],
+  )
 
   function toggleStudentSort(field: StudentSortField) {
     if (field === studentSortField) {
@@ -864,6 +877,53 @@ export function AdminAnalytics() {
                         </tr>
                       </tfoot>
                     )}
+                  </table>
+                </div>
+              </div>
+
+              <div className="card p-5">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-bold text-ink">Todas as respostas</h2>
+                  <CsvButton filename="respostas-detalhadas-nps.csv" headers={npsDetailedCsv.headers} rows={npsDetailedCsv.rows} />
+                </div>
+                <p className="mt-1 text-xs text-ink-soft">
+                  Cada linha é uma resposta, com a nota NPS e as demais perguntas da pesquisa de reação daquele curso.
+                </p>
+                <div className="mt-4 max-h-96 overflow-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="text-xs uppercase text-ink-soft">
+                        <th className="pb-2 pr-4">Aluno</th>
+                        <th className="pb-2 pr-4">Curso</th>
+                        <th className="pb-2 pr-4 text-right">Nota NPS</th>
+                        <th className="pb-2 pr-4 text-right">Data</th>
+                        {npsQuestionColumns.map((q) => (
+                          <th key={q} className="pb-2 pr-4">{q}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {npsDetailedRows.map((r) => (
+                        <tr key={r.responseId} className="border-t border-navy-light/60">
+                          <td className="py-2 pr-4 font-medium text-ink">{r.userName}</td>
+                          <td className="py-2 pr-4 text-ink-soft">{r.course}</td>
+                          <td
+                            className={`py-2 pr-4 text-right font-semibold ${
+                              r.value <= 6 ? 'text-brand-red' : r.value <= 8 ? 'text-gold' : 'text-success'
+                            }`}
+                          >
+                            {r.value}
+                          </td>
+                          <td className="py-2 pr-4 text-right text-ink-soft">{r.date}</td>
+                          {r.answers.map((a, i) => (
+                            <td key={i} className="py-2 pr-4 text-ink-soft">{a}</td>
+                          ))}
+                        </tr>
+                      ))}
+                      {npsDetailedRows.length === 0 && (
+                        <tr><td colSpan={4 + npsQuestionColumns.length} className="py-3 text-ink-soft">Sem dados ainda.</td></tr>
+                      )}
+                    </tbody>
                   </table>
                 </div>
               </div>
