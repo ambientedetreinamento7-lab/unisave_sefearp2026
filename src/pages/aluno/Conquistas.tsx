@@ -1,23 +1,25 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppHeader } from '../../components/AppHeader'
 import { useAuth } from '../../context/AuthContext'
-import { getTrackWithPills, getUserProgressMap, trackProgressPct } from '../../lib/api'
-import type { Pill, Track, UserProgress } from '../../types/database'
+import { getTrackWithPills, getUserPlans, getUserProgressMap } from '../../lib/api'
+import type { Pill, PdiPlan, Track, UserProgress } from '../../types/database'
 
 export function Conquistas() {
   const { profile } = useAuth()
   const [track, setTrack] = useState<Track | null>(null)
   const [pills, setPills] = useState<Pill[]>([])
   const [progress, setProgress] = useState<Record<string, UserProgress>>({})
+  const [plans, setPlans] = useState<PdiPlan[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!profile) return
     let cancelled = false
     async function load() {
-      const progressMap = await getUserProgressMap(profile!.id)
+      const [progressMap, userPlans] = await Promise.all([getUserProgressMap(profile!.id), getUserPlans(profile!.id)])
       if (cancelled) return
       setProgress(progressMap)
+      setPlans(userPlans)
       if (profile!.selected_track_id) {
         const { track: t, pills: p } = await getTrackWithPills(profile!.selected_track_id)
         if (!cancelled) {
@@ -33,8 +35,14 @@ export function Conquistas() {
     }
   }, [profile])
 
-  const pct = useMemo(() => trackProgressPct(pills, progress), [pills, progress])
-  const trackComplete = pct === 100 && pills.length > 0
+  // O relatório é sobre o PDI inteiro (todos os planos do aluno), não só a
+  // trilha recomendada — badges continuam por pílula da trilha, mas esse
+  // card reflete a média de progress_pct de cada PdiPlan.
+  const pdiPct = useMemo(() => {
+    if (plans.length === 0) return 0
+    return Math.round(plans.reduce((sum, p) => sum + p.progress_pct, 0) / plans.length)
+  }, [plans])
+  const pdiComplete = plans.length > 0 && plans.every((p) => p.progress_pct === 100)
 
   if (loading) {
     return (
@@ -76,13 +84,13 @@ export function Conquistas() {
         <div className="card mt-10 p-6">
           <h2 className="font-bold text-ink">Relatório de PDI e certificado</h2>
           <p className="mt-1 text-sm text-ink-soft">
-            Disponível para download assim que 100% da trilha for concluída.
+            Disponível para download assim que 100% do seu PDI for concluído.
           </p>
           <button
-            disabled={!trackComplete}
+            disabled={!pdiComplete}
             className="mt-4 rounded-xl bg-brand-red px-5 py-2.5 font-bold text-white transition hover:bg-brand-red-dark disabled:opacity-40"
           >
-            {trackComplete ? 'Baixar relatório de PDI (PDF)' : `Progresso da trilha: ${pct}%`}
+            {pdiComplete ? 'Baixar relatório de PDI (PDF)' : `Progresso do PDI: ${pdiPct}%`}
           </button>
         </div>
       </main>

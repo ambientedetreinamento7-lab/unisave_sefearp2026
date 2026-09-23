@@ -1045,7 +1045,8 @@ export async function setItemStatus(planId: string, itemId: string, status: PdiI
  * bucket/tipo de item, é só uma meta pessoal (não entra no cálculo de
  * Preenchimento/Evolução). */
 export async function setItemTargetDate(itemId: string, targetDate: string | null): Promise<void> {
-  await supabase.from('pdi_plan_items').update({ target_date: targetDate }).eq('id', itemId)
+  const { error } = await supabase.from('pdi_plan_items').update({ target_date: targetDate }).eq('id', itemId)
+  if (error) throw error
 }
 
 /** Itens de um plano vinculados a uma competência específica — usado no

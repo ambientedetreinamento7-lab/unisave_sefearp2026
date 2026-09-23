@@ -13,7 +13,9 @@ create type pill_status as enum ('not_started', 'in_progress', 'completed');
 create type skill_type as enum ('tecnica', 'comportamental', 'etica');
 create type content_type as enum ('video', 'iframe', 'scorm', 'reaction');
 create type pdi_plan_type as enum ('trilha_evento', 'plano_pessoal', 'plano_institucional');
-create type pdi_item_type as enum ('skill_category', 'pill', 'trilha');
+-- 'tarefa_livre': item de texto livre do Painel 70/20/10 (sem curso/
+-- trilha por trás, ref_id fica null nesse caso — ver pdi_plan_items).
+create type pdi_item_type as enum ('skill_category', 'pill', 'trilha', 'tarefa_livre');
 create type pdi_item_status as enum ('nao_iniciado', 'em_andamento', 'concluido');
 -- Faixa de desempenho (spec: metodologia de PDI 70-20-10), recalculada no
 -- client (src/lib/pdiTier.ts) sempre que o Balanço de Competências muda.
@@ -435,20 +437,33 @@ create table pdi_plans (
   progress_pct numeric not null default 0,
   created_at timestamptz not null default now(),
   -- Faixa de desempenho atual do plano (spec: metodologia de PDI 70-20-10).
-  tier pdi_tier
+  tier pdi_tier,
+  -- Painel 70/20/10: até 3 skill_categories escolhidas pelo aluno pra
+  -- este plano (no PDI Express ou ao criar o plano) — define direto quais
+  -- cards de competência aparecem, sem inferir por toggle/autoavaliação.
+  competency_ids uuid[] not null default '{}'
 );
 
 create table pdi_plan_items (
   id uuid primary key default gen_random_uuid(),
   plan_id uuid not null references pdi_plans(id) on delete cascade,
   item_type pdi_item_type not null,
-  ref_id uuid not null,
+  -- Nullable: item_type='tarefa_livre' não tem curso/trilha por trás.
+  ref_id uuid,
   progress_current int not null default 0,
   progress_total int not null default 4,
   status pdi_item_status not null default 'nao_iniciado',
   order_index int not null default 0,
   -- Classificação 70-20-10 (spec: metodologia de PDI 70-20-10).
-  jornada_bucket pdi_jornada_bucket
+  jornada_bucket pdi_jornada_bucket,
+  -- Competência do Painel 70/20/10 que este item pertence (wizard de
+  -- competência) — null pros itens antigos, adicionados fora do wizard.
+  skill_category_id uuid references skill_categories(id) on delete set null,
+  -- Descrição livre, só usada por item_type='tarefa_livre'.
+  descricao text,
+  -- Data em que o aluno pretende concluir o item (meta pessoal, não entra
+  -- no cálculo de Preenchimento/Evolução) — qualquer bucket/tipo de item.
+  target_date date
 );
 
 -- Rede social interna — Fase A (feed base: texto/imagem/carrossel, curtir,
