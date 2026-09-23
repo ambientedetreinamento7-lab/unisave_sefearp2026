@@ -698,7 +698,7 @@ export async function getNpsResponses(): Promise<NpsResponseRow[]> {
     pill_id: string
     pills: { title: string; track_id: string | null; tracks: { title: string } | null } | null
   }
-  const responseMap = new Map(((responses as ResponseRow[]) ?? []).map((r) => [r.id, r]))
+  const responseMap = new Map(((responses as unknown as ResponseRow[]) ?? []).map((r) => [r.id, r]))
 
   return answersArr
     .map((a) => {
