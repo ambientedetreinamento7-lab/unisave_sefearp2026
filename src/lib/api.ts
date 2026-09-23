@@ -488,7 +488,7 @@ async function syncTrackProgressToPdi(userId: string, trackId: string, planIds: 
   return rows.map((r) => r.plan_id)
 }
 
-async function recomputePlanProgress(planId: string) {
+export async function recomputePlanProgress(planId: string) {
   const items = await getPlanItems(planId)
   if (items.length === 0) return
   const sum = items.reduce((acc, i) => acc + i.progress_current / Math.max(1, i.progress_total), 0)
@@ -914,6 +914,114 @@ export async function addPillToPlan(planId: string, pillId: string) {
   })
 }
 
+/**
+ * Adiciona uma trilha sugerida (cursos do catálogo, filtrados pela tag da
+ * competência) diretamente vinculada a uma competência — variante de
+ * addTrackToPlan que, ao contrário dela, grava skill_category_id e um
+ * jornada_bucket explícito ('formacao') em vez de deixar o bucketForIndex
+ * (ciclagem mecânica por ordem de inserção) decidir. Usada pelo passo 4 do
+ * wizard de competência (bloco "10% Aprendizagem Formal").
+ */
+export async function addTrackToCompetency(planId: string, skillCategoryId: string, trackId: string): Promise<void> {
+  const { data: existing } = await supabase
+    .from('pdi_plan_items')
+    .select('id')
+    .eq('plan_id', planId)
+    .eq('item_type', 'trilha')
+    .eq('ref_id', trackId)
+    .maybeSingle()
+  if (existing) return
+
+  const { pills } = await getTrackWithPills(trackId)
+  const { count } = await supabase
+    .from('pdi_plan_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('plan_id', planId)
+  const orderIndex = count ?? 0
+
+  await supabase.from('pdi_plan_items').insert({
+    plan_id: planId,
+    item_type: 'trilha' as const,
+    ref_id: trackId,
+    skill_category_id: skillCategoryId,
+    progress_current: 0,
+    progress_total: Math.max(1, pills.length),
+    status: 'nao_iniciado' as const,
+    order_index: orderIndex,
+    jornada_bucket: 'formacao' as const,
+  })
+  await recomputePlanProgress(planId)
+}
+
+/**
+ * Adiciona um item de texto livre (sem curso/trilha por trás) a uma
+ * competência, já vinculado ao bucket 70/20/10 explícito — bucket
+ * 'pratica'/'mentoria' (o aluno descreve o que vai fazer) ou "outra
+ * tarefa" dentro de 'formacao'. Ao contrário dos cursos/trilhas, o status
+ * desse item é ciclado manualmente pelo aluno (cycleItemStatus).
+ */
+export async function addFreeTextItemToCompetency(
+  planId: string,
+  skillCategoryId: string,
+  bucket: PdiJornadaBucket,
+  descricao: string,
+): Promise<void> {
+  const { count } = await supabase
+    .from('pdi_plan_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('plan_id', planId)
+  const orderIndex = count ?? 0
+
+  await supabase.from('pdi_plan_items').insert({
+    plan_id: planId,
+    item_type: 'tarefa_livre' as const,
+    ref_id: null,
+    descricao,
+    skill_category_id: skillCategoryId,
+    progress_current: 0,
+    progress_total: 1,
+    status: 'nao_iniciado' as const,
+    order_index: orderIndex,
+    jornada_bucket: bucket,
+  })
+  await recomputePlanProgress(planId)
+}
+
+const NEXT_STATUS: Record<PdiItemStatus, PdiItemStatus> = {
+  nao_iniciado: 'em_andamento',
+  em_andamento: 'concluido',
+  concluido: 'nao_iniciado',
+}
+
+/**
+ * Avança manualmente o status de um item do PDI (não iniciado → em
+ * andamento → concluído → não iniciado). Só faz sentido pra itens
+ * item_type='tarefa_livre' — itens de curso/trilha têm status derivado do
+ * consumo real via syncPillCompletionToPdi/syncTrackProgressToPdi, e a UI
+ * não deve oferecer esse controle pra eles.
+ */
+export async function cycleItemStatus(planId: string, itemId: string, currentStatus: PdiItemStatus): Promise<PdiItemStatus> {
+  const next = NEXT_STATUS[currentStatus]
+  await supabase
+    .from('pdi_plan_items')
+    .update({ status: next, progress_current: next === 'concluido' ? 1 : 0, progress_total: 1 })
+    .eq('id', itemId)
+  await recomputePlanProgress(planId)
+  return next
+}
+
+/** Itens de um plano vinculados a uma competência específica — usado no
+ * wizard de competência (passos 4 e 5). */
+export async function getCompetencyPlanItems(planId: string, skillCategoryId: string): Promise<PdiPlanItem[]> {
+  const { data } = await supabase
+    .from('pdi_plan_items')
+    .select('*')
+    .eq('plan_id', planId)
+    .eq('skill_category_id', skillCategoryId)
+    .order('order_index')
+  return (data as PdiPlanItem[]) ?? []
+}
+
 export async function createPlanWithPill(userId: string, title: string, pillId: string): Promise<PdiPlan> {
   const { data: plan, error } = await supabase
     .from('pdi_plans')
@@ -946,9 +1054,15 @@ export async function getSkillRatings(userId: string): Promise<SkillRating[]> {
   return (data as SkillRating[]) ?? []
 }
 
-export async function upsertSelfRating(userId: string, skillCategoryId: string, rating: number) {
+export async function upsertSelfRating(userId: string, skillCategoryId: string, rating?: number, objetivo?: string) {
   await supabase.from('skill_ratings').upsert(
-    { user_id: userId, skill_category_id: skillCategoryId, self_rating: rating, rated_at: new Date().toISOString() },
+    {
+      user_id: userId,
+      skill_category_id: skillCategoryId,
+      ...(rating !== undefined ? { self_rating: rating } : {}),
+      ...(objetivo !== undefined ? { objetivo } : {}),
+      rated_at: new Date().toISOString(),
+    },
     { onConflict: 'user_id,skill_category_id' },
   )
 }
@@ -977,6 +1091,120 @@ export async function getTracksBySkillCategory(skillCategoryId: string): Promise
   if (ids.length === 0) return []
   const { data } = await supabase.from('tracks').select('*').in('skill_category_id', ids).eq('published', true)
   return (data as Track[]) ?? []
+}
+
+// ---- Meu PDI: painel de competências (Painel 70/20/10) ----
+
+// Mesma correspondência já usada pra vincular as trilhas semente de cada
+// perfil diagnóstico à competência do PDI (ver seed de tracks acima):
+// autogestão → "Gestão do Tempo e Autogestão", tech/IA → "Análise de
+// Dados e Tecnologia", liderança → "Comunicação e Liderança".
+const DESAFIO_SKILL_NAME: Record<DiagnosticProfile, string> = {
+  autogestao: 'Gestão do Tempo e Autogestão',
+  tech_ia: 'Análise de Dados e Tecnologia',
+  lideranca: 'Comunicação e Liderança',
+}
+
+/** Id da competência ligada ao "maior desafio" do PDI Express do aluno —
+ * usado pra marcar a estrela ★ no grid, independente do modo do toggle do
+ * admin (que só decide quais cards aparecem, não qual leva a estrela). */
+export async function getDesafioInicialSkillCategoryId(
+  programId: string | null,
+  diagnosticProfile: DiagnosticProfile | null,
+): Promise<string | null> {
+  if (!programId || !diagnosticProfile) return null
+  const { data } = await supabase
+    .from('skill_categories')
+    .select('id')
+    .eq('program_id', programId)
+    .eq('name', DESAFIO_SKILL_NAME[diagnosticProfile])
+    .maybeSingle()
+  return (data as { id: string } | null)?.id ?? null
+}
+
+/** Resolve quais competências aparecem no grid de Meu PDI na primeira
+ * visita, conforme o modo configurado pelo admin em app_settings
+ * ('pdi_competency_visibility'): 'selecionadas' = competências que o
+ * aluno já autoavaliou no Balanço; 'desafio_inicial' = só a competência
+ * do maior desafio do PDI Express. */
+export async function getVisibleCompetencyIds(
+  userId: string,
+  programId: string | null,
+  diagnosticProfile: DiagnosticProfile | null,
+  mode: 'selecionadas' | 'desafio_inicial',
+): Promise<string[]> {
+  if (mode === 'desafio_inicial') {
+    const id = await getDesafioInicialSkillCategoryId(programId, diagnosticProfile)
+    return id ? [id] : []
+  }
+  const ratings = await getSkillRatings(userId)
+  return [...new Set(ratings.filter((r) => r.self_rating != null).map((r) => r.skill_category_id))]
+}
+
+export interface CompetencyPdiSummary {
+  skillCategoryId: string
+  hasRating: boolean
+  hasObjetivo: boolean
+  bucketCounts: Record<PdiJornadaBucket, number>
+  totalItems: number
+  concludedItems: number
+  /** 0-100 — 5 checks (autoavaliação, objetivo, ≥1 item em cada bucket), cada um valendo 20%. */
+  preenchimentoPct: number
+  /** 0-100 — itens concluídos ÷ total de itens nos 3 buckets; 0 se não houver itens. */
+  evolucaoPct: number
+  status: 'nao_iniciado' | 'em_andamento' | 'completo'
+}
+
+/** Resume, por competência, o estado do Painel 70/20/10 (spec: fórmulas de
+ * Preenchimento% e Evolução%) — usado no grid de cards de Meu PDI. */
+export async function getCompetencyPdiSummaries(
+  userId: string,
+  planId: string | null,
+  skillCategoryIds: string[],
+): Promise<Map<string, CompetencyPdiSummary>> {
+  const result = new Map<string, CompetencyPdiSummary>()
+  if (skillCategoryIds.length === 0) return result
+
+  const [{ data: ratingRows }, itemsResult] = await Promise.all([
+    supabase.from('skill_ratings').select('*').eq('user_id', userId).in('skill_category_id', skillCategoryIds),
+    planId
+      ? supabase.from('pdi_plan_items').select('*').eq('plan_id', planId).in('skill_category_id', skillCategoryIds)
+      : Promise.resolve({ data: [] as PdiPlanItem[] }),
+  ])
+  const ratings = (ratingRows as SkillRating[]) ?? []
+  const items = (itemsResult.data as PdiPlanItem[]) ?? []
+
+  for (const skillCategoryId of skillCategoryIds) {
+    const rating = ratings.find((r) => r.skill_category_id === skillCategoryId)
+    const catItems = items.filter((i) => i.skill_category_id === skillCategoryId)
+    const bucketCounts: Record<PdiJornadaBucket, number> = { pratica: 0, mentoria: 0, formacao: 0 }
+    let concludedItems = 0
+    for (const item of catItems) {
+      if (item.jornada_bucket) bucketCounts[item.jornada_bucket]++
+      if (item.status === 'concluido') concludedItems++
+    }
+    const hasRating = rating?.self_rating != null
+    const hasObjetivo = Boolean(rating?.objetivo?.trim())
+    const checks = [hasRating, hasObjetivo, bucketCounts.pratica > 0, bucketCounts.mentoria > 0, bucketCounts.formacao > 0]
+    const preenchimentoPct = Math.round((checks.filter(Boolean).length / checks.length) * 100)
+    const totalItems = catItems.length
+    const evolucaoPct = totalItems === 0 ? 0 : Math.round((concludedItems / totalItems) * 100)
+    const status: CompetencyPdiSummary['status'] =
+      preenchimentoPct === 0 ? 'nao_iniciado' : evolucaoPct === 100 && totalItems >= 1 ? 'completo' : 'em_andamento'
+
+    result.set(skillCategoryId, {
+      skillCategoryId,
+      hasRating,
+      hasObjetivo,
+      bucketCounts,
+      totalItems,
+      concludedItems,
+      preenchimentoPct,
+      evolucaoPct,
+      status,
+    })
+  }
+  return result
 }
 
 /**
