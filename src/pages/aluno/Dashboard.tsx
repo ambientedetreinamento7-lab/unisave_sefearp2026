@@ -765,51 +765,60 @@ function CourseCard({
   )
 
   return (
-    <div className="card relative flex h-full flex-col overflow-hidden p-0 transition duration-200 hover:-translate-y-1 hover:shadow-lg">
-      {onToggleFavorite && (
-        <button
-          onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            onToggleFavorite()
-          }}
-          aria-label={favorited ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
-          className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-ink-soft shadow"
-        >
-          <Icon name={favorited ? 'heart-filled' : 'heart'} size={14} className={favorited ? 'text-brand-red' : undefined} />
-        </button>
-      )}
+    <div className="card relative flex h-full flex-col p-0">
+      {/* O hover:-translate-y-1 (efeito de "levantar" o card) mora no
+          wrapper INTERNO, não neste div externo — um transform em CSS cria
+          uma nova "âncora" de posicionamento pra qualquer descendente
+          "fixed" (o CourseDetailModal usa position:fixed pra cobrir a tela
+          toda); se esse transform estivesse aqui — ancestral direto do
+          modal — ele ficaria preso dentro do card pequeno em vez de cobrir
+          a tela (sem capa/vídeo, sem fundo escurecido, tudo espremido). */}
+      <div className="flex flex-1 flex-col overflow-hidden rounded-[20px] transition duration-200 hover:-translate-y-1 hover:shadow-lg">
+        {onToggleFavorite && (
+          <button
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onToggleFavorite()
+            }}
+            aria-label={favorited ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+            className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-ink-soft shadow"
+          >
+            <Icon name={favorited ? 'heart-filled' : 'heart'} size={14} className={favorited ? 'text-brand-red' : undefined} />
+          </button>
+        )}
 
-      {/* Um clique/toque só, direto: abre o modal com capa/vídeo, progresso,
-          descrição completa e a lista de aulas. Nada de hover: um card
-          "expandindo" por cima de outro elemento (o painel de ações) só deu
-          bug (empurrava o layout, ficava preso atrás de outro conteúdo,
-          escondia dependendo do scroll) — mais simples e funciona igual em
-          mouse e toque. */}
-      <button type="button" onClick={() => setDetailOpen(true)} className="flex flex-1 flex-col text-left">
-        {thumbnail}
-        <div className="flex flex-1 flex-col gap-2 p-4">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
-          <h3 className="-mt-1 font-bold leading-snug text-ink">{title}</h3>
-          {description && <p className="line-clamp-2 text-sm text-ink-soft">{description}</p>}
-          {isCourse && status !== 'not_started' && (
-            <div className="mt-1">
-              <div className="flex items-center justify-between text-[11px] font-semibold text-ink-soft">
-                <span>{pct}% concluído</span>
+        {/* Um clique/toque só, direto: abre o modal com capa/vídeo, progresso,
+            descrição completa e a lista de aulas. Nada de hover: um card
+            "expandindo" por cima de outro elemento (o painel de ações) só deu
+            bug (empurrava o layout, ficava preso atrás de outro conteúdo,
+            escondia dependendo do scroll) — mais simples e funciona igual em
+            mouse e toque. */}
+        <button type="button" onClick={() => setDetailOpen(true)} className="flex flex-1 flex-col text-left">
+          {thumbnail}
+          <div className="flex flex-1 flex-col gap-2 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
+            <h3 className="-mt-1 font-bold leading-snug text-ink">{title}</h3>
+            {description && <p className="line-clamp-2 text-sm text-ink-soft">{description}</p>}
+            {isCourse && status !== 'not_started' && (
+              <div className="mt-1">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-ink-soft">
+                  <span>{pct}% concluído</span>
+                </div>
+                <ProgressBar value={pct} />
               </div>
-              <ProgressBar value={pct} />
+            )}
+            <div className="mt-auto flex items-center justify-end pt-2">
+              <span
+                className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-white transition ${ACTION_COLOR[status]}`}
+              >
+                {ACTION_LABEL[status]}
+                <Icon name="arrow-right" size={12} />
+              </span>
             </div>
-          )}
-          <div className="mt-auto flex items-center justify-end pt-2">
-            <span
-              className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-white transition ${ACTION_COLOR[status]}`}
-            >
-              {ACTION_LABEL[status]}
-              <Icon name="arrow-right" size={12} />
-            </span>
           </div>
-        </div>
-      </button>
+        </button>
+      </div>
 
       {detailOpen && (
         <CourseDetailModal
