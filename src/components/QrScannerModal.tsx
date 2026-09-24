@@ -11,6 +11,13 @@ export function QrScannerModal({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [error, setError] = useState('')
+  // Guarda a versão mais recente sem entrar nas deps do efeito abaixo — o
+  // pai (AdminBottons) recria essa função a cada re-render dele, e se ela
+  // entrar nas deps o efeito reinicia a câmera no meio da negociação de
+  // permissão/stream, o que o navegador reporta como "aborted by the user
+  // agent" e trava numa tela preta (só acontecia com o modal já aberto).
+  const onDetectedRef = useRef(onDetected)
+  onDetectedRef.current = onDetected
 
   useEffect(() => {
     if (!videoRef.current) return
@@ -19,7 +26,7 @@ export function QrScannerModal({
       videoRef.current,
       (result) => {
         if (!cancelled) {
-          onDetected(result.data)
+          onDetectedRef.current(result.data)
           scanner.stop()
         }
       },
@@ -33,7 +40,8 @@ export function QrScannerModal({
       scanner.stop()
       scanner.destroy()
     }
-  }, [onDetected])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
