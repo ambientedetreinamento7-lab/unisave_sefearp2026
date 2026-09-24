@@ -767,13 +767,17 @@ function CourseCard({
   return (
     <div className="card relative flex h-full flex-col p-0">
       {/* O hover:-translate-y-1 (efeito de "levantar" o card) mora no
-          wrapper INTERNO, não neste div externo — um transform em CSS cria
-          uma nova "âncora" de posicionamento pra qualquer descendente
-          "fixed" (o CourseDetailModal usa position:fixed pra cobrir a tela
-          toda); se esse transform estivesse aqui — ancestral direto do
-          modal — ele ficaria preso dentro do card pequeno em vez de cobrir
-          a tela (sem capa/vídeo, sem fundo escurecido, tudo espremido). */}
-      <div className="flex flex-1 flex-col overflow-hidden rounded-[20px] transition duration-200 hover:-translate-y-1 hover:shadow-lg">
+          próprio <button> clicável, não neste div externo nem no wrapper
+          logo abaixo — dois motivos: (1) um transform em CSS cria uma nova
+          "âncora" de posicionamento pra qualquer descendente "fixed" (o
+          CourseDetailModal usa position:fixed pra cobrir a tela toda); se
+          esse transform estivesse num ancestral do modal, ele ficaria preso
+          dentro do card pequeno em vez de cobrir a tela. (2) no celular,
+          hover num elemento que não é o clicável (sem cursor:pointer) faz o
+          Safari/iOS tratar o 1º toque como só "passar o mouse" — precisava
+          tocar 2x pra realmente abrir. Hover e clique no mesmo elemento
+          evita os dois problemas. */}
+      <div className="flex flex-1 flex-col overflow-hidden rounded-[20px]">
         {onToggleFavorite && (
           <button
             onClick={(e) => {
@@ -794,7 +798,11 @@ function CourseCard({
             bug (empurrava o layout, ficava preso atrás de outro conteúdo,
             escondia dependendo do scroll) — mais simples e funciona igual em
             mouse e toque. */}
-        <button type="button" onClick={() => setDetailOpen(true)} className="flex flex-1 flex-col text-left">
+        <button
+          type="button"
+          onClick={() => setDetailOpen(true)}
+          className="flex flex-1 cursor-pointer flex-col text-left transition duration-200 hover:-translate-y-1 hover:shadow-lg"
+        >
           {thumbnail}
           <div className="flex flex-1 flex-col gap-2 p-4">
             <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
