@@ -790,7 +790,7 @@ function CourseCard({
 
   return (
     <div
-      className="card relative flex h-full flex-col p-0 transition duration-200 hover:-translate-y-1 hover:shadow-lg"
+      className="card relative flex h-full flex-col p-0"
       onMouseEnter={() => setExpanded(true)}
       onMouseLeave={() => setExpanded(false)}
     >
@@ -801,8 +801,14 @@ function CourseCard({
           recolhia, o layout voltava, o mouse caía de novo em cima dele —
           um loop de pisca-pisca infinito. Como é filho do mesmo elemento
           com o onMouseEnter/onMouseLeave, entrar nele com o mouse ainda
-          conta como "dentro" do card (não fecha), sem mover mais nada. */}
-      <div className="flex flex-1 flex-col overflow-hidden rounded-[20px]">
+          conta como "dentro" do card (não fecha), sem mover mais nada.
+          O hover:-translate-y-1 (efeito de "levantar" o card) mora no
+          wrapper INTERNO, não neste div externo — um transform em CSS cria
+          uma nova "âncora" de posicionamento pra qualquer descendente
+          "fixed" (o CourseDetailModal usa position:fixed pra cobrir a tela
+          toda); se esse transform estivesse aqui, o modal ficaria preso
+          dentro do card pequeno em vez de cobrir a tela. */}
+      <div className="flex flex-1 flex-col overflow-hidden rounded-[20px] transition duration-200 hover:-translate-y-1 hover:shadow-lg">
         {onToggleFavorite && (
           <button
             onClick={(e) => {
