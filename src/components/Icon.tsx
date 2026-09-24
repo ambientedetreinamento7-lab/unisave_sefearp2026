@@ -33,6 +33,8 @@ export type IconName =
   | "download"
   | "camera"
   | "copy"
+  | "play"
+  | "share"
 
 const PATHS: Record<IconName, React.ReactNode> = {
   book: (
@@ -333,6 +335,21 @@ const PATHS: Record<IconName, React.ReactNode> = {
         strokeWidth="1.7"
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </>
+  ),
+  play: <path d="M6 4.5v15l13-7.5-13-7.5Z" fill="currentColor" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />,
+  share: (
+    <>
+      <circle cx="18" cy="5.5" r="2.3" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="6" cy="12" r="2.3" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="18" cy="18.5" r="2.3" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="m8.1 10.8 7.8-4.2m-7.8 6.6 7.8 4.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
       />
     </>
   ),

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { Icon } from '../../components/Icon'
 import { ProgressBar } from '../../components/ProgressBar'
@@ -715,6 +715,7 @@ function CourseCard({
   onToggleFavorite?: () => void
 }) {
   const { courseDefaults } = usePlatformSettings()
+  const navigate = useNavigate()
   const isCourse = item.kind === 'course'
   const title = isCourse ? item.track.title : item.pill.title
   const description = isCourse ? item.track.description : item.pill.description
@@ -723,7 +724,9 @@ function CourseCard({
     : item.pill.thumbnail_url ?? courseDefaults.lessonThumbnailUrl ?? courseDefaults.lessonCoverUrl
   const teaserVimeoId = isCourse ? item.track.teaser_vimeo_id : null
   const axis = isCourse ? item.track.title : item.pill.axis
-  const [previewOpen, setPreviewOpen] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [shareFeedback, setShareFeedback] = useState(false)
   const metaLine = isCourse
     ? `${item.modules.length} ${item.modules.length === 1 ? 'módulo' : 'módulos'}${item.track.carga_horaria_total ? ` · ${formatCargaHoraria(item.track.carga_horaria_total)}` : ''}`
     : `${item.pill.axis} · ${item.pill.duration}`
@@ -742,55 +745,55 @@ function CourseCard({
     linkTargetId = item.pill.id
   }
 
-  const hasPreview = isCourse && !!teaserVimeoId
+  function goToCourse() {
+    navigate(`/curso/${linkTargetId}`)
+  }
 
-  const cardInner = (
-    <>
-      <div className="relative h-32 w-full shrink-0 overflow-hidden">
-        {thumbnailUrl ? (
-          <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${gradientForAxis(axis)}`}>
-            <Icon name={isCourse ? 'graduation-cap' : 'book'} size={34} className="text-white/90" />
-            {isCourse && (
-              <span className="absolute left-3 top-3 rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur-sm">
-                Curso
-              </span>
-            )}
-          </div>
-        )}
-        {hasPreview && (
-          <span className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm">
-            <Icon name="video" size={13} />
-          </span>
-        )}
-      </div>
-      <div className="flex flex-1 flex-col gap-2 p-4">
-        <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
-        <h3 className="-mt-1 font-bold leading-snug text-ink">{title}</h3>
-        {description && <p className="line-clamp-2 text-sm text-ink-soft">{description}</p>}
-        {isCourse && status !== 'not_started' && (
-          <div className="mt-1">
-            <div className="flex items-center justify-between text-[11px] font-semibold text-ink-soft">
-              <span>{pct}% concluído</span>
-            </div>
-            <ProgressBar value={pct} />
-          </div>
-        )}
-        <div className="mt-auto flex items-center justify-end pt-2">
-          <span
-            className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-white transition ${ACTION_COLOR[status]}`}
-          >
-            {ACTION_LABEL[status]}
-            <Icon name="arrow-right" size={12} />
-          </span>
+  async function handleShare(e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    const url = `${window.location.origin}/curso/${linkTargetId}`
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, url })
+      } catch {
+        // usuário cancelou o compartilhamento — não é um erro
+      }
+      return
+    }
+    await navigator.clipboard.writeText(url)
+    setShareFeedback(true)
+    setTimeout(() => setShareFeedback(false), 2000)
+  }
+
+  const thumbnail = (
+    <div className="relative h-32 w-full shrink-0 overflow-hidden">
+      {thumbnailUrl ? (
+        <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${gradientForAxis(axis)}`}>
+          <Icon name={isCourse ? 'graduation-cap' : 'book'} size={34} className="text-white/90" />
+          {isCourse && (
+            <span className="absolute left-3 top-3 rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur-sm">
+              Curso
+            </span>
+          )}
         </div>
-      </div>
-    </>
+      )}
+      {isCourse && !!teaserVimeoId && (
+        <span className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm">
+          <Icon name="video" size={13} />
+        </span>
+      )}
+    </div>
   )
 
   return (
-    <div className="card relative flex h-full flex-col overflow-hidden p-0 transition duration-200 hover:-translate-y-1 hover:shadow-lg">
+    <div
+      className="card relative flex h-full flex-col overflow-hidden p-0 transition duration-200 hover:-translate-y-1 hover:shadow-lg"
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => setExpanded(false)}
+    >
       {onToggleFavorite && (
         <button
           onClick={(e) => {
@@ -804,61 +807,155 @@ function CourseCard({
           <Icon name={favorited ? 'heart-filled' : 'heart'} size={14} className={favorited ? 'text-brand-red' : undefined} />
         </button>
       )}
-      {hasPreview ? (
-        <button onClick={() => setPreviewOpen(true)} className="flex flex-1 flex-col text-left">
-          {cardInner}
-        </button>
-      ) : (
-        <Link to={`/curso/${linkTargetId}`} className="flex flex-1 flex-col">
-          {cardInner}
-        </Link>
+
+      {/* No celular não existe hover — o 1º toque só revela as ações (igual
+          passar o mouse no desktop); com o card já expandido, tocar de novo
+          no corpo do card é que abre o curso. */}
+      <button
+        type="button"
+        onClick={() => (expanded ? goToCourse() : setExpanded(true))}
+        className="flex flex-1 flex-col text-left"
+      >
+        {thumbnail}
+        <div className="flex flex-1 flex-col gap-2 p-4">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
+          <h3 className="-mt-1 font-bold leading-snug text-ink">{title}</h3>
+          {description && <p className="line-clamp-2 text-sm text-ink-soft">{description}</p>}
+          {isCourse && status !== 'not_started' && (
+            <div className="mt-1">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-ink-soft">
+                <span>{pct}% concluído</span>
+              </div>
+              <ProgressBar value={pct} />
+            </div>
+          )}
+          {!expanded && (
+            <div className="mt-auto flex items-center justify-end pt-2">
+              <span
+                className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-white transition ${ACTION_COLOR[status]}`}
+              >
+                {ACTION_LABEL[status]}
+                <Icon name="arrow-right" size={12} />
+              </span>
+            </div>
+          )}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-navy-light/60 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                goToCourse()
+              }}
+              aria-label="Assistir"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-navy text-white hover:bg-navy-dark"
+            >
+              <Icon name="play" size={15} />
+            </button>
+            {onToggleFavorite && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onToggleFavorite()
+                }}
+                aria-label={favorited ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-navy-light text-ink-soft hover:border-navy hover:text-navy"
+              >
+                <Icon name={favorited ? 'heart-filled' : 'heart'} size={15} className={favorited ? 'text-brand-red' : undefined} />
+              </button>
+            )}
+            <button
+              onClick={handleShare}
+              aria-label="Compartilhar"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-navy-light text-ink-soft hover:border-navy hover:text-navy"
+            >
+              <Icon name="share" size={15} />
+            </button>
+            <div className="flex-1" />
+            <button
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setDetailOpen(true)
+              }}
+              aria-label="Ver detalhes"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-navy-light text-ink-soft hover:border-navy hover:text-navy"
+            >
+              <Icon name="maximize" size={15} />
+            </button>
+          </div>
+          {shareFeedback && <p className="mt-2 text-xs font-semibold text-success">Link copiado!</p>}
+        </div>
       )}
-      {previewOpen && teaserVimeoId && (
-        <CoursePreviewModal
+
+      {detailOpen && (
+        <CourseDetailModal
           vimeoId={teaserVimeoId}
+          coverUrl={thumbnailUrl}
           title={title}
           description={description}
           metaLine={metaLine}
           status={status}
           pct={pct}
           linkTargetId={linkTargetId}
-          onClose={() => setPreviewOpen(false)}
+          modules={isCourse ? item.modules : null}
+          progress={progress}
+          onClose={() => setDetailOpen(false)}
         />
       )}
     </div>
   )
 }
 
-function CoursePreviewModal({
+function CourseDetailModal({
   vimeoId,
+  coverUrl,
   title,
   description,
   metaLine,
   status,
   pct,
   linkTargetId,
+  modules,
+  progress,
   onClose,
 }: {
-  vimeoId: string
+  vimeoId: string | null
+  coverUrl: string | null
   title: string
   description: string | null
   metaLine: string
   status: UserProgress['status']
   pct: number
   linkTargetId: string
+  modules: Pill[] | null
+  progress: Record<string, UserProgress>
   onClose: () => void
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="card w-full max-w-lg overflow-hidden p-0" onClick={(e) => e.stopPropagation()}>
+      <div className="card max-h-[85vh] w-full max-w-lg overflow-y-auto p-0" onClick={(e) => e.stopPropagation()}>
         <div className="relative aspect-video w-full bg-black">
-          <iframe
-            src={`https://player.vimeo.com/video/${vimeoId}?autoplay=1&muted=1`}
-            title="Prévia do curso"
-            className="absolute inset-0 h-full w-full"
-            allow="autoplay; fullscreen; picture-in-picture"
-            allowFullScreen
-          />
+          {vimeoId ? (
+            <iframe
+              src={`https://player.vimeo.com/video/${vimeoId}?autoplay=1&muted=1`}
+              title="Prévia do curso"
+              className="absolute inset-0 h-full w-full"
+              allow="autoplay; fullscreen; picture-in-picture"
+              allowFullScreen
+            />
+          ) : coverUrl ? (
+            <img src={coverUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center bg-navy-light">
+              <Icon name="graduation-cap" size={40} className="text-navy/50" />
+            </div>
+          )}
           <button
             onClick={onClose}
             aria-label="Fechar"
@@ -887,6 +984,32 @@ function CoursePreviewModal({
             {ACTION_LABEL[status]}
             <Icon name="arrow-right" size={12} />
           </Link>
+
+          {modules && modules.length > 0 && (
+            <div className="mt-5">
+              <h4 className="text-sm font-bold text-ink">Aulas</h4>
+              <div className="mt-2 space-y-1.5">
+                {modules.map((m) => (
+                  <Link
+                    key={m.id}
+                    to={`/curso/${m.id}`}
+                    onClick={onClose}
+                    className="flex items-center gap-3 rounded-lg bg-bg px-3 py-2 text-sm hover:bg-navy-light/40"
+                  >
+                    {m.thumbnail_url ? (
+                      <img src={m.thumbnail_url} alt="" className="h-8 w-12 shrink-0 rounded object-cover" />
+                    ) : (
+                      <span className="flex h-8 w-12 shrink-0 items-center justify-center rounded bg-navy-light text-navy">
+                        <Icon name="play" size={12} />
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1 truncate font-medium text-ink">{m.title}</span>
+                    {progress[m.id]?.status === 'completed' && <span className="shrink-0 text-sm font-bold text-success">✓</span>}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
