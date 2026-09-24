@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { Icon } from '../../components/Icon'
 import { ProgressBar } from '../../components/ProgressBar'
@@ -715,7 +715,6 @@ function CourseCard({
   onToggleFavorite?: () => void
 }) {
   const { courseDefaults } = usePlatformSettings()
-  const navigate = useNavigate()
   const isCourse = item.kind === 'course'
   const title = isCourse ? item.track.title : item.pill.title
   const description = isCourse ? item.track.description : item.pill.description
@@ -724,9 +723,7 @@ function CourseCard({
     : item.pill.thumbnail_url ?? courseDefaults.lessonThumbnailUrl ?? courseDefaults.lessonCoverUrl
   const teaserVimeoId = isCourse ? item.track.teaser_vimeo_id : null
   const axis = isCourse ? item.track.title : item.pill.axis
-  const [expanded, setExpanded] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
-  const [shareFeedback, setShareFeedback] = useState(false)
   const metaLine = isCourse
     ? `${item.modules.length} ${item.modules.length === 1 ? 'módulo' : 'módulos'}${item.track.carga_horaria_total ? ` · ${formatCargaHoraria(item.track.carga_horaria_total)}` : ''}`
     : `${item.pill.axis} · ${item.pill.duration}`
@@ -743,27 +740,6 @@ function CourseCard({
   } else {
     status = progress[item.pill.id]?.status ?? 'not_started'
     linkTargetId = item.pill.id
-  }
-
-  function goToCourse() {
-    navigate(`/curso/${linkTargetId}`)
-  }
-
-  async function handleShare(e: React.MouseEvent) {
-    e.preventDefault()
-    e.stopPropagation()
-    const url = `${window.location.origin}/curso/${linkTargetId}`
-    if (navigator.share) {
-      try {
-        await navigator.share({ title, url })
-      } catch {
-        // usuário cancelou o compartilhamento — não é um erro
-      }
-      return
-    }
-    await navigator.clipboard.writeText(url)
-    setShareFeedback(true)
-    setTimeout(() => setShareFeedback(false), 2000)
   }
 
   const thumbnail = (
@@ -789,123 +765,51 @@ function CourseCard({
   )
 
   return (
-    <div
-      className="card relative flex h-full flex-col p-0"
-      onMouseEnter={() => setExpanded(true)}
-      onMouseLeave={() => setExpanded(false)}
-    >
-      {/* Painel de ações fica fora do fluxo normal (position absolute,
-          "flutuando" abaixo do card) de propósito: se ele empurrasse o
-          conteúdo (crescendo dentro do fluxo), a linha toda se deslocava,
-          o mouse saía de baixo do cursor, disparava mouseleave, o card
-          recolhia, o layout voltava, o mouse caía de novo em cima dele —
-          um loop de pisca-pisca infinito. Como é filho do mesmo elemento
-          com o onMouseEnter/onMouseLeave, entrar nele com o mouse ainda
-          conta como "dentro" do card (não fecha), sem mover mais nada.
-          O hover:-translate-y-1 (efeito de "levantar" o card) mora no
-          wrapper INTERNO, não neste div externo — um transform em CSS cria
-          uma nova "âncora" de posicionamento pra qualquer descendente
-          "fixed" (o CourseDetailModal usa position:fixed pra cobrir a tela
-          toda); se esse transform estivesse aqui, o modal ficaria preso
-          dentro do card pequeno em vez de cobrir a tela. */}
-      <div className="flex flex-1 flex-col overflow-hidden rounded-[20px] transition duration-200 hover:-translate-y-1 hover:shadow-lg">
-        {onToggleFavorite && (
-          <button
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              onToggleFavorite()
-            }}
-            aria-label={favorited ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
-            className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-ink-soft shadow"
-          >
-            <Icon name={favorited ? 'heart-filled' : 'heart'} size={14} className={favorited ? 'text-brand-red' : undefined} />
-          </button>
-        )}
-
-        {/* No celular não existe hover — o 1º toque só revela as ações
-            (igual passar o mouse no desktop); com o card já expandido,
-            tocar de novo no corpo do card é que abre o curso. */}
+    <div className="card relative flex h-full flex-col overflow-hidden p-0 transition duration-200 hover:-translate-y-1 hover:shadow-lg">
+      {onToggleFavorite && (
         <button
-          type="button"
-          onClick={() => (expanded ? goToCourse() : setExpanded(true))}
-          className="flex flex-1 flex-col text-left"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onToggleFavorite()
+          }}
+          aria-label={favorited ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+          className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-ink-soft shadow"
         >
-          {thumbnail}
-          <div className="flex flex-1 flex-col gap-2 p-4">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
-            <h3 className="-mt-1 font-bold leading-snug text-ink">{title}</h3>
-            {description && <p className="line-clamp-2 text-sm text-ink-soft">{description}</p>}
-            {isCourse && status !== 'not_started' && (
-              <div className="mt-1">
-                <div className="flex items-center justify-between text-[11px] font-semibold text-ink-soft">
-                  <span>{pct}% concluído</span>
-                </div>
-                <ProgressBar value={pct} />
-              </div>
-            )}
-            <div className="mt-auto flex items-center justify-end pt-2">
-              <span
-                className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-white transition ${ACTION_COLOR[status]}`}
-              >
-                {ACTION_LABEL[status]}
-                <Icon name="arrow-right" size={12} />
-              </span>
-            </div>
-          </div>
+          <Icon name={favorited ? 'heart-filled' : 'heart'} size={14} className={favorited ? 'text-brand-red' : undefined} />
         </button>
-      </div>
-
-      {expanded && (
-        <div className="card absolute inset-x-0 top-full z-20 mt-1.5 p-3 shadow-xl">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                goToCourse()
-              }}
-              aria-label="Assistir"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-navy text-white hover:bg-navy-dark"
-            >
-              <Icon name="play" size={15} />
-            </button>
-            {onToggleFavorite && (
-              <button
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  onToggleFavorite()
-                }}
-                aria-label={favorited ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-navy-light text-ink-soft hover:border-navy hover:text-navy"
-              >
-                <Icon name={favorited ? 'heart-filled' : 'heart'} size={15} className={favorited ? 'text-brand-red' : undefined} />
-              </button>
-            )}
-            <button
-              onClick={handleShare}
-              aria-label="Compartilhar"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-navy-light text-ink-soft hover:border-navy hover:text-navy"
-            >
-              <Icon name="share" size={15} />
-            </button>
-            <div className="flex-1" />
-            <button
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setDetailOpen(true)
-              }}
-              aria-label="Ver detalhes"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-navy-light text-ink-soft hover:border-navy hover:text-navy"
-            >
-              <Icon name="maximize" size={15} />
-            </button>
-          </div>
-          {shareFeedback && <p className="mt-2 text-xs font-semibold text-success">Link copiado!</p>}
-        </div>
       )}
+
+      {/* Um clique/toque só, direto: abre o modal com capa/vídeo, progresso,
+          descrição completa e a lista de aulas. Nada de hover: um card
+          "expandindo" por cima de outro elemento (o painel de ações) só deu
+          bug (empurrava o layout, ficava preso atrás de outro conteúdo,
+          escondia dependendo do scroll) — mais simples e funciona igual em
+          mouse e toque. */}
+      <button type="button" onClick={() => setDetailOpen(true)} className="flex flex-1 flex-col text-left">
+        {thumbnail}
+        <div className="flex flex-1 flex-col gap-2 p-4">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
+          <h3 className="-mt-1 font-bold leading-snug text-ink">{title}</h3>
+          {description && <p className="line-clamp-2 text-sm text-ink-soft">{description}</p>}
+          {isCourse && status !== 'not_started' && (
+            <div className="mt-1">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-ink-soft">
+                <span>{pct}% concluído</span>
+              </div>
+              <ProgressBar value={pct} />
+            </div>
+          )}
+          <div className="mt-auto flex items-center justify-end pt-2">
+            <span
+              className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-white transition ${ACTION_COLOR[status]}`}
+            >
+              {ACTION_LABEL[status]}
+              <Icon name="arrow-right" size={12} />
+            </span>
+          </div>
+        </div>
+      </button>
 
       {detailOpen && (
         <CourseDetailModal
@@ -951,6 +855,23 @@ function CourseDetailModal({
   progress: Record<string, UserProgress>
   onClose: () => void
 }) {
+  const [shareFeedback, setShareFeedback] = useState(false)
+
+  async function handleShare() {
+    const url = `${window.location.origin}/curso/${linkTargetId}`
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, url })
+      } catch {
+        // usuário cancelou o compartilhamento — não é um erro
+      }
+      return
+    }
+    await navigator.clipboard.writeText(url)
+    setShareFeedback(true)
+    setTimeout(() => setShareFeedback(false), 2000)
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div className="card max-h-[85vh] w-full max-w-lg overflow-y-auto p-0" onClick={(e) => e.stopPropagation()}>
@@ -970,18 +891,28 @@ function CourseDetailModal({
               <Icon name="graduation-cap" size={40} className="text-navy/50" />
             </div>
           )}
-          <button
-            onClick={onClose}
-            aria-label="Fechar"
-            className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
-          >
-            <Icon name="x" size={16} />
-          </button>
+          <div className="absolute right-3 top-3 flex gap-2">
+            <button
+              onClick={handleShare}
+              aria-label="Compartilhar"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+            >
+              <Icon name="share" size={15} />
+            </button>
+            <button
+              onClick={onClose}
+              aria-label="Fechar"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+            >
+              <Icon name="x" size={16} />
+            </button>
+          </div>
         </div>
         <div className="p-5">
           <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
           <h3 className="-mt-1 text-lg font-bold text-ink">{title}</h3>
           {description && <p className="mt-1 text-sm text-ink-soft">{description}</p>}
+          {shareFeedback && <p className="mt-1 text-xs font-semibold text-success">Link copiado!</p>}
           {status !== 'not_started' && (
             <div className="mt-3">
               <div className="flex items-center justify-between text-[11px] font-semibold text-ink-soft">
