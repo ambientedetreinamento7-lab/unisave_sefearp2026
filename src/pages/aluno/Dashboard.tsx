@@ -790,46 +790,54 @@ function CourseCard({
 
   return (
     <div
-      className="card relative flex h-full flex-col overflow-hidden p-0 transition duration-200 hover:-translate-y-1 hover:shadow-lg"
+      className="card relative flex h-full flex-col p-0 transition duration-200 hover:-translate-y-1 hover:shadow-lg"
       onMouseEnter={() => setExpanded(true)}
       onMouseLeave={() => setExpanded(false)}
     >
-      {onToggleFavorite && (
-        <button
-          onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            onToggleFavorite()
-          }}
-          aria-label={favorited ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
-          className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-ink-soft shadow"
-        >
-          <Icon name={favorited ? 'heart-filled' : 'heart'} size={14} className={favorited ? 'text-brand-red' : undefined} />
-        </button>
-      )}
+      {/* Painel de ações fica fora do fluxo normal (position absolute,
+          "flutuando" abaixo do card) de propósito: se ele empurrasse o
+          conteúdo (crescendo dentro do fluxo), a linha toda se deslocava,
+          o mouse saía de baixo do cursor, disparava mouseleave, o card
+          recolhia, o layout voltava, o mouse caía de novo em cima dele —
+          um loop de pisca-pisca infinito. Como é filho do mesmo elemento
+          com o onMouseEnter/onMouseLeave, entrar nele com o mouse ainda
+          conta como "dentro" do card (não fecha), sem mover mais nada. */}
+      <div className="flex flex-1 flex-col overflow-hidden rounded-[20px]">
+        {onToggleFavorite && (
+          <button
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onToggleFavorite()
+            }}
+            aria-label={favorited ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+            className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-ink-soft shadow"
+          >
+            <Icon name={favorited ? 'heart-filled' : 'heart'} size={14} className={favorited ? 'text-brand-red' : undefined} />
+          </button>
+        )}
 
-      {/* No celular não existe hover — o 1º toque só revela as ações (igual
-          passar o mouse no desktop); com o card já expandido, tocar de novo
-          no corpo do card é que abre o curso. */}
-      <button
-        type="button"
-        onClick={() => (expanded ? goToCourse() : setExpanded(true))}
-        className="flex flex-1 flex-col text-left"
-      >
-        {thumbnail}
-        <div className="flex flex-1 flex-col gap-2 p-4">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
-          <h3 className="-mt-1 font-bold leading-snug text-ink">{title}</h3>
-          {description && <p className="line-clamp-2 text-sm text-ink-soft">{description}</p>}
-          {isCourse && status !== 'not_started' && (
-            <div className="mt-1">
-              <div className="flex items-center justify-between text-[11px] font-semibold text-ink-soft">
-                <span>{pct}% concluído</span>
+        {/* No celular não existe hover — o 1º toque só revela as ações
+            (igual passar o mouse no desktop); com o card já expandido,
+            tocar de novo no corpo do card é que abre o curso. */}
+        <button
+          type="button"
+          onClick={() => (expanded ? goToCourse() : setExpanded(true))}
+          className="flex flex-1 flex-col text-left"
+        >
+          {thumbnail}
+          <div className="flex flex-1 flex-col gap-2 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
+            <h3 className="-mt-1 font-bold leading-snug text-ink">{title}</h3>
+            {description && <p className="line-clamp-2 text-sm text-ink-soft">{description}</p>}
+            {isCourse && status !== 'not_started' && (
+              <div className="mt-1">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-ink-soft">
+                  <span>{pct}% concluído</span>
+                </div>
+                <ProgressBar value={pct} />
               </div>
-              <ProgressBar value={pct} />
-            </div>
-          )}
-          {!expanded && (
+            )}
             <div className="mt-auto flex items-center justify-end pt-2">
               <span
                 className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-white transition ${ACTION_COLOR[status]}`}
@@ -838,12 +846,12 @@ function CourseCard({
                 <Icon name="arrow-right" size={12} />
               </span>
             </div>
-          )}
-        </div>
-      </button>
+          </div>
+        </button>
+      </div>
 
       {expanded && (
-        <div className="border-t border-navy-light/60 px-4 py-3">
+        <div className="card absolute inset-x-0 top-full z-20 mt-1.5 p-3 shadow-xl">
           <div className="flex items-center gap-2">
             <button
               onClick={(e) => {
