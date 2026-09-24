@@ -3,6 +3,7 @@ import { AdminLayout } from './AdminLayout'
 import { Icon } from '../../components/Icon'
 import { QrScannerModal } from '../../components/QrScannerModal'
 import { getAllRedemptions, getRedemptionByCode, markRedemptionDelivered } from '../../lib/bottons'
+import { PROGRAMS } from '../../lib/quiz'
 import type { BottonRedemption } from '../../types/database'
 
 export function AdminBottons() {
@@ -101,9 +102,16 @@ export function AdminBottons() {
         {codeResult && (
           <div className="mt-4 overflow-hidden rounded-2xl card-highlight">
             <div className="flex items-center gap-4 bg-navy-light/40 p-6">
-              <div className="icon-badge h-14 w-14 shrink-0">
-                <Icon name="shield" size={28} />
-              </div>
+              {(() => {
+                const badgeUrl = codeResult.program_id ? PROGRAMS.find((p) => p.id === codeResult.program_id)?.badge : null
+                return badgeUrl ? (
+                  <img src={badgeUrl} alt="" className="h-14 w-14 shrink-0 object-contain" />
+                ) : (
+                  <div className="icon-badge h-14 w-14 shrink-0">
+                    <Icon name="shield" size={28} />
+                  </div>
+                )
+              })()}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xl font-extrabold text-ink">{codeResult.student_name}</p>
                 <p className="text-sm text-ink-soft">{codeResult.course_name ?? 'Sem curso vinculado'}</p>
