@@ -2,6 +2,7 @@ import JSZip from 'jszip'
 import { useEffect, useState } from 'react'
 import { AdminLayout } from './AdminLayout'
 import { useConfirm } from '../../components/ConfirmDialog'
+import { withRetry } from '../../lib/retry'
 import { supabase } from '../../lib/supabase'
 import type { H5pLibraryItem } from '../../types/database'
 
@@ -226,16 +227,34 @@ function H5pFormModal({
 
         const packageId = crypto.randomUUID()
         let uploaded = 0
-        for (const entry of entries) {
-          const raw = await entry.async('blob')
-          const mime = guessContentType(entry.name)
-          const blob = new Blob([raw], { type: mime })
-          const { error: uploadError } = await supabase.storage
-            .from('h5p-packages')
-            .upload(`${packageId}/${entry.name}`, blob, { upsert: true, contentType: mime })
-          if (uploadError) throw uploadError
-          uploaded += 1
-          setUploadPct(Math.round((uploaded / entries.length) * 100))
+        // Um H5P completo (com bibliotecas, ex.: exportado do Lumi) pode ter
+        // centenas de arquivos — subir um de cada vez, em sequência, demora
+        // tanto que o Storage do Supabase às vezes devolve 504 no meio do
+        // caminho. Sobe em lotes paralelos (com retry pra erros passageiros
+        // tipo 429/5xx) pra terminar bem mais rápido e tolerar picos.
+        const CONCURRENCY = 6
+        for (let i = 0; i < entries.length; i += CONCURRENCY) {
+          const batch = entries.slice(i, i + CONCURRENCY)
+          await Promise.all(
+            batch.map(async (entry) => {
+              const raw = await entry.async('blob')
+              const mime = guessContentType(entry.name)
+              const blob = new Blob([raw], { type: mime })
+              try {
+                await withRetry(async () => {
+                  const { error: uploadError } = await supabase.storage
+                    .from('h5p-packages')
+                    .upload(`${packageId}/${entry.name}`, blob, { upsert: true, contentType: mime })
+                  if (uploadError) throw uploadError
+                })
+              } catch (err) {
+                const message = err instanceof Error ? err.message : 'erro desconhecido'
+                throw new Error(`Falha ao enviar "${entry.name}": ${message}`)
+              }
+              uploaded += 1
+              setUploadPct(Math.round((uploaded / entries.length) * 100))
+            }),
+          )
         }
         // Same-origin proxy required pelo mesmo motivo do SCORM: *.supabase.co
         // rebaixa qualquer resposta HTML/JS pra text/plain com CSP travado.
