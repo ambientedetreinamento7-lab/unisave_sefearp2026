@@ -68,7 +68,7 @@ export function ValidarCertificado() {
           </p>
 
           {result === 'found' && certificate && (
-            <div className="mt-5 flex items-start gap-3 rounded-xl border border-success/30 bg-green-50 p-4">
+            <div className="alert-success mt-5 flex items-start gap-3 rounded-xl border p-4">
               <span className="mt-0.5 shrink-0 text-xl">✅</span>
               <div>
                 <p className="font-bold text-ink">Certificado válido</p>
@@ -87,7 +87,7 @@ export function ValidarCertificado() {
           )}
 
           {result === 'not_found' && (
-            <div className="mt-5 flex items-start gap-3 rounded-xl border border-brand-red/30 bg-red-50 p-4">
+            <div className="alert-danger mt-5 flex items-start gap-3 rounded-xl border p-4">
               <Icon name="alert-triangle" size={20} className="mt-0.5 shrink-0 text-brand-red" />
               <div>
                 <p className="font-bold text-ink">Código não encontrado</p>

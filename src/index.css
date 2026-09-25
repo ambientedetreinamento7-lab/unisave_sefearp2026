@@ -21,6 +21,10 @@
   --color-lavender: #eef0ff;
   --color-lavender-ink: #4c4dc7;
   --color-surface: #ffffff;
+  --color-alert-success-bg: #f0fdf4;
+  --color-alert-success-border: rgba(22, 163, 74, 0.3);
+  --color-alert-danger-bg: #fef2f2;
+  --color-alert-danger-border: rgba(237, 28, 36, 0.3);
 }
 
 /* Dark theme: overrides the semantic tokens above (not the raw Tailwind
@@ -41,6 +45,15 @@
   --color-navy-light: #46479c;
   --color-lavender: #232a52;
   --color-lavender-ink: #b7bdf8;
+  /* Fundos pastel fixos (bg-green-50, bg-red-50 etc.) não escurecem
+     sozinhos e ficam ilegíveis com texto claro (text-ink) em cima no
+     escuro — esses dois tokens existem pra caixas de alerta/validação
+     (ex.: certificado válido/inválido) usarem um fundo com contraste
+     certo nos dois temas, com o mesmo texto var(--color-ink) por cima. */
+  --color-alert-success-bg: rgba(22, 163, 74, 0.16);
+  --color-alert-success-border: rgba(22, 163, 74, 0.4);
+  --color-alert-danger-bg: rgba(237, 28, 36, 0.16);
+  --color-alert-danger-border: rgba(237, 28, 36, 0.4);
 }
 
 @layer base {
@@ -80,6 +93,19 @@
 
   .card-highlight {
     box-shadow: 0 10px 30px rgba(20, 30, 60, 0.12);
+  }
+
+  /* Caixas de alerta/validação (ex.: certificado válido/inválido, erros de
+     formulário) — usar isso em vez de bg-green-50/bg-red-50 fixos, que não
+     adaptam ao tema escuro e deixam o texto (var(--color-ink)) ilegível. */
+  .alert-success {
+    background: var(--color-alert-success-bg);
+    border-color: var(--color-alert-success-border);
+  }
+
+  .alert-danger {
+    background: var(--color-alert-danger-bg);
+    border-color: var(--color-alert-danger-border);
   }
 
   /* Trilho horizontal de cursos (Dashboard, Comunidade) — a barra de

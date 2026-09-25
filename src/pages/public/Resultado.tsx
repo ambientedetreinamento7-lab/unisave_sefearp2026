@@ -52,7 +52,7 @@ export function Resultado() {
             </div>
           </div>
 
-          <div className="mt-5 rounded-2xl border-2 border-dashed border-red-200 bg-red-50/60 p-4">
+          <div className="alert-danger mt-5 rounded-2xl border-2 border-dashed p-4">
             <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-red">
               <Icon name="map-pin" size={13} />
               Não perca na feira
