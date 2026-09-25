@@ -187,7 +187,7 @@ export function AdminCertificados() {
               <p className="p-4 text-sm text-ink-soft">Carregando…</p>
             ) : (
               <table className="w-full text-left text-sm">
-                <thead className="bg-navy-light text-navy">
+                <thead className="bg-chip text-navy">
                   <tr>
                     <th className="px-4 py-3">Aluno</th>
                     <th className="px-4 py-3">Curso</th>

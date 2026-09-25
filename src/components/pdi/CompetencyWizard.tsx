@@ -306,7 +306,7 @@ export function CompetencyWizard({
                     key={v}
                     onClick={() => saveRating(v)}
                     className={`h-10 w-10 rounded-full text-sm font-bold transition ${
-                      selfRating >= v ? 'bg-brand-red text-white' : 'bg-navy-light text-navy'
+                      selfRating >= v ? 'bg-brand-red text-white' : 'bg-chip text-navy'
                     }`}
                   >
                     {v}

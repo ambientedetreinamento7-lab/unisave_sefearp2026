@@ -146,7 +146,7 @@ export function AdminUsuarios() {
 
       <div className="card overflow-hidden">
         <table className="w-full text-left text-sm">
-          <thead className="bg-navy-light text-navy">
+          <thead className="bg-chip text-navy">
             <tr>
               <th className="w-10 px-4 py-3">
                 <input

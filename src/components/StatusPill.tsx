@@ -3,7 +3,7 @@ import type { PillStatus } from '../types/database'
 const CONFIG: Record<PillStatus, { label: string; className: string }> = {
   completed: { label: 'Concluído', className: 'bg-green-50 text-success border border-green-200' },
   in_progress: { label: 'Continuar', className: 'bg-red-50 text-brand-red border border-red-200' },
-  not_started: { label: 'Iniciar', className: 'bg-navy-light text-navy border border-navy/10' },
+  not_started: { label: 'Iniciar', className: 'bg-chip text-navy border border-navy/10' },
 }
 
 export function StatusPill({ status }: { status: PillStatus }) {

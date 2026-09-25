@@ -248,7 +248,7 @@ export function AdminTrilhas() {
                   {track.published ? 'Publicado' : 'Despublicado'}
                 </span>
                 {track.is_catalog && (
-                  <span className="rounded-full bg-navy-light px-2 py-0.5 text-[11px] font-semibold text-navy">Biblioteca</span>
+                  <span className="rounded-full bg-chip px-2 py-0.5 text-[11px] font-semibold text-navy">Biblioteca</span>
                 )}
               </div>
               <p className="mt-1 text-xs text-ink-soft">

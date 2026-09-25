@@ -72,7 +72,7 @@ export function AdminGamificacao() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => toggleEnabled(rule)}
-                  className="rounded-xl border border-navy-light px-3 py-1.5 text-sm font-semibold text-navy hover:bg-navy-light"
+                  className="rounded-xl border border-navy-light px-3 py-1.5 text-sm font-semibold text-navy hover:bg-chip"
                 >
                   {rule.enabled ? 'Desativar' : 'Ativar'}
                 </button>
@@ -116,7 +116,7 @@ export function AdminGamificacao() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setLevelForm(level)}
-                  className="rounded-xl border border-navy-light px-3 py-1.5 text-sm font-semibold text-navy hover:bg-navy-light"
+                  className="rounded-xl border border-navy-light px-3 py-1.5 text-sm font-semibold text-navy hover:bg-chip"
                 >
                   Editar
                 </button>
@@ -308,7 +308,7 @@ function LevelFormModal({
               type="button"
               onClick={() => setMode('emoji')}
               className={`flex-1 rounded-lg border-2 py-1.5 text-xs font-bold transition ${
-                mode === 'emoji' ? 'border-navy bg-navy-light text-navy' : 'border-navy-light text-ink-soft'
+                mode === 'emoji' ? 'border-navy bg-chip text-navy' : 'border-navy-light text-ink-soft'
               }`}
             >
               Emoji
@@ -317,7 +317,7 @@ function LevelFormModal({
               type="button"
               onClick={() => setMode('image')}
               className={`flex-1 rounded-lg border-2 py-1.5 text-xs font-bold transition ${
-                mode === 'image' ? 'border-navy bg-navy-light text-navy' : 'border-navy-light text-ink-soft'
+                mode === 'image' ? 'border-navy bg-chip text-navy' : 'border-navy-light text-ink-soft'
               }`}
             >
               Imagem/SVG
@@ -341,7 +341,7 @@ function LevelFormModal({
                 const file = e.target.files?.[0]
                 if (file) handleFile(file)
               }}
-              className="block w-full text-sm text-ink-soft file:mr-3 file:rounded-lg file:border-0 file:bg-navy-light file:px-3 file:py-2 file:text-sm file:font-semibold file:text-navy"
+              className="block w-full text-sm text-ink-soft file:mr-3 file:rounded-lg file:border-0 file:bg-chip file:px-3 file:py-2 file:text-sm file:font-semibold file:text-navy"
             />
             {uploading && <p className="mt-1 text-xs text-ink-soft">Enviando…</p>}
           </div>

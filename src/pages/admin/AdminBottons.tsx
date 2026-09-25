@@ -125,7 +125,7 @@ export function AdminBottons() {
               </span>
             </div>
             <div className="flex flex-col items-center gap-3 p-6">
-              <span className="inline-flex items-center gap-2 rounded-full bg-navy-light px-6 py-3 font-mono text-2xl font-extrabold tracking-[0.2em] text-navy">
+              <span className="inline-flex items-center gap-2 rounded-full bg-chip px-6 py-3 font-mono text-2xl font-extrabold tracking-[0.2em] text-navy">
                 {codeResult.code}
                 <button
                   onClick={() => navigator.clipboard.writeText(codeResult.code)}

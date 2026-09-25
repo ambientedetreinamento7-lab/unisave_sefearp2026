@@ -113,7 +113,7 @@ export function MeuPdi() {
           <h1 className="text-2xl font-extrabold text-ink">Meu PDI</h1>
           <button
             onClick={() => setRunPdiTour(true)}
-            className="rounded-full border border-navy-light px-3.5 py-1.5 text-xs font-semibold text-navy hover:bg-navy-light"
+            className="rounded-full border border-navy-light px-3.5 py-1.5 text-xs font-semibold text-navy hover:bg-chip"
           >
             Tutorial Meu PDI
           </button>
@@ -485,7 +485,7 @@ function BalancoTab({ userId, programId }: { userId: string; programId: string |
                   key={v}
                   onClick={() => rate(cat.id, v)}
                   className={`h-8 w-8 rounded-full text-xs font-bold transition ${
-                    (rating?.self_rating ?? 0) >= v ? 'bg-brand-red text-white' : 'bg-navy-light text-navy'
+                    (rating?.self_rating ?? 0) >= v ? 'bg-brand-red text-white' : 'bg-chip text-navy'
                   }`}
                 >
                   {v}
@@ -519,6 +519,7 @@ function BibliotecaTab({
   const [plans, setPlans] = useState<PdiPlan[]>([])
   const [picker, setPicker] = useState<LibraryItem | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -542,18 +543,28 @@ function BibliotecaTab({
   }, [userId, programId, diagnosticProfile])
 
   async function handleAddTrack(track: Track) {
+    setError('')
     if (plans.length === 0) {
-      await createPlanWithTrack(userId, `PDI — ${track.title}`, track.id)
-      setPlans(await getUserPlans(userId))
+      try {
+        await createPlanWithTrack(userId, `PDI — ${track.title}`, track.id)
+        setPlans(await getUserPlans(userId))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Não foi possível adicionar essa trilha ao PDI.')
+      }
       return
     }
     setPicker({ kind: 'track', track })
   }
 
   async function handleAddPill(pill: Pill) {
+    setError('')
     if (plans.length === 0) {
-      await createPlanWithPill(userId, `PDI — ${pill.title}`, pill.id)
-      setPlans(await getUserPlans(userId))
+      try {
+        await createPlanWithPill(userId, `PDI — ${pill.title}`, pill.id)
+        setPlans(await getUserPlans(userId))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Não foi possível adicionar esse curso ao PDI.')
+      }
       return
     }
     setPicker({ kind: 'pill', pill })
@@ -563,6 +574,7 @@ function BibliotecaTab({
 
   return (
     <div className="mt-6 space-y-8">
+      {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-brand-red">{error}</p>}
       <div>
         <h3 className="font-bold text-ink">Trilhas</h3>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
@@ -645,28 +657,42 @@ function AddToPlanModal({
   onDone: () => void
 }) {
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   const title = item.kind === 'track' ? item.track.title : item.pill.title
 
   async function addToExisting(planId: string) {
     setSaving(true)
-    if (item.kind === 'track') await addTrackToPlan(planId, item.track.id)
-    else await addPillToPlan(planId, item.pill.id)
-    setSaving(false)
-    onDone()
+    setError('')
+    try {
+      if (item.kind === 'track') await addTrackToPlan(planId, item.track.id)
+      else await addPillToPlan(planId, item.pill.id)
+      onDone()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível adicionar ao plano.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function createNew() {
     setSaving(true)
-    if (item.kind === 'track') await createPlanWithTrack(userId, `PDI — ${item.track.title}`, item.track.id)
-    else await createPlanWithPill(userId, `PDI — ${item.pill.title}`, item.pill.id)
-    setSaving(false)
-    onDone()
+    setError('')
+    try {
+      if (item.kind === 'track') await createPlanWithTrack(userId, `PDI — ${item.track.title}`, item.track.id)
+      else await createPlanWithPill(userId, `PDI — ${item.pill.title}`, item.pill.id)
+      onDone()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível criar o plano.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="card w-full max-w-md p-6">
         <h3 className="text-lg font-bold text-ink">Adicionar "{title}" a qual plano?</h3>
+        {error && <p className="mt-2 rounded-xl bg-red-50 p-3 text-sm text-brand-red">{error}</p>}
         <div className="mt-4 space-y-2">
           {plans.map((plan) => (
             <button

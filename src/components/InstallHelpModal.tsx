@@ -65,7 +65,7 @@ export function InstallHelpModal({ onClose }: { onClose: () => void }) {
             <button
               onClick={() => setPlatform('android')}
               className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold transition ${
-                platform === 'android' ? 'border-navy bg-navy-light text-navy' : 'border-navy-light text-ink-soft'
+                platform === 'android' ? 'border-navy bg-chip text-navy' : 'border-navy-light text-ink-soft'
               }`}
             >
               Android
@@ -73,7 +73,7 @@ export function InstallHelpModal({ onClose }: { onClose: () => void }) {
             <button
               onClick={() => setPlatform('ios')}
               className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold transition ${
-                platform === 'ios' ? 'border-navy bg-navy-light text-navy' : 'border-navy-light text-ink-soft'
+                platform === 'ios' ? 'border-navy bg-chip text-navy' : 'border-navy-light text-ink-soft'
               }`}
             >
               iPhone / iPad
@@ -83,7 +83,7 @@ export function InstallHelpModal({ onClose }: { onClose: () => void }) {
           <ol className="mt-4 space-y-3">
             {STEPS[platform].map((step, i) => (
               <li key={i} className="flex items-start gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-navy-light text-xs font-bold text-navy">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-chip text-xs font-bold text-navy">
                   {i + 1}
                 </span>
                 <p className="text-sm text-ink">{step}</p>

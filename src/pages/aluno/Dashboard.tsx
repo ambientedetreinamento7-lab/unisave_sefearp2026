@@ -961,7 +961,7 @@ function CourseDetailModal({
                     {m.thumbnail_url ? (
                       <img src={m.thumbnail_url} alt="" className="h-8 w-12 shrink-0 rounded object-cover" />
                     ) : (
-                      <span className="flex h-8 w-12 shrink-0 items-center justify-center rounded bg-navy-light text-navy">
+                      <span className="flex h-8 w-12 shrink-0 items-center justify-center rounded bg-chip text-navy">
                         <Icon name="play" size={12} />
                       </span>
                     )}
@@ -1023,7 +1023,7 @@ function RedeemBottonModal({
             <div className="mt-4 flex justify-center">
               <QrCode value={redemption.code} size={160} className="rounded-lg" />
             </div>
-            <p className="mt-3 rounded-xl bg-navy-light px-4 py-3 text-2xl font-extrabold tracking-widest text-navy">
+            <p className="mt-3 rounded-xl bg-chip px-4 py-3 text-2xl font-extrabold tracking-widest text-navy">
               {redemption.code}
             </p>
             <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">

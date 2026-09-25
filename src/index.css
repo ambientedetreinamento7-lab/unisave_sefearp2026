@@ -21,6 +21,7 @@
   --color-lavender: #eef0ff;
   --color-lavender-ink: #4c4dc7;
   --color-surface: #ffffff;
+  --color-chip: #e7e7f2;
   --color-alert-success-bg: #f0fdf4;
   --color-alert-success-border: rgba(22, 163, 74, 0.3);
   --color-alert-danger-bg: #fef2f2;
@@ -45,6 +46,15 @@
   --color-navy-light: #46479c;
   --color-lavender: #232a52;
   --color-lavender-ink: #b7bdf8;
+  /* Token separado de --color-navy-light: aquele também é usado como cor de
+     borda padrão em ~250 lugares (inputs, cards) e precisa ficar claro o
+     bastante pra aparecer contra o fundo escuro — mas isso deixava as
+     pílulas/chips (bg-navy-light + text-navy: categorias, badges,
+     cabeçalho de tabela) com só ~2.5:1 de contraste, muito escuras/baixo
+     contraste. --color-chip é só pra fundo de pílula, pode ficar bem mais
+     escuro que a borda sem quebrar nada, subindo o contraste com o texto
+     navy em cima pra ~3.9:1. */
+  --color-chip: #2c3159;
   /* Fundos pastel fixos (bg-green-50, bg-red-50 etc.) não escurecem
      sozinhos e ficam ilegíveis com texto claro (text-ink) em cima no
      escuro — esses dois tokens existem pra caixas de alerta/validação

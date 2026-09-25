@@ -55,7 +55,7 @@ export function AdminGrade() {
           <>
             <div className="mt-4 max-h-80 overflow-auto rounded-xl border border-navy-light">
               <table className="w-full text-left text-sm">
-                <thead className="bg-navy-light text-navy">
+                <thead className="bg-chip text-navy">
                   <tr>
                     <th className="px-3 py-2">program_id</th>
                     <th className="px-3 py-2">period</th>

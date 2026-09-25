@@ -567,7 +567,7 @@ export function CoursePlayer() {
             </span>
             <span
               className={`rounded-full px-3 py-1 text-xs font-bold ${
-                isCompleted ? 'bg-green-50 text-success' : 'bg-navy-light text-navy'
+                isCompleted ? 'bg-green-50 text-success' : 'bg-chip text-navy'
               }`}
             >
               {isCompleted ? 'Concluído' : 'Em andamento'}
