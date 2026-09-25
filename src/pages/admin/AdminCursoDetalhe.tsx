@@ -7,7 +7,7 @@ import { getReactionSurveys, linkPillToTrack, unlinkPillFromTrack } from '../../
 import { formatCargaHoraria, sanitizeFileName } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import { parseVimeoId } from '../../lib/vimeo'
-import type { Category, CertificateTemplate, ContentType, DiagnosticProfile, Pill, Program, ReactionSurvey, ScormLibraryItem, SkillCategory, Track, TrackPill } from '../../types/database'
+import type { Category, CertificateTemplate, ContentType, DiagnosticProfile, H5pLibraryItem, Pill, Program, ReactionSurvey, ScormLibraryItem, SkillCategory, Track, TrackPill } from '../../types/database'
 
 async function uploadCover(file: File, folder: string): Promise<string> {
   const path = `${folder}/${crypto.randomUUID()}-${sanitizeFileName(file.name)}`
@@ -688,6 +688,8 @@ function PillFormModal({
   const [contentUrl, setContentUrl] = useState(pill?.content_url ?? '')
   const [scormLibraryId, setScormLibraryId] = useState(pill?.scorm_library_id ?? '')
   const [scormLibrary, setScormLibrary] = useState<ScormLibraryItem[]>([])
+  const [h5pLibraryId, setH5pLibraryId] = useState(pill?.h5p_library_id ?? '')
+  const [h5pLibrary, setH5pLibrary] = useState<H5pLibraryItem[]>([])
   const [reactionSurveyId, setReactionSurveyId] = useState(pill?.reaction_survey_id ?? '')
   const [reactionSurveys, setReactionSurveys] = useState<ReactionSurvey[]>([])
   const [coverFile, setCoverFile] = useState<File | null>(null)
@@ -707,6 +709,13 @@ function PillFormModal({
     if (contentType !== 'scorm') return
     supabase.from('scorm_library').select('*').order('name').then(({ data }) => {
       setScormLibrary((data as ScormLibraryItem[]) ?? [])
+    })
+  }, [contentType])
+
+  useEffect(() => {
+    if (contentType !== 'h5p') return
+    supabase.from('h5p_library').select('*').order('name').then(({ data }) => {
+      setH5pLibrary((data as H5pLibraryItem[]) ?? [])
     })
   }, [contentType])
 
@@ -732,11 +741,12 @@ function PillFormModal({
         axis,
         duration,
         content_type: contentType,
-        content_url: contentType !== 'scorm' && contentType !== 'reaction' ? contentUrl : null,
+        content_url: contentType !== 'scorm' && contentType !== 'h5p' && contentType !== 'reaction' ? contentUrl : null,
         scorm_library_id: contentType === 'scorm' ? scormLibraryId || null : null,
         ...(contentType === 'scorm' && scormLibraryId
           ? { scorm_package_url: null, scorm_manifest_path: null }
           : {}),
+        h5p_library_id: contentType === 'h5p' ? h5pLibraryId || null : null,
         reaction_survey_id: contentType === 'reaction' ? reactionSurveyId || null : null,
         cover_url: coverUrl,
         thumbnail_url: thumbnailUrl,
@@ -775,6 +785,7 @@ function PillFormModal({
           <option value="video">Vídeo</option>
           <option value="iframe">Iframe / embed</option>
           <option value="scorm">SCORM</option>
+          <option value="h5p">H5P</option>
           <option value="reaction">Avaliação de Reação</option>
         </select>
 
@@ -801,7 +812,7 @@ function PillFormModal({
           </div>
         )}
 
-        {contentType !== 'scorm' && contentType !== 'reaction' && (
+        {contentType !== 'scorm' && contentType !== 'h5p' && contentType !== 'reaction' && (
           <input className="w-full rounded-xl border border-navy-light px-4 py-3" placeholder="URL do conteúdo" value={contentUrl} onChange={(e) => setContentUrl(e.target.value)} />
         )}
 
@@ -819,6 +830,24 @@ function PillFormModal({
             </select>
             <Link to="/admin/scorms" className="mt-1 inline-block text-xs font-semibold text-navy hover:underline">
               + Cadastrar novo pacote na Biblioteca de SCORMs
+            </Link>
+          </div>
+        )}
+
+        {contentType === 'h5p' && (
+          <div>
+            <select
+              className="w-full rounded-xl border border-navy-light px-4 py-3"
+              value={h5pLibraryId}
+              onChange={(e) => setH5pLibraryId(e.target.value)}
+            >
+              <option value="">Selecione um pacote da biblioteca…</option>
+              {h5pLibrary.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
+            <Link to="/admin/h5p" className="mt-1 inline-block text-xs font-semibold text-navy hover:underline">
+              + Cadastrar novo pacote na Biblioteca de H5P
             </Link>
           </div>
         )}

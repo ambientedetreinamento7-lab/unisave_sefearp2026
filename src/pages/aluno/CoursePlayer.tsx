@@ -3,19 +3,21 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { Icon } from '../../components/Icon'
 import { InfoTooltip } from '../../components/InfoTooltip'
+import { H5pPlayer } from '../../components/H5pPlayer'
 import { ScormPlayer } from '../../components/ScormPlayer'
 import { useAuth } from '../../context/AuthContext'
 import { completePill, getBlockingPill, getTrackWithPills, getUserProgressMap, markPillInProgress } from '../../lib/api'
 import { formatPillDuration } from '../../lib/format'
 import { getModuleCompletionSettings } from '../../lib/settings'
 import { supabase } from '../../lib/supabase'
-import type { Pill, ScormLibraryItem, UserProgress } from '../../types/database'
+import type { H5pLibraryItem, Pill, ScormLibraryItem, UserProgress } from '../../types/database'
 
 const CONTENT_TYPE_ICON: Record<Pill['content_type'], string> = {
   video: '▶',
   iframe: '▶',
   scorm: '▶',
   reaction: '📝',
+  h5p: '▶',
 }
 
 // Gradiente de fallback pro thumb do módulo na barra lateral, quando a
@@ -26,6 +28,7 @@ const CONTENT_TYPE_GRADIENT: Record<Pill['content_type'], string> = {
   iframe: 'from-lavender-ink to-navy',
   scorm: 'from-navy-dark to-navy-deep',
   reaction: 'from-brand-red to-brand-red-dark',
+  h5p: 'from-navy-dark to-navy-deep',
 }
 
 // Anel de progresso circular do curso — SVG puro, sem lib de gráfico.
@@ -108,6 +111,7 @@ export function CoursePlayer() {
   const navigate = useNavigate()
   const [pill, setPill] = useState<Pill | null>(null)
   const [scormSource, setScormSource] = useState<{ packageUrl: string; manifestPath: string } | null>(null)
+  const [h5pPackageUrl, setH5pPackageUrl] = useState<string | null>(null)
   const [progress, setProgress] = useState<UserProgress | null>(null)
   const [modules, setModules] = useState<Pill[]>([])
   const [moduleProgress, setModuleProgress] = useState<Record<string, UserProgress>>({})
@@ -198,6 +202,16 @@ export function CoursePlayer() {
         } else if (pillRow.scorm_package_url && pillRow.scorm_manifest_path) {
           setScormSource({ packageUrl: pillRow.scorm_package_url, manifestPath: pillRow.scorm_manifest_path })
         }
+      }
+
+      if (pillRow?.content_type === 'h5p' && pillRow.h5p_library_id) {
+        const { data: libItem } = await supabase
+          .from('h5p_library')
+          .select('*')
+          .eq('id', pillRow.h5p_library_id)
+          .maybeSingle()
+        const lib = libItem as H5pLibraryItem | null
+        if (!cancelled && lib) setH5pPackageUrl(lib.package_url)
       }
 
       // Lista de módulos do curso "dono" desta pílula, pra mostrar o
@@ -388,6 +402,18 @@ export function CoursePlayer() {
         await completePill(profile.id, id, score, pill?.title ?? 'Curso', pill?.points_override, bookmark)
       } else {
         await markPillInProgress(profile.id, id, bookmark)
+      }
+    },
+    [profile, id, pill],
+  )
+
+  const handleH5pProgress = useCallback(
+    async (status: 'in_progress' | 'completed') => {
+      if (!profile || !id) return
+      if (status === 'completed') {
+        await completePill(profile.id, id, null, pill?.title ?? 'Curso', pill?.points_override)
+      } else {
+        await markPillInProgress(profile.id, id)
       }
     },
     [profile, id, pill],
@@ -617,7 +643,7 @@ export function CoursePlayer() {
               <div
                 ref={playerRef}
                 className={`card relative mt-5 touch-pan-y overflow-hidden shadow-[0_1px_2px_rgba(20,30,60,0.05),0_30px_70px_-24px_rgba(55,56,150,0.4)] ${
-                  pill.content_type === 'scorm'
+                  pill.content_type === 'scorm' || pill.content_type === 'h5p'
                     ? 'h-[55vh] min-h-[380px] sm:h-[70vh] sm:min-h-[480px] lg:h-[80vh] lg:min-h-[560px]'
                     : 'aspect-video'
                 } ${isFullscreen ? 'h-screen w-screen rounded-none' : ''}`}
@@ -687,7 +713,13 @@ export function CoursePlayer() {
                 {pill.content_type === 'scorm' && !scormSource && (
                   <div className="flex h-full items-center justify-center text-ink-soft">Conteúdo indisponível</div>
                 )}
-                {!pill.content_url && pill.content_type !== 'scorm' && (
+                {pill.content_type === 'h5p' && h5pPackageUrl && (
+                  <H5pPlayer packageUrl={h5pPackageUrl} initialCompleted={isCompleted} onProgress={handleH5pProgress} />
+                )}
+                {pill.content_type === 'h5p' && !h5pPackageUrl && (
+                  <div className="flex h-full items-center justify-center text-ink-soft">Conteúdo indisponível</div>
+                )}
+                {!pill.content_url && pill.content_type !== 'scorm' && pill.content_type !== 'h5p' && (
                   <div className="flex h-full items-center justify-center text-ink-soft">Conteúdo indisponível</div>
                 )}
               </div>
@@ -717,6 +749,15 @@ export function CoursePlayer() {
                   <span>{isCompleted ? 'Módulo SCORM concluído ✓' : 'Progresso registrado automaticamente'}</span>
                   {!isCompleted && (
                     <InfoTooltip text='Se você já terminou o conteúdo e o módulo continua aparecendo como "Em andamento", atualize a página (F5) — às vezes a confirmação de conclusão só aparece depois disso.' />
+                  )}
+                </div>
+              )}
+
+              {pill.content_type === 'h5p' && (
+                <div className="mt-5 flex items-center gap-1.5 text-sm text-ink-soft">
+                  <span>{isCompleted ? 'Módulo H5P concluído ✓' : 'Progresso registrado automaticamente'}</span>
+                  {!isCompleted && (
+                    <InfoTooltip text='Se você já terminou a atividade e o módulo continua aparecendo como "Em andamento", atualize a página (F5) — às vezes a confirmação de conclusão só aparece depois disso.' />
                   )}
                 </div>
               )}

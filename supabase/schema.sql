@@ -11,7 +11,7 @@ create type diagnostic_profile as enum ('autogestao', 'tech_ia', 'lideranca');
 create type user_role as enum ('aluno', 'moderador', 'admin');
 create type pill_status as enum ('not_started', 'in_progress', 'completed');
 create type skill_type as enum ('tecnica', 'comportamental', 'etica');
-create type content_type as enum ('video', 'iframe', 'scorm', 'reaction');
+create type content_type as enum ('video', 'iframe', 'scorm', 'reaction', 'h5p');
 create type pdi_plan_type as enum ('trilha_evento', 'plano_pessoal', 'plano_institucional');
 -- 'tarefa_livre': item de texto livre do Painel 70/20/10 (sem curso/
 -- trilha por trás, ref_id fica null nesse caso — ver pdi_plan_items).
@@ -170,6 +170,23 @@ create trigger scorm_library_set_updated_at
   before update on scorm_library
   for each row execute function set_updated_at();
 
+-- Biblioteca de H5P (mesmo padrão de scorm_library acima): o admin envia um
+-- .h5p (é um .zip) uma vez, extraído e servido via /api/h5p/{id} (mesmo
+-- proxy same-origin do SCORM, necessário pelo mesmo motivo: *.supabase.co
+-- rebaixa qualquer resposta HTML/JS pra text/plain). Sem manifest_path — a
+-- lib h5p-standalone sempre lê h5p.json na raiz do pacote.
+create table h5p_library (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  package_url text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create trigger h5p_library_set_updated_at
+  before update on h5p_library
+  for each row execute function set_updated_at();
+
 -- Biblioteca de Certificados (mesmo padrão de scorm_library acima): o
 -- admin cria um modelo de certificado (fundo + texto com variáveis) uma
 -- vez só, aqui, e cada curso só referencia qual modelo usar via
@@ -231,6 +248,7 @@ create table pills (
   scorm_package_url text,
   scorm_manifest_path text,
   scorm_library_id uuid references scorm_library(id) on delete set null,
+  h5p_library_id uuid references h5p_library(id) on delete set null,
   -- Recommended: cover 1326x495px, thumbnail 895x495px (spec: capa/miniatura).
   cover_url text,
   thumbnail_url text,
@@ -912,6 +930,7 @@ alter table pdi_plan_items enable row level security;
 alter table pdi_plan_skill_ratings enable row level security;
 alter table curriculum_grid enable row level security;
 alter table scorm_library enable row level security;
+alter table h5p_library enable row level security;
 alter table track_pills enable row level security;
 alter table track_programs enable row level security;
 alter table track_skill_categories enable row level security;
@@ -958,6 +977,7 @@ create policy "catalog readable by all" on reaction_surveys for select using (tr
 create policy "catalog readable by all" on reaction_questions for select using (true);
 create policy "catalog readable by all" on curriculum_grid for select using (true);
 create policy "catalog readable by all" on scorm_library for select using (true);
+create policy "catalog readable by all" on h5p_library for select using (true);
 create policy "catalog readable by all" on track_pills for select using (true);
 create policy "catalog readable by all" on track_programs for select using (true);
 create policy "catalog readable by all" on track_skill_categories for select using (true);
@@ -969,6 +989,8 @@ create policy "admin manages skills" on skill_categories for all
 create policy "admin manages tracks" on tracks for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
 create policy "admin manages scorm library" on scorm_library for all
+  using (current_role_is('admin')) with check (current_role_is('admin'));
+create policy "admin manages h5p library" on h5p_library for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
 create policy "admin manages pills" on pills for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
@@ -1392,6 +1414,22 @@ create policy "public can read scorm packages" on storage.objects
 create policy "admin manages scorm packages" on storage.objects
   for all using (bucket_id = 'scorm-packages' and current_role_is('admin'))
   with check (bucket_id = 'scorm-packages' and current_role_is('admin'));
+
+-- ============================================================
+-- STORAGE — H5P packages
+-- ============================================================
+-- Mesmo padrão de scorm-packages acima: pacote .h5p (um .zip) extraído
+-- client-side, um objeto por arquivo, servido via /api/h5p/{id}.
+insert into storage.buckets (id, name, public)
+values ('h5p-packages', 'h5p-packages', true)
+on conflict (id) do nothing;
+
+create policy "public can read h5p packages" on storage.objects
+  for select using (bucket_id = 'h5p-packages');
+
+create policy "admin manages h5p packages" on storage.objects
+  for all using (bucket_id = 'h5p-packages' and current_role_is('admin'))
+  with check (bucket_id = 'h5p-packages' and current_role_is('admin'));
 
 -- ============================================================
 -- STORAGE — cover/thumbnail/certificate images

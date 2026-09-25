@@ -16,6 +16,7 @@ import { AdminGrade } from './pages/admin/AdminGrade'
 import { AdminProgramas } from './pages/admin/AdminProgramas'
 import { AdminQuizzes } from './pages/admin/AdminQuizzes'
 import { AdminScormLibrary } from './pages/admin/AdminScormLibrary'
+import { AdminH5pLibrary } from './pages/admin/AdminH5pLibrary'
 import { AdminTrilhas } from './pages/admin/AdminTrilhas'
 import { AdminUsuarios } from './pages/admin/AdminUsuarios'
 import { Certificados } from './pages/aluno/Certificados'
@@ -249,6 +250,14 @@ function App() {
           element={
             <RouteGuard allow={['admin']}>
               <AdminScormLibrary />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/admin/h5p"
+          element={
+            <RouteGuard allow={['admin']}>
+              <AdminH5pLibrary />
             </RouteGuard>
           }
         />

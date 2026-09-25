@@ -2,7 +2,7 @@ export type DiagnosticProfile = 'autogestao' | 'tech_ia' | 'lideranca'
 export type UserRole = 'aluno' | 'moderador' | 'admin'
 export type PillStatus = 'not_started' | 'in_progress' | 'completed'
 export type SkillType = 'tecnica' | 'comportamental' | 'etica'
-export type ContentType = 'video' | 'iframe' | 'scorm' | 'reaction'
+export type ContentType = 'video' | 'iframe' | 'scorm' | 'reaction' | 'h5p'
 export type PdiPlanType = 'trilha_evento' | 'plano_pessoal' | 'plano_institucional'
 export type PdiItemType = 'skill_category' | 'pill' | 'trilha' | 'tarefa_livre'
 export type PdiItemStatus = 'nao_iniciado' | 'em_andamento' | 'concluido'
@@ -117,6 +117,14 @@ export interface ScormLibraryItem {
   updated_at: string
 }
 
+export interface H5pLibraryItem {
+  id: string
+  name: string
+  package_url: string
+  created_at: string
+  updated_at: string
+}
+
 export interface CertificateTemplate {
   id: string
   name: string
@@ -138,6 +146,7 @@ export interface Pill {
   scorm_package_url: string | null
   scorm_manifest_path: string | null
   scorm_library_id: string | null
+  h5p_library_id: string | null
   cover_url: string | null
   thumbnail_url: string | null
   points_override: number | null
@@ -543,6 +552,7 @@ export interface Database {
       pdi_plans: { Row: PdiPlan; Insert: Partial<PdiPlan>; Update: Partial<PdiPlan> }
       pdi_plan_items: { Row: PdiPlanItem; Insert: Partial<PdiPlanItem>; Update: Partial<PdiPlanItem> }
       scorm_library: { Row: ScormLibraryItem; Insert: Partial<ScormLibraryItem>; Update: Partial<ScormLibraryItem> }
+      h5p_library: { Row: H5pLibraryItem; Insert: Partial<H5pLibraryItem>; Update: Partial<H5pLibraryItem> }
       track_pills: { Row: TrackPill; Insert: Partial<TrackPill>; Update: Partial<TrackPill> }
       social_posts: { Row: SocialPost; Insert: Partial<SocialPost>; Update: Partial<SocialPost> }
       social_post_media: { Row: SocialPostMedia; Insert: Partial<SocialPostMedia>; Update: Partial<SocialPostMedia> }

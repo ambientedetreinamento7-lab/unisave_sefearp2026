@@ -6,6 +6,7 @@ const LINKS = [
   { to: '/admin/programas', label: 'Programas' },
   { to: '/admin/trilhas', label: 'Cursos' },
   { to: '/admin/scorms', label: 'Biblioteca de SCORMs' },
+  { to: '/admin/h5p', label: 'Biblioteca de H5P' },
   { to: '/admin/certificados', label: 'Certificados' },
   { to: '/admin/bottons', label: 'Bottons' },
   { to: '/admin/comunidade', label: 'Comunidade' },
