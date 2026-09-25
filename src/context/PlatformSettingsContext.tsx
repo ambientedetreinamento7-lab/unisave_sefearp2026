@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useTheme } from './ThemeContext'
 import {
   getBrandingSettings,
   getCourseDefaultsSettings,
@@ -59,6 +60,7 @@ const PlatformSettingsContext = createContext<PlatformSettingsValue | undefined>
 export function PlatformSettingsProvider({ children }: { children: ReactNode }) {
   const [value, setValue] = useState<Omit<PlatformSettingsValue, 'loading'>>(DEFAULTS)
   const [loading, setLoading] = useState(true)
+  const { theme } = useTheme()
 
   useEffect(() => {
     Promise.all([
@@ -73,11 +75,6 @@ export function PlatformSettingsProvider({ children }: { children: ReactNode }) 
       ([branding, legal, maintenance, session, security, pwa, courseDefaults]) => {
         setValue({ branding, legal, maintenance, session, security, pwa, courseDefaults })
         setLoading(false)
-        // Sobrescreve os tokens de cor em runtime (definidos em index.css)
-        // só quando o admin configurou algo — sem isso, continua com a
-        // paleta navy/vermelho padrão do projeto.
-        if (branding.primaryColor) document.documentElement.style.setProperty('--color-navy', branding.primaryColor)
-        if (branding.accentColor) document.documentElement.style.setProperty('--color-brand-red', branding.accentColor)
         if (branding.platformName) document.title = branding.platformName
       },
     ).catch(() => {
@@ -88,6 +85,27 @@ export function PlatformSettingsProvider({ children }: { children: ReactNode }) 
       setLoading(false)
     })
   }, [])
+
+  useEffect(() => {
+    // Sobrescreve os tokens de cor em runtime (definidos em index.css) só
+    // quando o admin configurou algo E só no tema claro — a cor de marca é
+    // escolhida pensando em fundo claro (ex.: o navy oficial #373896), e
+    // travá-la também no escuro via style inline (que sempre vence a regra
+    // `:root[data-theme='dark']` do CSS) deixava texto escuro-sobre-escuro
+    // ilegível em toda a plataforma. No escuro, usa a paleta já ajustada
+    // pra contraste em index.css em vez da cor de marca crua.
+    const root = document.documentElement
+    if (theme === 'light' && value.branding.primaryColor) {
+      root.style.setProperty('--color-navy', value.branding.primaryColor)
+    } else {
+      root.style.removeProperty('--color-navy')
+    }
+    if (theme === 'light' && value.branding.accentColor) {
+      root.style.setProperty('--color-brand-red', value.branding.accentColor)
+    } else {
+      root.style.removeProperty('--color-brand-red')
+    }
+  }, [theme, value.branding.primaryColor, value.branding.accentColor])
 
   return (
     <PlatformSettingsContext.Provider value={{ ...value, loading }}>{children}</PlatformSettingsContext.Provider>
