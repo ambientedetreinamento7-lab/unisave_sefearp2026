@@ -236,6 +236,11 @@ export interface CourseDefaultsSettings {
   lessonThumbnailUrl: string | null
 }
 
+export interface PdiTabsSettings {
+  hideBalanco: boolean
+  hideBiblioteca: boolean
+}
+
 export interface IssuedCertificate {
   id: string
   code: string
@@ -326,6 +331,9 @@ export interface ReactionAnswer {
   value_text: string | null
 }
 
+/** Balanço de Competências — autoavaliação (+ nota do moderador) GLOBAL do
+ * aluno por competência, independente de qualquer plano. Não confundir com
+ * PdiPlanSkillRating abaixo, que é por plano. */
 export interface SkillRating {
   id: string
   user_id: string
@@ -333,7 +341,18 @@ export interface SkillRating {
   self_rating: number | null
   moderator_rating: number | null
   rated_at: string
+}
+
+/** Autoavaliação + objetivo por competência, específica de CADA plano
+ * (CompetencyWizard, "Seu painel 70/20/10") — separado de SkillRating pra
+ * um plano novo não herdar nota/objetivo de um plano antigo. */
+export interface PdiPlanSkillRating {
+  id: string
+  plan_id: string
+  skill_category_id: string
+  self_rating: number | null
   objetivo: string | null
+  rated_at: string
 }
 
 export interface PdiPlan {
@@ -516,6 +535,11 @@ export interface Database {
       reaction_responses: { Row: ReactionResponse; Insert: Partial<ReactionResponse>; Update: Partial<ReactionResponse> }
       reaction_answers: { Row: ReactionAnswer; Insert: Partial<ReactionAnswer>; Update: Partial<ReactionAnswer> }
       skill_ratings: { Row: SkillRating; Insert: Partial<SkillRating>; Update: Partial<SkillRating> }
+      pdi_plan_skill_ratings: {
+        Row: PdiPlanSkillRating
+        Insert: Partial<PdiPlanSkillRating>
+        Update: Partial<PdiPlanSkillRating>
+      }
       pdi_plans: { Row: PdiPlan; Insert: Partial<PdiPlan>; Update: Partial<PdiPlan> }
       pdi_plan_items: { Row: PdiPlanItem; Insert: Partial<PdiPlanItem>; Update: Partial<PdiPlanItem> }
       scorm_library: { Row: ScormLibraryItem; Insert: Partial<ScormLibraryItem>; Update: Partial<ScormLibraryItem> }

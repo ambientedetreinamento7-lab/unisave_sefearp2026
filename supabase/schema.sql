@@ -438,6 +438,12 @@ create table reaction_answers (
 alter table pills add column reaction_survey_id uuid references reaction_surveys(id) on delete set null;
 create index on pills (reaction_survey_id);
 
+-- Balanço de Competências: autoavaliação (+ nota do moderador) GLOBAL do
+-- aluno por competência, independente de qualquer plano — é a partir daqui
+-- que se calcula a faixa de desempenho (tier) gravada em TODOS os planos do
+-- aluno (ver recomputeAndSaveTier). Não confundir com pdi_plan_skill_ratings
+-- abaixo, que é a autoavaliação/objetivo específica de CADA plano no
+-- wizard do Painel 70/20/10.
 create table skill_ratings (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references profiles(id) on update cascade on delete cascade,
@@ -445,9 +451,6 @@ create table skill_ratings (
   self_rating numeric,
   moderator_rating numeric,
   rated_at timestamptz not null default now(),
-  -- Objetivo em texto livre do aluno pra essa competência (Painel 70/20/10,
-  -- passo 3 do wizard) — independente da nota numérica de autoavaliação.
-  objetivo text,
   unique (user_id, skill_category_id)
 );
 
@@ -487,6 +490,21 @@ create table pdi_plan_items (
   -- Data em que o aluno pretende concluir o item (meta pessoal, não entra
   -- no cálculo de Preenchimento/Evolução) — qualquer bucket/tipo de item.
   target_date date
+);
+
+-- Autoavaliação + objetivo por competência, ESPECÍFICA de cada plano (passo
+-- 2/3 do CompetencyWizard, "Seu painel 70/20/10") — antes isso era gravado
+-- na tabela global skill_ratings (Balanço de Competências), o que fazia um
+-- plano novo herdar a nota/objetivo de um plano antigo pra mesma
+-- competência (bug reportado: criar plano novo trazia dados do anterior).
+create table pdi_plan_skill_ratings (
+  id uuid primary key default gen_random_uuid(),
+  plan_id uuid not null references pdi_plans(id) on delete cascade,
+  skill_category_id uuid not null references skill_categories(id) on delete cascade,
+  self_rating numeric,
+  objetivo text,
+  rated_at timestamptz not null default now(),
+  unique (plan_id, skill_category_id)
 );
 
 -- Rede social interna — Fase A (feed base: texto/imagem/carrossel, curtir,
@@ -771,6 +789,7 @@ create index on reaction_answers (response_id);
 create index on skill_ratings (user_id);
 create index on pdi_plans (user_id);
 create index on pdi_plan_items (plan_id);
+create index on pdi_plan_skill_ratings (plan_id);
 create index on social_posts (scope, program_id, created_at);
 create index on social_posts (author_id);
 create index on social_post_media (post_id);
@@ -890,6 +909,7 @@ alter table reaction_answers enable row level security;
 alter table skill_ratings enable row level security;
 alter table pdi_plans enable row level security;
 alter table pdi_plan_items enable row level security;
+alter table pdi_plan_skill_ratings enable row level security;
 alter table curriculum_grid enable row level security;
 alter table scorm_library enable row level security;
 alter table track_pills enable row level security;
@@ -1213,6 +1233,18 @@ create policy "self manage plans" on pdi_plans for all
   with check (auth.uid() = user_id or current_role_is('moderador'));
 
 create policy "self manage plan items" on pdi_plan_items for all
+  using (
+    exists (select 1 from pdi_plans p where p.id = plan_id and (
+      p.user_id = auth.uid() or current_role_is('moderador') or current_role_is('admin')
+    ))
+  )
+  with check (
+    exists (select 1 from pdi_plans p where p.id = plan_id and (
+      p.user_id = auth.uid() or current_role_is('moderador') or current_role_is('admin')
+    ))
+  );
+
+create policy "self manage plan skill ratings" on pdi_plan_skill_ratings for all
   using (
     exists (select 1 from pdi_plans p where p.id = plan_id and (
       p.user_id = auth.uid() or current_role_is('moderador') or current_role_is('admin')

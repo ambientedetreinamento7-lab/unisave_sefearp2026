@@ -6,6 +6,7 @@ import { ProgressBar } from '../../components/ProgressBar'
 import { Tour } from '../../components/Tour'
 import type { TourStep } from '../../components/Tour'
 import { useAuth } from '../../context/AuthContext'
+import { usePlatformSettings } from '../../context/PlatformSettingsContext'
 import {
   addPillToPlan,
   addTrackToPlan,
@@ -52,11 +53,11 @@ const BUCKET_LABEL: Record<PdiJornadaBucket, string> = {
 
 type Tab = 'pdi' | 'balanco' | 'biblioteca'
 
-function pdiTourSteps(setTab: (t: Tab) => void): TourStep[] {
+function pdiTourSteps(setTab: (t: Tab) => void, pdiTabs: { hideBalanco: boolean; hideBiblioteca: boolean }): TourStep[] {
   return [
     {
       title: 'Conheça o Meu PDI 🎯',
-      body: 'Aqui você monta seu Plano de Desenvolvimento Individual e acompanha sua evolução. Vamos ver as 3 abas.',
+      body: 'Aqui você monta seu Plano de Desenvolvimento Individual e acompanha sua evolução. Vamos dar uma volta.',
     },
     {
       target: '#pdi-tab-pdi',
@@ -70,18 +71,26 @@ function pdiTourSteps(setTab: (t: Tab) => void): TourStep[] {
       title: 'Criar um plano',
       body: 'Clique aqui pra criar seu primeiro plano pessoal. Você pode partir da taxonomia de skills do seu curso ou começar do zero.',
     },
-    {
-      target: '#pdi-tab-balanco',
-      onEnter: () => setTab('balanco'),
-      title: 'Aba "Balanço de Competências"',
-      body: 'Autoavalie suas competências de 1 a 5. É diferente do PDI: aqui você mede onde está hoje, não o que vai fazer a seguir.',
-    },
-    {
-      target: '#pdi-tab-biblioteca',
-      onEnter: () => setTab('biblioteca'),
-      title: 'Aba "Biblioteca de Trilhas"',
-      body: 'Explore trilhas e cursos avulsos além da sua trilha recomendada, e adicione qualquer um deles a um plano pessoal.',
-    },
+    ...(pdiTabs.hideBalanco
+      ? []
+      : [
+          {
+            target: '#pdi-tab-balanco',
+            onEnter: () => setTab('balanco'),
+            title: 'Aba "Balanço de Competências"',
+            body: 'Autoavalie suas competências de 1 a 5. É diferente do PDI: aqui você mede onde está hoje, não o que vai fazer a seguir.',
+          },
+        ]),
+    ...(pdiTabs.hideBiblioteca
+      ? []
+      : [
+          {
+            target: '#pdi-tab-biblioteca',
+            onEnter: () => setTab('biblioteca'),
+            title: 'Aba "Biblioteca de Trilhas"',
+            body: 'Explore trilhas e cursos avulsos além da sua trilha recomendada, e adicione qualquer um deles a um plano pessoal.',
+          },
+        ]),
     {
       title: 'Pronto! 🎉',
       body: 'Agora é só montar seu plano e acompanhar o progresso por aqui sempre que quiser.',
@@ -91,6 +100,7 @@ function pdiTourSteps(setTab: (t: Tab) => void): TourStep[] {
 
 export function MeuPdi() {
   const { profile, refreshProfile } = useAuth()
+  const { pdiTabs } = usePlatformSettings()
   const [tab, setTab] = useState<Tab>('pdi')
   const [runPdiTour, setRunPdiTour] = useState(false)
 
@@ -98,6 +108,21 @@ export function MeuPdi() {
     if (profile && !profile.pdi_tutorial_seen) setRunPdiTour(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id])
+
+  // Se o admin ocultar a aba atual (ou ela já vier oculta, ex.: aluno com
+  // um link salvo pra ?tab=balanco de antes), volta pra "Meu PDI", que
+  // nunca pode ser escondida.
+  useEffect(() => {
+    if ((tab === 'balanco' && pdiTabs.hideBalanco) || (tab === 'biblioteca' && pdiTabs.hideBiblioteca)) setTab('pdi')
+  }, [tab, pdiTabs])
+
+  const TABS = (
+    [
+      ['pdi', 'Meu PDI'],
+      ...(pdiTabs.hideBalanco ? [] : [['balanco', 'Balanço de Competências']]),
+      ...(pdiTabs.hideBiblioteca ? [] : [['biblioteca', 'Biblioteca de Trilhas']]),
+    ] as [Tab, string][]
+  )
 
   async function finishPdiTour(userId: string, completed: boolean) {
     setRunPdiTour(false)
@@ -123,13 +148,7 @@ export function MeuPdi() {
         </p>
 
         <div className="mt-6 flex gap-2 rounded-full bg-surface p-1 shadow-sm">
-          {(
-            [
-              ['pdi', 'Meu PDI'],
-              ['balanco', 'Balanço de Competências'],
-              ['biblioteca', 'Biblioteca de Trilhas'],
-            ] as [Tab, string][]
-          ).map(([key, label]) => (
+          {TABS.map(([key, label]) => (
             <button
               key={key}
               id={`pdi-tab-${key}`}
@@ -154,7 +173,7 @@ export function MeuPdi() {
 
       {profile && runPdiTour && (
         <Tour
-          steps={pdiTourSteps(setTab)}
+          steps={pdiTourSteps(setTab, pdiTabs)}
           onFinish={(completed) => finishPdiTour(profile.id, completed)}
           laterHint='no topo da página Meu PDI, em "Tutorial Meu PDI"'
         />
@@ -454,7 +473,6 @@ function BalancoTab({ userId, programId }: { userId: string; programId: string |
           self_rating: value,
           moderator_rating: previous?.moderator_rating ?? null,
           rated_at: '',
-          objetivo: previous?.objetivo ?? null,
         },
       ]
     })

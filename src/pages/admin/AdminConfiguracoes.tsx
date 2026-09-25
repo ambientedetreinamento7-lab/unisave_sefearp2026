@@ -7,6 +7,7 @@ import {
   getLegalSettings,
   getMaintenanceSettings,
   getModuleCompletionSettings,
+  getPdiTabsSettings,
   getPwaSettings,
   getSecuritySettings,
   getSessionSettings,
@@ -18,6 +19,7 @@ import {
   updateLegalSettings,
   updateMaintenanceSettings,
   updateModuleCompletionSettings,
+  updatePdiTabsSettings,
   updatePwaSettings,
   updateSecuritySettings,
   updateSessionSettings,
@@ -33,6 +35,7 @@ import type {
   LegalSettings,
   MaintenanceSettings,
   ModuleCompletionSettings,
+  PdiTabsSettings,
   PwaSettings,
   SecuritySettings,
   SessionSettings,
@@ -65,6 +68,7 @@ export function AdminConfiguracoes() {
         <LegalSection />
         <MaintenanceSection />
         <PwaSection />
+        <PdiTabsSection />
       </div>
     </AdminLayout>
   )
@@ -618,7 +622,6 @@ function SignupSection() {
   )
 }
 
-
 function ModuleCompletionSection() {
   const [settings, setSettings] = useState<ModuleCompletionSettings | null>(null)
   const [saving, setSaving] = useState(false)
@@ -1011,6 +1014,57 @@ function PwaSection() {
               onChange={(e) => setSettings({ ...settings, installableEnabled: e.target.checked })}
             />
             Permitir instalação do app
+          </label>
+        </div>
+      )}
+    </SectionShell>
+  )
+}
+
+function PdiTabsSection() {
+  const [settings, setSettings] = useState<PdiTabsSettings | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    getPdiTabsSettings().then(setSettings)
+  }, [])
+
+  async function save() {
+    if (!settings) return
+    setSaving(true)
+    setSaved(false)
+    await updatePdiTabsSettings(settings)
+    setSaving(false)
+    setSaved(true)
+  }
+
+  return (
+    <SectionShell
+      title="Abas de Meu PDI"
+      description="Oculta abas inteiras da tela Meu PDI pros alunos, caso a plataforma não use esses recursos. A aba 'Meu PDI' (planos pessoais) nunca pode ser ocultada."
+      loading={!settings}
+      onSave={save}
+      saving={saving}
+      saved={saved}
+    >
+      {settings && (
+        <div className="mt-4 space-y-2">
+          <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
+            <input
+              type="checkbox"
+              checked={settings.hideBalanco}
+              onChange={(e) => setSettings({ ...settings, hideBalanco: e.target.checked })}
+            />
+            Ocultar aba "Balanço de Competências"
+          </label>
+          <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
+            <input
+              type="checkbox"
+              checked={settings.hideBiblioteca}
+              onChange={(e) => setSettings({ ...settings, hideBiblioteca: e.target.checked })}
+            />
+            Ocultar aba "Biblioteca de Trilhas"
           </label>
         </div>
       )}

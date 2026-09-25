@@ -9,11 +9,11 @@ import {
   getUserProgressMap,
   setItemStatus,
   setItemTargetDate,
-  upsertSelfRating,
+  upsertPlanSelfRating,
 } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { ProgressBar } from '../ProgressBar'
-import type { PdiItemStatus, PdiJornadaBucket, PdiPlanItem, SkillCategory, SkillRating, Track } from '../../types/database'
+import type { PdiItemStatus, PdiJornadaBucket, PdiPlanItem, PdiPlanSkillRating, SkillCategory, Track } from '../../types/database'
 
 const TOTAL_STEPS = 5
 const STEP_LABELS = ['Competência', 'Autoavaliação', 'Objetivo', 'Preenchimento', 'Acompanhamento']
@@ -113,7 +113,7 @@ export function CompetencyWizard({
   userId: string
   planId: string
   category: SkillCategory
-  rating: SkillRating | undefined
+  rating: PdiPlanSkillRating | undefined
   onClose: () => void
   onSaved: () => void
 }) {
@@ -172,12 +172,12 @@ export function CompetencyWizard({
 
   async function saveRating(value: number) {
     setSelfRating(value)
-    await upsertSelfRating(userId, category.id, value, objetivo || undefined)
+    await upsertPlanSelfRating(planId, category.id, value, objetivo || undefined)
     onSaved()
   }
 
   async function saveObjetivo() {
-    await upsertSelfRating(userId, category.id, selfRating > 0 ? selfRating : undefined, objetivo)
+    await upsertPlanSelfRating(planId, category.id, selfRating > 0 ? selfRating : undefined, objetivo)
     onSaved()
   }
 

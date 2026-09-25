@@ -6,6 +6,7 @@ import type {
   LegalSettings,
   MaintenanceSettings,
   ModuleCompletionSettings,
+  PdiTabsSettings,
   PwaSettings,
   SecuritySettings,
   SessionSettings,
@@ -158,3 +159,12 @@ export async function updateCourseDefaultsSettings(settings: CourseDefaultsSetti
   await supabase.from('app_settings').upsert({ key: 'course_defaults', value: settings })
 }
 
+const DEFAULT_PDI_TABS: PdiTabsSettings = { hideBalanco: false, hideBiblioteca: false }
+
+export async function getPdiTabsSettings(): Promise<PdiTabsSettings> {
+  return getAppSetting('pdi_tabs', DEFAULT_PDI_TABS)
+}
+
+export async function updatePdiTabsSettings(settings: PdiTabsSettings) {
+  await supabase.from('app_settings').upsert({ key: 'pdi_tabs', value: settings })
+}

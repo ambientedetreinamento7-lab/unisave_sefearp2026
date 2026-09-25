@@ -6,6 +6,7 @@ import {
   getCourseDefaultsSettings,
   getLegalSettings,
   getMaintenanceSettings,
+  getPdiTabsSettings,
   getPwaSettings,
   getSecuritySettings,
   getSessionSettings,
@@ -15,6 +16,7 @@ import type {
   CourseDefaultsSettings,
   LegalSettings,
   MaintenanceSettings,
+  PdiTabsSettings,
   PwaSettings,
   SecuritySettings,
   SessionSettings,
@@ -28,6 +30,7 @@ interface PlatformSettingsValue {
   security: SecuritySettings
   pwa: PwaSettings
   courseDefaults: CourseDefaultsSettings
+  pdiTabs: PdiTabsSettings
   loading: boolean
 }
 
@@ -47,6 +50,7 @@ const DEFAULTS: Omit<PlatformSettingsValue, 'loading'> = {
   security: { magicLinkResetEnabled: true, birthDateResetEnabled: true },
   pwa: { installableEnabled: false },
   courseDefaults: { courseCoverUrl: null, courseThumbnailUrl: null, lessonCoverUrl: null, lessonThumbnailUrl: null },
+  pdiTabs: { hideBalanco: false, hideBiblioteca: false },
 }
 
 const PlatformSettingsContext = createContext<PlatformSettingsValue | undefined>(undefined)
@@ -71,9 +75,10 @@ export function PlatformSettingsProvider({ children }: { children: ReactNode }) 
       getSecuritySettings(),
       getPwaSettings(),
       getCourseDefaultsSettings(),
+      getPdiTabsSettings(),
     ]).then(
-      ([branding, legal, maintenance, session, security, pwa, courseDefaults]) => {
-        setValue({ branding, legal, maintenance, session, security, pwa, courseDefaults })
+      ([branding, legal, maintenance, session, security, pwa, courseDefaults, pdiTabs]) => {
+        setValue({ branding, legal, maintenance, session, security, pwa, courseDefaults, pdiTabs })
         setLoading(false)
         if (branding.platformName) document.title = branding.platformName
       },

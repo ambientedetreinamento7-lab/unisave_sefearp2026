@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { getCompetencyPdiSummaries, getSkillRatings } from '../../lib/api'
+import { getCompetencyPdiSummaries, getPlanSkillRatings } from '../../lib/api'
 import type { CompetencyPdiSummary } from '../../lib/api'
-import type { SkillCategory, SkillRating } from '../../types/database'
+import type { PdiPlanSkillRating, SkillCategory } from '../../types/database'
 import { CompetencyCard } from './CompetencyCard'
 import { CompetencyWizard } from './CompetencyWizard'
 
@@ -24,7 +24,7 @@ export function CompetencyGrid({
 }) {
   const [loading, setLoading] = useState(true)
   const [summaries, setSummaries] = useState<Map<string, CompetencyPdiSummary>>(new Map())
-  const [ratings, setRatings] = useState<SkillRating[]>([])
+  const [ratings, setRatings] = useState<PdiPlanSkillRating[]>([])
   const [selected, setSelected] = useState<SkillCategory | null>(null)
 
   // Recarrega os dados sem mexer em `loading` — usada como onSaved do
@@ -34,8 +34,8 @@ export function CompetencyGrid({
   // pro passo 1 toda vez.
   async function refresh() {
     const [sums, allRatings] = await Promise.all([
-      getCompetencyPdiSummaries(userId, planId, competencyIds),
-      getSkillRatings(userId),
+      getCompetencyPdiSummaries(planId, competencyIds),
+      getPlanSkillRatings(planId),
     ])
     setSummaries(sums)
     setRatings(allRatings)

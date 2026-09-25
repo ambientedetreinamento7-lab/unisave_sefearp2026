@@ -13,6 +13,7 @@ import type {
   PdiJornadaBucket,
   PdiPlan,
   PdiPlanItem,
+  PdiPlanSkillRating,
   Pill,
   PublicCertificate,
   ReactionQuestion,
@@ -1128,16 +1129,37 @@ export async function getSkillRatings(userId: string): Promise<SkillRating[]> {
   return (data as SkillRating[]) ?? []
 }
 
-export async function upsertSelfRating(userId: string, skillCategoryId: string, rating?: number, objetivo?: string) {
+export async function upsertSelfRating(userId: string, skillCategoryId: string, rating?: number) {
   await supabase.from('skill_ratings').upsert(
     {
       user_id: userId,
       skill_category_id: skillCategoryId,
       ...(rating !== undefined ? { self_rating: rating } : {}),
-      ...(objetivo !== undefined ? { objetivo } : {}),
       rated_at: new Date().toISOString(),
     },
     { onConflict: 'user_id,skill_category_id' },
+  )
+}
+
+/** Autoavaliação + objetivo do CompetencyWizard ("Seu painel 70/20/10") —
+ * por PLANO, ao contrário de getSkillRatings/upsertSelfRating acima (que são
+ * o Balanço de Competências, global do aluno). Um plano novo nunca deve
+ * herdar nota/objetivo de um plano antigo pra mesma competência. */
+export async function getPlanSkillRatings(planId: string): Promise<PdiPlanSkillRating[]> {
+  const { data } = await supabase.from('pdi_plan_skill_ratings').select('*').eq('plan_id', planId)
+  return (data as PdiPlanSkillRating[]) ?? []
+}
+
+export async function upsertPlanSelfRating(planId: string, skillCategoryId: string, rating?: number, objetivo?: string) {
+  await supabase.from('pdi_plan_skill_ratings').upsert(
+    {
+      plan_id: planId,
+      skill_category_id: skillCategoryId,
+      ...(rating !== undefined ? { self_rating: rating } : {}),
+      ...(objetivo !== undefined ? { objetivo } : {}),
+      rated_at: new Date().toISOString(),
+    },
+    { onConflict: 'plan_id,skill_category_id' },
   )
 }
 
@@ -1190,21 +1212,18 @@ export interface CompetencyPdiSummary {
 /** Resume, por competência, o estado do Painel 70/20/10 (spec: fórmulas de
  * Preenchimento% e Evolução%) — usado no grid de cards de Meu PDI. */
 export async function getCompetencyPdiSummaries(
-  userId: string,
-  planId: string | null,
+  planId: string,
   skillCategoryIds: string[],
 ): Promise<Map<string, CompetencyPdiSummary>> {
   const result = new Map<string, CompetencyPdiSummary>()
   if (skillCategoryIds.length === 0) return result
 
-  const [{ data: ratingRows }, itemsResult] = await Promise.all([
-    supabase.from('skill_ratings').select('*').eq('user_id', userId).in('skill_category_id', skillCategoryIds),
-    planId
-      ? supabase.from('pdi_plan_items').select('*').eq('plan_id', planId).in('skill_category_id', skillCategoryIds)
-      : Promise.resolve({ data: [] as PdiPlanItem[] }),
+  const [{ data: ratingRows }, { data: itemRows }] = await Promise.all([
+    supabase.from('pdi_plan_skill_ratings').select('*').eq('plan_id', planId).in('skill_category_id', skillCategoryIds),
+    supabase.from('pdi_plan_items').select('*').eq('plan_id', planId).in('skill_category_id', skillCategoryIds),
   ])
-  const ratings = (ratingRows as SkillRating[]) ?? []
-  const items = (itemsResult.data as PdiPlanItem[]) ?? []
+  const ratings = (ratingRows as PdiPlanSkillRating[]) ?? []
+  const items = (itemRows as PdiPlanItem[]) ?? []
 
   for (const skillCategoryId of skillCategoryIds) {
     const rating = ratings.find((r) => r.skill_category_id === skillCategoryId)
