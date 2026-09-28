@@ -27,9 +27,10 @@ import {
   getTrackWithPills,
   getUserProgressMap,
   toggleFavorite,
+  trackPointsTotal,
   trackProgressPct,
 } from '../../lib/api'
-import { brasiliaDaysBetween, claimDailyAccess, getLastPointsEvent, getRule } from '../../lib/gamification'
+import { brasiliaDaysBetween, claimDailyAccess, getLastPointsEvent, getRule, getRules } from '../../lib/gamification'
 import { formatCargaHoraria } from '../../lib/format'
 import { createRedemption, getMyRedemption } from '../../lib/bottons'
 import { PROGRAMS } from '../../lib/quiz'
@@ -115,6 +116,11 @@ export function Dashboard() {
   const [pdiPills, setPdiPills] = useState<Pill[]>([])
   const [redemption, setRedemption] = useState<BottonRedemption | null | undefined>(undefined)
   const [redemptionModalOpen, setRedemptionModalOpen] = useState(false)
+  const [rules, setRules] = useState<GamificationRule[]>([])
+
+  useEffect(() => {
+    getRules().then(setRules)
+  }, [])
 
   useEffect(() => {
     if (!profile) return
@@ -191,6 +197,12 @@ export function Dashboard() {
 
   useEffect(() => {
     if (!profile) return
+    // No primeiro acesso (tutorial de navegação ainda não visto), esse modal
+    // de pontos por acesso diário não pode aparecer junto com o tour guiado
+    // — os dois brigando pela tela atrapalha o aluno enxergar o que o
+    // tutorial está mostrando. Espera o aluno concluir ou pular o tutorial
+    // (nav_tutorial_seen vira true) pra só então oferecer esses pontos.
+    if (!profile.nav_tutorial_seen) return
     let cancelled = false
     async function checkAccessPoints() {
       const rule = await getRule('daily_access')
@@ -368,6 +380,7 @@ export function Dashboard() {
                     favoriteIds={favoriteIds}
                     onToggleFavorite={handleToggleFavorite}
                     multiModuleTracks={multiModuleTracks}
+                    rules={rules}
                   />
                 )}
                 {sections
@@ -381,6 +394,7 @@ export function Dashboard() {
                       favoriteIds={favoriteIds}
                       onToggleFavorite={handleToggleFavorite}
                       multiModuleTracks={multiModuleTracks}
+                      rules={rules}
                     />
                   ))}
                 {pdiPills.length === 0 &&
@@ -428,6 +442,7 @@ export function Dashboard() {
                       key={item.kind === 'pill' ? item.pill.id : item.track.id}
                       item={item}
                       progress={progress}
+                      rules={rules}
                       favorited={item.kind === 'pill' ? favoriteIds.has(item.pill.id) : undefined}
                       onToggleFavorite={item.kind === 'pill' ? () => handleToggleFavorite(item.pill.id) : undefined}
                     />
@@ -675,6 +690,7 @@ function CourseRow({
   favoriteIds,
   onToggleFavorite,
   multiModuleTracks,
+  rules,
 }: {
   title: string
   pills: Pill[]
@@ -682,6 +698,7 @@ function CourseRow({
   favoriteIds: Set<string>
   onToggleFavorite: (pillId: string) => void
   multiModuleTracks: Map<string, { track: Track; pills: Pill[] }>
+  rules: GamificationRule[]
 }) {
   const cards = collapseToCourseCards(pills, multiModuleTracks)
   return (
@@ -693,6 +710,7 @@ function CourseRow({
             <CourseCard
               item={item}
               progress={progress}
+              rules={rules}
               favorited={item.kind === 'pill' ? favoriteIds.has(item.pill.id) : undefined}
               onToggleFavorite={item.kind === 'pill' ? () => onToggleFavorite(item.pill.id) : undefined}
             />
@@ -703,14 +721,27 @@ function CourseRow({
   )
 }
 
+/** Pontos totais do curso/pílula do card — pílula avulsa usa
+ * points_override (senão os pontos padrão da regra 'course_completed');
+ * curso com módulos soma cada módulo + o bônus de conclusão total
+ * ('track_completed'), via trackPointsTotal. */
+function pointsForCard(item: DisplayCard, rules: GamificationRule[]): number {
+  if (item.kind === 'course') return trackPointsTotal(item.modules, rules)
+  const pillRule = rules.find((r) => r.key === 'course_completed')
+  const defaultPoints = pillRule?.enabled ? pillRule.points : 0
+  return item.pill.points_override ?? defaultPoints
+}
+
 function CourseCard({
   item,
   progress,
+  rules,
   favorited,
   onToggleFavorite,
 }: {
   item: DisplayCard
   progress: Record<string, UserProgress>
+  rules: GamificationRule[]
   favorited?: boolean
   onToggleFavorite?: () => void
 }) {
@@ -727,6 +758,7 @@ function CourseCard({
   const metaLine = isCourse
     ? `${item.modules.length} ${item.modules.length === 1 ? 'módulo' : 'módulos'}${item.track.carga_horaria_total ? ` · ${formatCargaHoraria(item.track.carga_horaria_total)}` : ''}`
     : `${item.pill.axis} · ${item.pill.duration}`
+  const points = pointsForCard(item, rules)
 
   let status: UserProgress['status'] = 'not_started'
   let linkTargetId: string
@@ -816,9 +848,15 @@ function CourseCard({
                 <ProgressBar value={pct} />
               </div>
             )}
-            <div className="mt-auto flex items-center justify-end pt-2">
+            <div className="mt-auto flex items-center justify-between pt-2">
+              {points > 0 && (
+                <span className="flex items-center gap-1 text-[11px] font-medium text-ink-soft/70">
+                  <Icon name="sparkles" size={11} />
+                  {points} pts
+                </span>
+              )}
               <span
-                className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-white transition ${ACTION_COLOR[status]}`}
+                className={`ml-auto flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-white transition ${ACTION_COLOR[status]}`}
               >
                 {ACTION_LABEL[status]}
                 <Icon name="arrow-right" size={12} />
@@ -837,6 +875,7 @@ function CourseCard({
           metaLine={metaLine}
           status={status}
           pct={pct}
+          points={points}
           linkTargetId={linkTargetId}
           modules={isCourse ? item.modules : null}
           progress={progress}
@@ -855,6 +894,7 @@ function CourseDetailModal({
   metaLine,
   status,
   pct,
+  points,
   linkTargetId,
   modules,
   progress,
@@ -867,6 +907,7 @@ function CourseDetailModal({
   metaLine: string
   status: UserProgress['status']
   pct: number
+  points: number
   linkTargetId: string
   modules: Pill[] | null
   progress: Record<string, UserProgress>
@@ -926,7 +967,15 @@ function CourseDetailModal({
           </div>
         </div>
         <div className="p-5">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-navy">{metaLine}</p>
+            {points > 0 && (
+              <span className="flex shrink-0 items-center gap-1 rounded-full bg-chip px-2.5 py-1 text-[11px] font-bold text-navy">
+                <Icon name="sparkles" size={12} />
+                {points} pontos
+              </span>
+            )}
+          </div>
           <h3 className="-mt-1 text-lg font-bold text-ink">{title}</h3>
           {description && <p className="mt-1 text-sm text-ink-soft">{description}</p>}
           {shareFeedback && <p className="mt-1 text-xs font-semibold text-success">Link copiado!</p>}

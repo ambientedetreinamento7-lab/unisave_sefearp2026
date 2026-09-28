@@ -1699,6 +1699,7 @@ on conflict (track_id, pill_id) do nothing;
 insert into gamification_rules (key, label, points, recurrence_days, streak_days) values
   ('pill_started', 'Iniciar um curso/pílula', 2, null, null),
   ('course_completed', 'Conclusão de curso/pílula', 10, null, null),
+  ('track_completed', 'Conclusão total do curso', 25, null, null),
   ('daily_access', 'Acesso recorrente', 2, 1, null),
   ('streak_bonus', 'Bônus por dias seguidos de acesso', 15, null, 7),
   ('certificate_earned', 'Certificado obtido', 20, null, null),

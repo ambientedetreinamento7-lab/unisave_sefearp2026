@@ -7,6 +7,7 @@ import type {
   Category,
   DashboardSection,
   DiagnosticProfile,
+  GamificationRule,
   IssuedCertificate,
   PdiItemStatus,
   PdiItemType,
@@ -413,7 +414,49 @@ export async function completePill(
   await awardPoints(userId, 'course_completed', pillId, {
     overridePoints: pointsOverride ?? undefined,
   })
+  await awardTrackCompletionBonus(userId, pillId)
   await syncPillCompletionToPdi(userId, pillId, pillTitle)
+}
+
+/**
+ * Bônus por concluir TODAS as pílulas de um curso (trilha) — separado dos
+ * pontos por pílula individual (regra 'course_completed'), concedido uma
+ * única vez por trilha via awardPoints (idempotente por ref_id=trackId).
+ */
+async function awardTrackCompletionBonus(userId: string, pillId: string) {
+  const { data: pillRow } = await supabase.from('pills').select('track_id').eq('id', pillId).maybeSingle()
+  const trackId = (pillRow as { track_id: string } | null)?.track_id ?? null
+  if (!trackId) return
+  const { pills } = await getTrackWithPills(trackId)
+  if (pills.length === 0) return
+  const { data: progressRows } = await supabase
+    .from('user_progress')
+    .select('pill_id, status')
+    .eq('user_id', userId)
+    .in('pill_id', pills.map((p) => p.id))
+  const completedIds = new Set(
+    ((progressRows as { pill_id: string; status: string }[]) ?? [])
+      .filter((r) => r.status === 'completed')
+      .map((r) => r.pill_id),
+  )
+  if (pills.every((p) => completedIds.has(p.id))) {
+    await awardPoints(userId, 'track_completed', trackId)
+  }
+}
+
+/**
+ * Soma de pontos possíveis de um curso: pontos de cada pílula (usando
+ * points_override quando definido, senão os pontos padrão da regra
+ * 'course_completed') mais o bônus de conclusão total ('track_completed').
+ * Usada pra exibir o valor em pontos do curso nos cards/modal.
+ */
+export function trackPointsTotal(pills: Pill[], rules: GamificationRule[]): number {
+  const pillRule = rules.find((r) => r.key === 'course_completed')
+  const trackRule = rules.find((r) => r.key === 'track_completed')
+  const pillDefault = pillRule?.enabled ? pillRule.points : 0
+  const pillsSum = pills.reduce((sum, p) => sum + (p.points_override ?? pillDefault), 0)
+  const bonus = trackRule?.enabled ? trackRule.points : 0
+  return pillsSum + bonus
 }
 
 /**
