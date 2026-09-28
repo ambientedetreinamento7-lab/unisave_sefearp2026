@@ -39,7 +39,12 @@ export function AppHeader() {
   }, [])
 
   const trialLabel =
-    trial?.enabled && profile ? `Degustação: ${daysLeft(profile.created_at, trial.days)}d restantes` : null
+    trial?.enabled && profile
+      ? (() => {
+          const days = daysLeft(profile.created_at, trial.days)
+          return `Acesso: ${days} ${days === 1 ? 'dia' : 'dias'} restante${days === 1 ? '' : 's'}`
+        })()
+      : null
 
   const canSwitchViews = profile && profile.role !== 'aluno'
 
