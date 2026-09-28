@@ -771,7 +771,9 @@ create table user_points_events (
 -- que continua abrindo o perfil de qualquer aluno normalmente).
 create view public_profiles as
   select id, name, avatar_url, total_points, program_id, ranking_opt_out from profiles;
-grant select on public_profiles to authenticated;
+-- anon também precisa (não só authenticated) pro Painel de TV do estande
+-- (/painel-tv), que fica ligado num navegador sem login.
+grant select on public_profiles to anon, authenticated;
 
 -- Validação pública de certificado (sem login): expõe só o necessário
 -- pra conferir autenticidade por código, na mesma linha de raciocínio de

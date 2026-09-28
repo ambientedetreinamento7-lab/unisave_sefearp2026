@@ -35,6 +35,7 @@ import { Moderador } from './pages/moderador/Moderador'
 import { AtivarConta } from './pages/public/AtivarConta'
 import { Entrar } from './pages/public/Entrar'
 import { Estande } from './pages/public/Estande'
+import { PainelTV } from './pages/public/PainelTV'
 import { Privacidade } from './pages/public/Privacidade'
 import { RecuperarSenha } from './pages/public/RecuperarSenha'
 import { Resultado } from './pages/public/Resultado'
@@ -106,6 +107,12 @@ function App() {
             </PublicMaintenanceGate>
           }
         />
+
+        {/* Painel de TV do estande — de propósito fora do menu e sem
+            RouteGuard/PublicMaintenanceGate: só quem tem o link acessa, e
+            precisa abrir direto num navegador de TV sem login nem ficar
+            bloqueado por manutenção. */}
+        <Route path="/painel-tv" element={<PainelTV />} />
 
         <Route
           path="/dashboard"

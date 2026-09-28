@@ -210,4 +210,13 @@
     0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
     40% { opacity: 1; transform: scale(1.1); }
   }
+
+  /* Painel de TV (ranking ao vivo) — a lista da direita duplica as
+     entradas e rola por exatamente metade da própria altura (translateY
+     -50%), o que fecha o loop sem costura já que a segunda metade é
+     idêntica à primeira. */
+  @keyframes tv-scroll-up {
+    from { transform: translateY(0); }
+    to { transform: translateY(-50%); }
+  }
 }
