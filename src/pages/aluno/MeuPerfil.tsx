@@ -52,7 +52,13 @@ export function MeuPerfil() {
           initialBirthDate={profile.birth_date}
           onChanged={refreshProfile}
         />
-        {allowRankingOptOut && (
+        {/* Alunos só veem essa opção se o admin liberou (allowRankingOptOut,
+            em Comunidade). Admin sempre vê a própria — não depende desse
+            toggle voltado pra política de privacidade dos alunos, já que
+            faz sentido um admin poder se esconder do ranking de qualquer
+            forma (ex.: contas de teste/organização não devem aparecer pros
+            alunos como se fossem concorrentes de verdade). */}
+        {(allowRankingOptOut || profile.role === 'admin') && (
           <PrivacidadeCard userId={profile.id} initialOptOut={profile.ranking_opt_out} onChanged={refreshProfile} />
         )}
         <SenhaCard />
