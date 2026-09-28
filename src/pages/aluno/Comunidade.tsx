@@ -1093,7 +1093,15 @@ function StoryViewerModal({
           </button>
         </div>
 
-        <div className="relative flex-1">
+        {/* min-h-0 é essencial aqui: por padrão um item flex tem
+            min-height:auto, então uma imagem alta/vertical (retrato, em
+            resolução maior) força esse flex-1 a crescer além do espaço
+            disponível — o container pai tem overflow-hidden, então o
+            excesso só "sai" empurrando a barra de baixo (curtir/ver quem
+            assistiu) pra fora da área visível, sem quebrar nada visualmente
+            além de sumir com esses botões. min-h-0 trava a altura no que a
+            flexbox realmente reservou pro item. */}
+        <div className="relative min-h-0 flex-1">
           {story.media_type === 'video' && story.vimeo_id ? (
             <iframe
               key={story.id}
