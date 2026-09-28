@@ -53,7 +53,12 @@ const BUCKET_LABEL: Record<PdiJornadaBucket, string> = {
 
 type Tab = 'pdi' | 'balanco' | 'biblioteca'
 
-function pdiTourSteps(setTab: (t: Tab) => void, pdiTabs: { hideBalanco: boolean; hideBiblioteca: boolean }): TourStep[] {
+// Guia só a aba "Meu PDI" em si (planos pessoais) — Balanço de
+// Competências e Biblioteca de Trilhas são telas independentes, com
+// propósito diferente, e não fazem parte deste fluxo (spec: o tutorial
+// precisa focar só no uso de Meu PDI + como acessar as competências
+// escolhidas de cada plano).
+function pdiTourSteps(setTab: (t: Tab) => void): TourStep[] {
   return [
     {
       title: 'Conheça o Meu PDI 🎯',
@@ -71,26 +76,12 @@ function pdiTourSteps(setTab: (t: Tab) => void, pdiTabs: { hideBalanco: boolean;
       title: 'Criar um plano',
       body: 'Clique aqui pra criar seu primeiro plano pessoal. Você pode partir da taxonomia de skills do seu curso ou começar do zero.',
     },
-    ...(pdiTabs.hideBalanco
-      ? []
-      : [
-          {
-            target: '#pdi-tab-balanco',
-            onEnter: () => setTab('balanco'),
-            title: 'Aba "Balanço de Competências"',
-            body: 'Autoavalie suas competências de 1 a 5. É diferente do PDI: aqui você mede onde está hoje, não o que vai fazer a seguir.',
-          },
-        ]),
-    ...(pdiTabs.hideBiblioteca
-      ? []
-      : [
-          {
-            target: '#pdi-tab-biblioteca',
-            onEnter: () => setTab('biblioteca'),
-            title: 'Aba "Biblioteca de Trilhas"',
-            body: 'Explore trilhas e cursos avulsos além da sua trilha recomendada, e adicione qualquer um deles a um plano pessoal.',
-          },
-        ]),
+    {
+      target: '#pdi-competency-grid',
+      onEnter: () => setTab('pdi'),
+      title: 'Suas competências escolhidas',
+      body: 'Cada plano mostra aqui as competências escolhidas pra ele (no PDI Express ou ao criar o plano). Clique num card de competência pra se autoavaliar, definir um objetivo e preencher a Prática, Mentoria e Educação formal dela.',
+    },
     {
       title: 'Pronto! 🎉',
       body: 'Agora é só montar seu plano e acompanhar o progresso por aqui sempre que quiser.',
@@ -173,7 +164,7 @@ export function MeuPdi() {
 
       {profile && runPdiTour && (
         <Tour
-          steps={pdiTourSteps(setTab, pdiTabs)}
+          steps={pdiTourSteps(setTab)}
           onFinish={(completed) => finishPdiTour(profile.id, completed)}
           laterHint='no topo da página Meu PDI, em "Tutorial Meu PDI"'
         />
@@ -211,8 +202,16 @@ function MeuPdiTab({ userId, programId }: { userId: string; programId: string | 
     <div className="mt-6 space-y-5">
       {loading && <p className="text-ink-soft">Carregando…</p>}
       {!loading &&
-        plans.map((plan) => (
-          <PlanCard key={plan.id} plan={plan} userId={userId} programId={programId} categories={categories} onChanged={reload} />
+        plans.map((plan, index) => (
+          <PlanCard
+            key={plan.id}
+            plan={plan}
+            userId={userId}
+            programId={programId}
+            categories={categories}
+            onChanged={reload}
+            isFirst={index === 0}
+          />
         ))}
 
       {!loading && plans.length === 0 && (
@@ -248,12 +247,14 @@ function PlanCard({
   programId,
   categories,
   onChanged,
+  isFirst,
 }: {
   plan: PdiPlan
   userId: string
   programId: string | null
   categories: SkillCategory[]
   onChanged: () => void
+  isFirst: boolean
 }) {
   const confirm = useConfirm()
   const [items, setItems] = useState<PdiPlanItem[]>([])
@@ -334,7 +335,13 @@ function PlanCard({
       </div>
 
       {plan.competency_ids.length > 0 && (
-        <CompetencyGrid userId={userId} planId={plan.id} competencyIds={plan.competency_ids} categories={categories} />
+        <CompetencyGrid
+          userId={userId}
+          planId={plan.id}
+          competencyIds={plan.competency_ids}
+          categories={categories}
+          id={isFirst ? 'pdi-competency-grid' : undefined}
+        />
       )}
 
       <button onClick={handleRemove} className="mt-4 text-sm font-medium text-brand-red hover:underline">

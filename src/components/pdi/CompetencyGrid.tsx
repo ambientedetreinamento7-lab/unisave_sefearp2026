@@ -16,11 +16,16 @@ export function CompetencyGrid({
   planId,
   competencyIds,
   categories,
+  id,
 }: {
   userId: string
   planId: string
   competencyIds: string[]
   categories: SkillCategory[]
+  /** Alvo estável (ex.: "pdi-competency-grid") pro tutorial guiado do Meu
+   * PDI apontar — só o primeiro plano da lista recebe um, pra não repetir
+   * o mesmo id em vários elementos da página. */
+  id?: string
 }) {
   const [loading, setLoading] = useState(true)
   const [summaries, setSummaries] = useState<Map<string, CompetencyPdiSummary>>(new Map())
@@ -52,7 +57,7 @@ export function CompetencyGrid({
   const visibleCategories = categories.filter((c) => competencyIds.includes(c.id))
 
   return (
-    <div className="mt-8 border-t border-navy-light pt-6">
+    <div id={id} className="mt-8 border-t border-navy-light pt-6">
       <h3 className="font-bold text-ink">Seu painel 70/20/10</h3>
       <p className="mt-1 text-sm text-ink-soft">As competências escolhidas pra este plano.</p>
 
