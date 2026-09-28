@@ -4,7 +4,7 @@ import { AdminLayout } from './AdminLayout'
 import { useConfirm } from '../../components/ConfirmDialog'
 import { formatCargaHoraria } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
-import type { Category, DashboardSection, Pill, Program, Track, TrackPill, TrackProgram } from '../../types/database'
+import type { Category, DashboardSection, GamificationLevel, GamificationRule, Pill, Program, Track, TrackPill, TrackProgram } from '../../types/database'
 
 export function AdminTrilhas() {
   const confirm = useConfirm()
@@ -15,6 +15,8 @@ export function AdminTrilhas() {
   const [programs, setPrograms] = useState<Program[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [sections, setSections] = useState<DashboardSection[]>([])
+  const [gamificationRules, setGamificationRules] = useState<GamificationRule[]>([])
+  const [gamificationLevels, setGamificationLevels] = useState<GamificationLevel[]>([])
   const [loading, setLoading] = useState(true)
   const [categoryForm, setCategoryForm] = useState<Category | 'new' | null>(null)
   const [search, setSearch] = useState('')
@@ -44,15 +46,18 @@ export function AdminTrilhas() {
   }
 
   async function reload() {
-    const [{ data: t }, { data: p }, { data: tp }, { data: tprog }, { data: prog }, { data: cat }, { data: sec }] = await Promise.all([
-      supabase.from('tracks').select('*'),
-      supabase.from('pills').select('*'),
-      supabase.from('track_pills').select('*'),
-      supabase.from('track_programs').select('*'),
-      supabase.from('programs').select('*'),
-      supabase.from('categories').select('*').order('order_index'),
-      supabase.from('dashboard_sections').select('*').order('order_index'),
-    ])
+    const [{ data: t }, { data: p }, { data: tp }, { data: tprog }, { data: prog }, { data: cat }, { data: sec }, { data: rules }, { data: levels }] =
+      await Promise.all([
+        supabase.from('tracks').select('*'),
+        supabase.from('pills').select('*'),
+        supabase.from('track_pills').select('*'),
+        supabase.from('track_programs').select('*'),
+        supabase.from('programs').select('*'),
+        supabase.from('categories').select('*').order('order_index'),
+        supabase.from('dashboard_sections').select('*').order('order_index'),
+        supabase.from('gamification_rules').select('*'),
+        supabase.from('gamification_levels').select('*').order('min_points'),
+      ])
     setTracks((t as Track[]) ?? [])
     setPills((p as Pill[]) ?? [])
     setTrackPills((tp as TrackPill[]) ?? [])
@@ -60,6 +65,8 @@ export function AdminTrilhas() {
     setPrograms((prog as Program[]) ?? [])
     setCategories((cat as Category[]) ?? [])
     setSections((sec as DashboardSection[]) ?? [])
+    setGamificationRules((rules as GamificationRule[]) ?? [])
+    setGamificationLevels((levels as GamificationLevel[]) ?? [])
     setLoading(false)
   }
 
@@ -92,6 +99,26 @@ export function AdminTrilhas() {
   }, [])
 
   const pillsById = useMemo(() => new Map(pills.map((p) => [p.id, p])), [pills])
+
+  // Soma de todos os cursos/módulos do catálogo — usado pra conferir se dá
+  // pra alcançar o último nível de gamificação (ex.: "Veterano") só
+  // completando o conteúdo disponível, sem depender de acesso diário/
+  // sequência (que são ilimitados no tempo, não faz sentido somar).
+  const pointsSummary = useMemo(() => {
+    const courseCompletedRule = gamificationRules.find((r) => r.key === 'course_completed')
+    const defaultPoints = courseCompletedRule?.points ?? 0
+    const maxPossiblePoints = pills.reduce((sum, p) => sum + (p.points_override ?? defaultPoints), 0)
+    const topLevel =
+      gamificationLevels.length > 0 ? gamificationLevels.reduce((a, b) => (b.min_points > a.min_points ? b : a)) : null
+    return {
+      totalTracks: tracks.length,
+      totalPills: pills.length,
+      ruleEnabled: courseCompletedRule?.enabled ?? false,
+      maxPossiblePoints,
+      topLevel,
+      reachable: topLevel ? maxPossiblePoints >= topLevel.min_points : null,
+    }
+  }, [pills, tracks, gamificationRules, gamificationLevels])
 
   const visibleTracks = useMemo(() => {
     return tracks.filter((track) => {
@@ -130,6 +157,42 @@ export function AdminTrilhas() {
 
   return (
     <AdminLayout>
+      <div className="card mb-4 p-4">
+        <p className="font-bold text-ink">Pontuação máxima possível no catálogo</p>
+        <p className="mt-1 text-sm text-ink-soft">
+          Soma dos pontos de completar todos os {pointsSummary.totalTracks} cursos ({pointsSummary.totalPills} aulas/
+          módulos ao todo) — não conta pontos de acesso diário/sequência, que não têm teto.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <span className="rounded-full bg-chip px-3 py-1.5 text-sm font-bold text-navy">
+            {pointsSummary.maxPossiblePoints.toLocaleString('pt-BR')} pontos possíveis
+          </span>
+          {!pointsSummary.ruleEnabled && (
+            <span className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
+              ⚠️ A regra "Conclusão de curso" está desativada em Gamificação — pontuação real hoje é 0
+            </span>
+          )}
+          {pointsSummary.topLevel && (
+            <span
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                pointsSummary.reachable ? 'bg-green-50 text-success' : 'bg-red-50 text-brand-red'
+              }`}
+            >
+              {pointsSummary.reachable ? '✅' : '⚠️'} Nível "{pointsSummary.topLevel.name}" exige{' '}
+              {pointsSummary.topLevel.min_points.toLocaleString('pt-BR')} pts —{' '}
+              {pointsSummary.reachable
+                ? 'alcançável só com o catálogo atual'
+                : `faltam ${(pointsSummary.topLevel.min_points - pointsSummary.maxPossiblePoints).toLocaleString('pt-BR')} pts de conteúdo`}
+            </span>
+          )}
+          {!pointsSummary.topLevel && (
+            <span className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
+              Nenhum nível de gamificação cadastrado ainda
+            </span>
+          )}
+        </div>
+      </div>
+
       <details className="card mb-4 p-4">
         <summary className="cursor-pointer font-bold text-ink">Categorias do catálogo</summary>
         <p className="mt-1 text-sm text-ink-soft">
