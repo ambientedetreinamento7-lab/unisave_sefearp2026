@@ -256,9 +256,15 @@ export interface TvPanelSettings {
   gradientFrom: string
   gradientTo: string
   backgroundImageUrl: string | null
+  /** Intensidade (0-100) do gradiente (gradientFrom/gradientTo) sobre a
+   * imagem de fundo, mesma lógica do overlay da tela de login. */
+  overlayOpacity: number
   textColor: string
   accentColor: string
   panelColor: string
+  firstPlaceColor: string
+  secondPlaceColor: string
+  thirdPlaceColor: string
 }
 
 export interface IssuedCertificate {

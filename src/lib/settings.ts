@@ -176,9 +176,13 @@ const DEFAULT_TV_PANEL: TvPanelSettings = {
   gradientFrom: '#171840',
   gradientTo: '#373896',
   backgroundImageUrl: null,
+  overlayOpacity: 65,
   textColor: '#ffffff',
   accentColor: '#ed1c24',
   panelColor: '#1f2154',
+  firstPlaceColor: '#eab308',
+  secondPlaceColor: '#94a3b8',
+  thirdPlaceColor: '#b45309',
 }
 
 export async function getTvPanelSettings(): Promise<TvPanelSettings> {

@@ -1180,8 +1180,12 @@ function TvPanelSection() {
           {settings.backgroundType === 'image' && (
             <div>
               <label className="block text-xs font-semibold text-ink-soft">Imagem de fundo</label>
+              <p className="mt-0.5 text-xs text-ink-soft">
+                Mesmo esquema da tela de login: a imagem fica por baixo e o gradiente (cor inicial/final abaixo) vira
+                uma camada de cor por cima dela — ajuste a intensidade pra deixar o texto legível.
+              </p>
               {settings.backgroundImageUrl && !bgImageFile && !removeBgImage && (
-                <div className="mt-1 flex items-center gap-2">
+                <div className="mt-2 flex items-center gap-2">
                   <img src={settings.backgroundImageUrl} alt="" className="h-16 w-28 rounded-lg border border-navy-light object-cover" />
                   <button
                     type="button"
@@ -1199,8 +1203,43 @@ function TvPanelSection() {
                   setBgImageFile(e.target.files?.[0] ?? null)
                   setRemoveBgImage(false)
                 }}
-                className="mt-1 w-full text-sm"
+                className="mt-2 w-full text-sm"
               />
+
+              <div className="mt-3 flex gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-ink-soft">Cor inicial do gradiente</label>
+                  <input
+                    type="color"
+                    className="mt-1 h-10 w-16 rounded-lg border border-navy-light"
+                    value={settings.gradientFrom}
+                    onChange={(e) => setSettings({ ...settings, gradientFrom: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-ink-soft">Cor final do gradiente</label>
+                  <input
+                    type="color"
+                    className="mt-1 h-10 w-16 rounded-lg border border-navy-light"
+                    value={settings.gradientTo}
+                    onChange={(e) => setSettings({ ...settings, gradientTo: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <label className="block text-xs font-semibold text-ink-soft">
+                  Intensidade do gradiente sobre a imagem — {settings.overlayOpacity}%
+                </label>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={settings.overlayOpacity}
+                  onChange={(e) => setSettings({ ...settings, overlayOpacity: Number(e.target.value) })}
+                  className="mt-1 w-full"
+                />
+              </div>
             </div>
           )}
 
@@ -1230,6 +1269,36 @@ function TvPanelSection() {
                 className="mt-1 h-10 w-16 rounded-lg border border-navy-light"
                 value={settings.panelColor}
                 onChange={(e) => setSettings({ ...settings, panelColor: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3 border-t border-navy-light pt-4">
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft">Barra do 1º lugar</label>
+              <input
+                type="color"
+                className="mt-1 h-10 w-16 rounded-lg border border-navy-light"
+                value={settings.firstPlaceColor}
+                onChange={(e) => setSettings({ ...settings, firstPlaceColor: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft">Barra do 2º lugar</label>
+              <input
+                type="color"
+                className="mt-1 h-10 w-16 rounded-lg border border-navy-light"
+                value={settings.secondPlaceColor}
+                onChange={(e) => setSettings({ ...settings, secondPlaceColor: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft">Barra do 3º lugar</label>
+              <input
+                type="color"
+                className="mt-1 h-10 w-16 rounded-lg border border-navy-light"
+                value={settings.thirdPlaceColor}
+                onChange={(e) => setSettings({ ...settings, thirdPlaceColor: e.target.value })}
               />
             </div>
           </div>
