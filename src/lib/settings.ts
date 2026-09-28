@@ -12,6 +12,7 @@ import type {
   SessionSettings,
   SignupSettings,
   TrialSettings,
+  TvPanelSettings,
 } from '../types/database'
 
 // Nunca deixa uma falha de rede/Supabase travar quem está esperando essas
@@ -167,4 +168,23 @@ export async function getPdiTabsSettings(): Promise<PdiTabsSettings> {
 
 export async function updatePdiTabsSettings(settings: PdiTabsSettings) {
   await supabase.from('app_settings').upsert({ key: 'pdi_tabs', value: settings })
+}
+
+const DEFAULT_TV_PANEL: TvPanelSettings = {
+  backgroundType: 'solid',
+  backgroundColor: '#171840',
+  gradientFrom: '#171840',
+  gradientTo: '#373896',
+  backgroundImageUrl: null,
+  textColor: '#ffffff',
+  accentColor: '#ed1c24',
+  panelColor: '#1f2154',
+}
+
+export async function getTvPanelSettings(): Promise<TvPanelSettings> {
+  return getAppSetting('tv_panel', DEFAULT_TV_PANEL)
+}
+
+export async function updateTvPanelSettings(settings: TvPanelSettings) {
+  await supabase.from('app_settings').upsert({ key: 'tv_panel', value: settings })
 }

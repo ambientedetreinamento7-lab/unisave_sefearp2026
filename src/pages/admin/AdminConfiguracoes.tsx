@@ -13,6 +13,7 @@ import {
   getSessionSettings,
   getSignupSettings,
   getTrialSettings,
+  getTvPanelSettings,
   updateBrandingSettings,
   updateCommunitySettings,
   updateCourseDefaultsSettings,
@@ -25,6 +26,7 @@ import {
   updateSessionSettings,
   updateSignupSettings,
   updateTrialSettings,
+  updateTvPanelSettings,
 } from '../../lib/settings'
 import { sanitizeFileName } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
@@ -41,6 +43,7 @@ import type {
   SessionSettings,
   SignupSettings,
   TrialSettings,
+  TvPanelSettings,
 } from '../../types/database'
 
 async function uploadBrandingAsset(file: File, folder = 'branding'): Promise<string> {
@@ -69,6 +72,7 @@ export function AdminConfiguracoes() {
         <MaintenanceSection />
         <PwaSection />
         <PdiTabsSection />
+        <TvPanelSection />
       </div>
     </AdminLayout>
   )
@@ -1066,6 +1070,169 @@ function PdiTabsSection() {
             />
             Ocultar aba "Biblioteca de Trilhas"
           </label>
+        </div>
+      )}
+    </SectionShell>
+  )
+}
+
+function TvPanelSection() {
+  const [settings, setSettings] = useState<TvPanelSettings | null>(null)
+  const [bgImageFile, setBgImageFile] = useState<File | null>(null)
+  const [removeBgImage, setRemoveBgImage] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    getTvPanelSettings().then(setSettings)
+  }, [])
+
+  async function save() {
+    if (!settings) return
+    setSaving(true)
+    setSaved(false)
+    const backgroundImageUrl = bgImageFile
+      ? await uploadBrandingAsset(bgImageFile, 'tv-panel')
+      : removeBgImage
+        ? null
+        : settings.backgroundImageUrl
+    const next = { ...settings, backgroundImageUrl }
+    await updateTvPanelSettings(next)
+    setSettings(next)
+    setBgImageFile(null)
+    setRemoveBgImage(false)
+    setSaving(false)
+    setSaved(true)
+  }
+
+  return (
+    <SectionShell
+      title="Painel de TV (ranking ao vivo)"
+      description={'Personaliza o fundo e as cores da tela /painel-tv, exibida numa TV no estande.'}
+      loading={!settings}
+      onSave={save}
+      saving={saving}
+      saved={saved}
+    >
+      {settings && (
+        <div className="mt-4 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-ink-soft">Tipo de fundo</label>
+            <div className="mt-1 flex gap-2">
+              {(
+                [
+                  { value: 'solid', label: 'Cor sólida' },
+                  { value: 'gradient', label: 'Gradiente' },
+                  { value: 'image', label: 'Imagem' },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setSettings({ ...settings, backgroundType: opt.value })}
+                  className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
+                    settings.backgroundType === opt.value
+                      ? 'border-navy bg-navy text-white'
+                      : 'border-navy-light text-ink-soft'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {settings.backgroundType === 'solid' && (
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft">Cor de fundo</label>
+              <input
+                type="color"
+                className="mt-1 h-10 w-16 rounded-lg border border-navy-light"
+                value={settings.backgroundColor}
+                onChange={(e) => setSettings({ ...settings, backgroundColor: e.target.value })}
+              />
+            </div>
+          )}
+
+          {settings.backgroundType === 'gradient' && (
+            <div className="flex gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-ink-soft">Cor inicial</label>
+                <input
+                  type="color"
+                  className="mt-1 h-10 w-16 rounded-lg border border-navy-light"
+                  value={settings.gradientFrom}
+                  onChange={(e) => setSettings({ ...settings, gradientFrom: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-ink-soft">Cor final</label>
+                <input
+                  type="color"
+                  className="mt-1 h-10 w-16 rounded-lg border border-navy-light"
+                  value={settings.gradientTo}
+                  onChange={(e) => setSettings({ ...settings, gradientTo: e.target.value })}
+                />
+              </div>
+            </div>
+          )}
+
+          {settings.backgroundType === 'image' && (
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft">Imagem de fundo</label>
+              {settings.backgroundImageUrl && !bgImageFile && !removeBgImage && (
+                <div className="mt-1 flex items-center gap-2">
+                  <img src={settings.backgroundImageUrl} alt="" className="h-16 w-28 rounded-lg border border-navy-light object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setRemoveBgImage(true)}
+                    className="text-xs font-semibold text-brand-red hover:underline"
+                  >
+                    Remover
+                  </button>
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  setBgImageFile(e.target.files?.[0] ?? null)
+                  setRemoveBgImage(false)
+                }}
+                className="mt-1 w-full text-sm"
+              />
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-3 border-t border-navy-light pt-4">
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft">Cor do texto</label>
+              <input
+                type="color"
+                className="mt-1 h-10 w-16 rounded-lg border border-navy-light"
+                value={settings.textColor}
+                onChange={(e) => setSettings({ ...settings, textColor: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft">Cor de destaque (AO VIVO)</label>
+              <input
+                type="color"
+                className="mt-1 h-10 w-16 rounded-lg border border-navy-light"
+                value={settings.accentColor}
+                onChange={(e) => setSettings({ ...settings, accentColor: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft">Cor dos painéis</label>
+              <input
+                type="color"
+                className="mt-1 h-10 w-16 rounded-lg border border-navy-light"
+                value={settings.panelColor}
+                onChange={(e) => setSettings({ ...settings, panelColor: e.target.value })}
+              />
+            </div>
+          </div>
         </div>
       )}
     </SectionShell>

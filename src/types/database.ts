@@ -250,6 +250,17 @@ export interface PdiTabsSettings {
   hideBiblioteca: boolean
 }
 
+export interface TvPanelSettings {
+  backgroundType: 'solid' | 'gradient' | 'image'
+  backgroundColor: string
+  gradientFrom: string
+  gradientTo: string
+  backgroundImageUrl: string | null
+  textColor: string
+  accentColor: string
+  panelColor: string
+}
+
 export interface IssuedCertificate {
   id: string
   code: string

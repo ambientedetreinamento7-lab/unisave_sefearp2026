@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { colorForName, initials } from '../../lib/avatar'
 import { getRanking } from '../../lib/gamification'
-import type { PublicProfile } from '../../types/database'
+import { getTvPanelSettings } from '../../lib/settings'
+import type { PublicProfile, TvPanelSettings } from '../../types/database'
 
 /**
  * Painel de ranking ao vivo pra exibir numa TV no estande — rota
  * deliberadamente fora do menu/nav (só quem tem o link acessa) e sem
  * exigir login, pra poder abrir direto num navegador de TV sem precisar
  * autenticar. Atualiza sozinho em intervalos, sem nenhuma interação
- * necessária.
+ * necessária. Fundo e cores são configuráveis em Admin > Configurações.
  */
 const REFRESH_MS = 20_000
 
@@ -18,10 +19,38 @@ const PRIZES: Record<1 | 2 | 3, { label: string; icon: string }> = {
   3: { label: 'Kit UniSave', icon: '🎁' },
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace('#', '')
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean
+  const r = parseInt(full.slice(0, 2), 16) || 0
+  const g = parseInt(full.slice(2, 4), 16) || 0
+  const b = parseInt(full.slice(4, 6), 16) || 0
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function backgroundStyle(settings: TvPanelSettings): CSSProperties {
+  if (settings.backgroundType === 'gradient') {
+    return { backgroundImage: `linear-gradient(135deg, ${settings.gradientFrom}, ${settings.gradientTo})` }
+  }
+  if (settings.backgroundType === 'image' && settings.backgroundImageUrl) {
+    return {
+      backgroundImage: `linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)), url(${settings.backgroundImageUrl})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+    }
+  }
+  return { backgroundColor: settings.backgroundColor }
+}
+
 export function PainelTV() {
   const [ranking, setRanking] = useState<PublicProfile[]>([])
+  const [settings, setSettings] = useState<TvPanelSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+
+  useEffect(() => {
+    getTvPanelSettings().then(setSettings)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -40,7 +69,7 @@ export function PainelTV() {
     }
   }, [])
 
-  if (loading) {
+  if (loading || !settings) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-navy-deep">
         <p className="text-2xl font-semibold text-white/70">Carregando ranking…</p>
@@ -49,16 +78,21 @@ export function PainelTV() {
   }
 
   const [first, second, third, fourth, fifth] = ranking
+  const panelBg = hexToRgba(settings.panelColor, 0.4)
+  const panelBgLight = hexToRgba(settings.panelColor, 0.22)
 
   return (
-    <div className="min-h-screen bg-navy-deep px-12 py-10 text-white">
+    <div className="min-h-screen px-12 py-10" style={{ ...backgroundStyle(settings), color: settings.textColor }}>
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-extrabold">Ranking ao vivo</h1>
-          <p className="mt-1 text-lg text-white/60">Top 5 do momento — continue pontuando pra chegar lá!</p>
+          <p className="mt-1 text-lg opacity-60">Top 5 do momento — continue pontuando pra chegar lá!</p>
         </div>
-        <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-lg font-bold text-brand-red">
-          <span className="mp-dot h-3 w-3 rounded-full bg-brand-red" />
+        <div
+          className="flex items-center gap-2 rounded-full px-4 py-2 text-lg font-bold"
+          style={{ background: panelBgLight, color: settings.accentColor }}
+        >
+          <span className="mp-dot h-3 w-3 rounded-full" style={{ background: settings.accentColor }} />
           AO VIVO
         </div>
       </header>
@@ -66,32 +100,30 @@ export function PainelTV() {
       <div className="mt-10 grid grid-cols-[1.5fr_1fr] gap-10">
         <section>
           <div className="flex items-end justify-center gap-6">
-            <PodiumSpot position={2} profile={second} heightClass="h-28" />
-            <PodiumSpot position={1} profile={first} heightClass="h-40" />
-            <PodiumSpot position={3} profile={third} heightClass="h-20" />
+            <PodiumSpot position={2} profile={second} heightClass="h-28" panelBg={panelBgLight} />
+            <PodiumSpot position={1} profile={first} heightClass="h-40" panelBg={panelBgLight} />
+            <PodiumSpot position={3} profile={third} heightClass="h-20" panelBg={panelBgLight} />
           </div>
 
           {(fourth || fifth) && (
             <div className="mx-auto mt-10 grid max-w-3xl grid-cols-2 gap-5">
-              {fourth && <NextRow position={4} profile={fourth} />}
-              {fifth && <NextRow position={5} profile={fifth} />}
+              {fourth && <NextRow position={4} profile={fourth} panelBg={panelBgLight} />}
+              {fifth && <NextRow position={5} profile={fifth} panelBg={panelBgLight} />}
             </div>
           )}
         </section>
 
-        <section className="rounded-3xl bg-white/5 p-6">
+        <section className="rounded-3xl p-6" style={{ background: panelBg }}>
           <h2 className="text-2xl font-bold">Ranking geral</h2>
-          <p className="mt-1 text-sm text-white/60">Veja sua posição — o top 5 está mais perto do que parece.</p>
+          <p className="mt-1 text-sm opacity-60">Veja sua posição — o top 5 está mais perto do que parece.</p>
           <div className="mt-5 h-[640px] overflow-hidden">
-            <GeneralRankingList entries={ranking} />
+            <GeneralRankingList entries={ranking} panelBg={panelBgLight} />
           </div>
         </section>
       </div>
 
       {lastUpdated && (
-        <p className="mt-8 text-right text-sm text-white/30">
-          Atualizado às {lastUpdated.toLocaleTimeString('pt-BR')}
-        </p>
+        <p className="mt-8 text-right text-sm opacity-30">Atualizado às {lastUpdated.toLocaleTimeString('pt-BR')}</p>
       )}
     </div>
   )
@@ -112,10 +144,12 @@ function PodiumSpot({
   position,
   profile,
   heightClass,
+  panelBg,
 }: {
   position: 1 | 2 | 3
   profile?: PublicProfile
   heightClass: string
+  panelBg: string
 }) {
   const prize = PRIZES[position]
   const blockColor =
@@ -129,13 +163,16 @@ function PodiumSpot({
     <div className="flex w-56 flex-col items-center">
       <div className="relative">
         {position === 1 && <span className="absolute -top-8 left-1/2 -translate-x-1/2 text-4xl">👑</span>}
-        <span className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-white/80 bg-white/10">
-          {profile ? <Avatar profile={profile} size={96} /> : <span className="text-3xl text-white/30">?</span>}
+        <span
+          className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-white/80"
+          style={{ background: panelBg }}
+        >
+          {profile ? <Avatar profile={profile} size={96} /> : <span className="text-3xl opacity-30">?</span>}
         </span>
       </div>
       <p className="mt-3 max-w-full truncate text-xl font-extrabold">{profile?.name ?? 'Aguardando…'}</p>
-      <p className="text-base font-semibold text-white/70">{profile ? `${profile.total_points} pts` : ''}</p>
-      <span className="mt-2 flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1.5 text-sm font-bold">
+      <p className="text-base font-semibold opacity-70">{profile ? `${profile.total_points} pts` : ''}</p>
+      <span className="mt-2 flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-bold" style={{ background: panelBg }}>
         <span className="text-lg">{prize.icon}</span>
         {prize.label}
       </span>
@@ -148,14 +185,14 @@ function PodiumSpot({
   )
 }
 
-function NextRow({ position, profile }: { position: number; profile: PublicProfile }) {
+function NextRow({ position, profile, panelBg }: { position: number; profile: PublicProfile; panelBg: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl bg-white/5 px-4 py-3">
-      <span className="w-8 shrink-0 text-center text-2xl font-black text-white/40">#{position}</span>
+    <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: panelBg }}>
+      <span className="w-8 shrink-0 text-center text-2xl font-black opacity-40">#{position}</span>
       <Avatar profile={profile} size={44} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-lg font-bold">{profile.name}</p>
-        <p className="text-sm text-white/60">{profile.total_points} pts</p>
+        <p className="text-sm opacity-60">{profile.total_points} pts</p>
       </div>
     </div>
   )
@@ -165,19 +202,23 @@ function NextRow({ position, profile }: { position: number; profile: PublicProfi
 // participantes); acima disso, gira sozinha com CSS puro (duplica a lista
 // e anima translateY até -50%, que é exatamente a altura de uma cópia —
 // fecha o loop sem soluço nem precisar medir altura em JS).
-function GeneralRankingList({ entries }: { entries: PublicProfile[] }) {
+function GeneralRankingList({ entries, panelBg }: { entries: PublicProfile[]; panelBg: string }) {
   if (entries.length === 0) {
-    return <p className="text-white/50">Ninguém pontuou ainda.</p>
+    return <p className="opacity-50">Ninguém pontuou ainda.</p>
   }
 
   const shouldScroll = entries.length > 10
   const rows = (list: PublicProfile[], keySuffix: string) =>
     list.map((p, i) => (
-      <div key={`${p.id}-${keySuffix}`} className="flex items-center gap-3 rounded-xl px-3 py-2.5 odd:bg-white/5">
-        <span className="w-8 shrink-0 text-center text-base font-bold text-white/40">{i + 1}</span>
+      <div
+        key={`${p.id}-${keySuffix}`}
+        className="flex items-center gap-3 rounded-xl px-3 py-2.5"
+        style={{ background: i % 2 === 1 ? panelBg : undefined }}
+      >
+        <span className="w-8 shrink-0 text-center text-base font-bold opacity-40">{i + 1}</span>
         <Avatar profile={p} size={38} />
         <span className="min-w-0 flex-1 truncate text-base font-semibold">{p.name}</span>
-        <span className="shrink-0 text-base font-bold text-white/80">{p.total_points} pts</span>
+        <span className="shrink-0 text-base font-bold opacity-80">{p.total_points} pts</span>
       </div>
     ))
 
