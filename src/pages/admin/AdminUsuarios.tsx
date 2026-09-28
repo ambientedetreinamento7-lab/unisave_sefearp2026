@@ -71,6 +71,13 @@ export function AdminUsuarios() {
     setBusy(false)
   }
 
+  async function setRankingOptOut(ids: string[], optOut: boolean) {
+    setBusy(true)
+    await supabase.from('profiles').update({ ranking_opt_out: optOut }).in('id', ids)
+    setUsers((prev) => prev.map((u) => (ids.includes(u.id) ? { ...u, ranking_opt_out: optOut } : u)))
+    setBusy(false)
+  }
+
   async function deleteUsers(ids: string[]) {
     const label = ids.length === 1 ? 'este usuário' : `${ids.length} usuários selecionados`
     if (
@@ -135,6 +142,20 @@ export function AdminUsuarios() {
             Resetar senha
           </button>
           <button
+            onClick={() => setRankingOptOut(selectedIds, true)}
+            disabled={busy}
+            className="rounded-lg border border-navy-light bg-surface px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy disabled:opacity-50"
+          >
+            Ocultar do ranking
+          </button>
+          <button
+            onClick={() => setRankingOptOut(selectedIds, false)}
+            disabled={busy}
+            className="rounded-lg border border-navy-light bg-surface px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy disabled:opacity-50"
+          >
+            Mostrar no ranking
+          </button>
+          <button
             onClick={() => deleteUsers(selectedIds)}
             disabled={busy}
             className="rounded-lg bg-brand-red px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-red-dark disabled:opacity-50"
@@ -159,6 +180,7 @@ export function AdminUsuarios() {
               <th className="px-4 py-3">E-mail</th>
               <th className="px-4 py-3">Papel</th>
               <th className="px-4 py-3">Pontos</th>
+              <th className="px-4 py-3">Ranking</th>
               <th className="px-4 py-3">Ações</th>
             </tr>
           </thead>
@@ -182,6 +204,17 @@ export function AdminUsuarios() {
                   </select>
                 </td>
                 <td className="px-4 py-3 text-ink-soft">{u.total_points}</td>
+                <td className="px-4 py-3">
+                  <label className="flex items-center gap-1.5 text-xs font-medium text-ink-soft">
+                    <input
+                      type="checkbox"
+                      checked={!u.ranking_opt_out}
+                      disabled={busy}
+                      onChange={(e) => setRankingOptOut([u.id], !e.target.checked)}
+                    />
+                    Aparece
+                  </label>
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-2">
                     <button
