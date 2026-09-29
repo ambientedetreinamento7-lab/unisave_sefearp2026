@@ -31,10 +31,12 @@ import {
 import { supabase } from '../../lib/supabase'
 import { colorForName, initials } from '../../lib/avatar'
 import { relativeTime } from '../../lib/format'
+import { getCommunitySettings } from '../../lib/settings'
 import { MAX_VIDEO_DURATION_SECONDS, readVideoDuration, uploadVideoToVimeo } from '../../lib/vimeo'
 import type { Program, SocialComment, SocialPostMedia, SocialScope, SocialStoryView } from '../../types/database'
 
 const MAX_STORY_VIDEO_SECONDS = 50
+const DEFAULT_STORY_DURATION_MS = 6000
 
 export function Comunidade() {
   const { profile, session } = useAuth()
@@ -43,6 +45,7 @@ export function Comunidade() {
   const [posts, setPosts] = useState<FeedPost[]>([])
   const [loading, setLoading] = useState(true)
   const [storyGroups, setStoryGroups] = useState<StoryGroup[]>([])
+  const [storyDurationMs, setStoryDurationMs] = useState(DEFAULT_STORY_DURATION_MS)
 
   const myProgram = programs.find((p) => p.id === profile?.program_id) ?? null
 
@@ -51,6 +54,7 @@ export function Comunidade() {
       .from('programs')
       .select('*')
       .then(({ data }) => setPrograms((data as Program[]) ?? []))
+    getCommunitySettings().then((s) => setStoryDurationMs(s.storyDurationSeconds * 1000))
   }, [])
 
   async function reload() {
@@ -92,6 +96,7 @@ export function Comunidade() {
           accessToken={session?.access_token ?? ''}
           groups={storyGroups}
           onChanged={reloadStories}
+          storyDurationMs={storyDurationMs}
         />
 
         <div className="mt-6 flex gap-2 rounded-full bg-surface p-1 shadow-sm">
@@ -765,6 +770,7 @@ function StoriesRow({
   accessToken,
   groups,
   onChanged,
+  storyDurationMs,
 }: {
   userId: string
   userName: string
@@ -772,6 +778,7 @@ function StoriesRow({
   accessToken: string
   groups: StoryGroup[]
   onChanged: () => void
+  storyDurationMs: number
 }) {
   const [creating, setCreating] = useState(false)
   const [viewingGroup, setViewingGroup] = useState<StoryGroup | null>(null)
@@ -857,6 +864,7 @@ function StoriesRow({
           viewerName={userName}
           onClose={() => setViewingGroup(null)}
           onChanged={onChanged}
+          durationMs={storyDurationMs}
         />
       )}
     </div>
@@ -995,20 +1003,21 @@ function CreateStoryModal({
   )
 }
 
-const STORY_DURATION_MS = 6000
-
 function StoryViewerModal({
   group,
   viewerId,
   viewerName,
   onClose,
   onChanged,
+  durationMs,
 }: {
   group: StoryGroup
   viewerId: string
   viewerName: string
   onClose: () => void
   onChanged: () => void
+  /** Configurável em Admin > Configurações > Comunidade (storyDurationSeconds, até 60s). */
+  durationMs: number
 }) {
   const confirm = useConfirm()
   const [index, setIndex] = useState(0)
@@ -1033,10 +1042,10 @@ function StoryViewerModal({
     const timer = setTimeout(() => {
       if (index < group.stories.length - 1) setIndex((i) => i + 1)
       else onClose()
-    }, STORY_DURATION_MS)
+    }, durationMs)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [story])
+  }, [story, durationMs])
 
   if (!story) return null
 
@@ -1069,7 +1078,18 @@ function StoryViewerModal({
         <div className="absolute inset-x-2 top-2 z-10 flex gap-1">
           {group.stories.map((s, i) => (
             <div key={s.id} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
-              {i <= index && <div className="h-full w-full bg-white" />}
+              {i < index && <div className="h-full w-full bg-white" />}
+              {i === index && (
+                // key=story.id força recriar esse elemento (e reiniciar a
+                // animação do zero) toda vez que troca de story — sem isso o
+                // React reaproveitaria o nó e a barra não voltaria a encher
+                // do início.
+                <div
+                  key={s.id}
+                  className="h-full bg-white"
+                  style={{ animation: `story-progress ${durationMs}ms linear forwards` }}
+                />
+              )}
             </div>
           ))}
         </div>

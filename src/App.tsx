@@ -16,6 +16,7 @@ import { AdminGrade } from './pages/admin/AdminGrade'
 import { AdminProgramas } from './pages/admin/AdminProgramas'
 import { AdminQuizzes } from './pages/admin/AdminQuizzes'
 import { AdminScormLibrary } from './pages/admin/AdminScormLibrary'
+import { AdminSuporte } from './pages/admin/AdminSuporte'
 import { AdminH5pLibrary } from './pages/admin/AdminH5pLibrary'
 import { AdminTrilhas } from './pages/admin/AdminTrilhas'
 import { AdminUsuarios } from './pages/admin/AdminUsuarios'
@@ -31,6 +32,7 @@ import { MeuPdi } from './pages/aluno/MeuPdi'
 import { MeuPerfil } from './pages/aluno/MeuPerfil'
 import { PerfilPublico } from './pages/aluno/PerfilPublico'
 import { Ranking } from './pages/aluno/Ranking'
+import { Suporte } from './pages/aluno/Suporte'
 import { Moderador } from './pages/moderador/Moderador'
 import { AtivarConta } from './pages/public/AtivarConta'
 import { Entrar } from './pages/public/Entrar'
@@ -210,6 +212,14 @@ function App() {
             </RouteGuard>
           }
         />
+        <Route
+          path="/suporte"
+          element={
+            <RouteGuard>
+              <Suporte />
+            </RouteGuard>
+          }
+        />
 
         <Route
           path="/moderador"
@@ -321,6 +331,14 @@ function App() {
           element={
             <RouteGuard allow={['admin']}>
               <AdminAnalytics />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/admin/suporte"
+          element={
+            <RouteGuard allow={['admin']}>
+              <AdminSuporte />
             </RouteGuard>
           }
         />

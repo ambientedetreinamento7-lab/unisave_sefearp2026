@@ -715,6 +715,24 @@ function CommunitySection() {
             />
             Permitir que o aluno saia do ranking público (opção em Meu Perfil)
           </label>
+
+          <div className="rounded-xl border border-navy-light p-3">
+            <label className="block text-xs font-semibold text-ink-soft">Duração de cada story (segundos)</label>
+            <input
+              type="number"
+              min={1}
+              max={60}
+              className="mt-1 w-24 rounded-lg border border-navy-light px-3 py-1.5 text-sm"
+              value={settings.storyDurationSeconds}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  storyDurationSeconds: Math.min(60, Math.max(1, Number(e.target.value) || 1)),
+                })
+              }
+            />
+            <p className="mt-1 text-xs text-ink-soft">Quanto tempo cada story fica em tela antes de avançar/fechar. Máximo 60s.</p>
+          </div>
         </div>
       )}
     </SectionShell>

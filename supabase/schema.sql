@@ -36,7 +36,7 @@ create type social_story_media_type as enum ('imagem', 'video');
 -- Central de notificações (sino no header). 'points' é a notificação de
 -- "+N pontos" da gamificação, sempre separada da notificação específica
 -- do gatilho (ex.: 'course_completed' já avisa a conclusão em si).
-create type notification_type as enum ('reaction', 'course_completed', 'pdi_progress', 'points');
+create type notification_type as enum ('reaction', 'course_completed', 'pdi_progress', 'points', 'support');
 
 -- ============================================================
 -- TABLES
@@ -714,6 +714,54 @@ create table issued_certificates (
 );
 
 -- ============================================================
+-- SUPORTE (service desk do aluno)
+-- ============================================================
+
+create type support_ticket_status as enum ('aberto', 'respondido', 'fechado');
+
+-- Um chamado por (aluno, assunto) — a conversa em si mora em
+-- support_messages, igual reaction_responses/reaction_answers. status
+-- muda pra 'respondido' quando o admin manda uma mensagem e pra 'aberto'
+-- de novo quando o próprio aluno responde (ver trigger abaixo) — só
+-- 'fechado' é setado manualmente (aluno encerrando ou admin resolvendo).
+create table support_tickets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on update cascade on delete cascade,
+  subject text not null,
+  status support_ticket_status not null default 'aberto',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table support_messages (
+  id uuid primary key default gen_random_uuid(),
+  ticket_id uuid not null references support_tickets(id) on delete cascade,
+  author_id uuid not null references profiles(id) on update cascade on delete cascade,
+  is_admin boolean not null default false,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+-- Mantém support_tickets.status/updated_at em sincronia com a última
+-- mensagem, sem precisar que o client faça isso em dois passos (insert
+-- da mensagem + update do ticket) — mais simples e sem risco de um dos
+-- dois falhar e deixar o ticket com status desatualizado.
+create or replace function support_message_updates_ticket()
+returns trigger as $$
+begin
+  update support_tickets
+    set status = case when new.is_admin then 'respondido' else 'aberto' end,
+        updated_at = new.created_at
+    where id = new.ticket_id;
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+create trigger support_message_updates_ticket
+  after insert on support_messages
+  for each row execute function support_message_updates_ticket();
+
+-- ============================================================
 -- GAMIFICAÇÃO
 -- ============================================================
 
@@ -779,8 +827,20 @@ grant select on public_profiles to anon, authenticated;
 -- pra conferir autenticidade por código, na mesma linha de raciocínio de
 -- public_profiles — roda com as permissões do dono e contorna a RLS de
 -- issued_certificates, que por padrão só deixa cada aluno ver os seus.
+-- Colunas de template/carga horária foram adicionadas no final (nunca
+-- reordenar as 6 primeiras — create or replace view exige manter
+-- nome/ordem/tipo das colunas já existentes) pra dar pra desenhar a
+-- prévia do certificado (thumb clicável) na própria página pública, sem
+-- outra consulta a tracks/certificate_templates (que não são públicas).
 create view public_certificates as
-  select id, code, student_name, track_title, completed_at, issued_at from issued_certificates;
+  select
+    ic.id, ic.code, ic.student_name, ic.track_title, ic.completed_at, ic.issued_at,
+    t.carga_horaria_total,
+    ct.background_url as template_background_url,
+    ct.message as template_message
+  from issued_certificates ic
+  left join tracks t on t.id = ic.track_id
+  left join certificate_templates ct on ct.id = t.certificate_template_id;
 grant select on public_certificates to anon, authenticated;
 
 -- Config da plataforma (ex.: período de degustação) precisa ser lida
@@ -797,6 +857,9 @@ create index on pills (category_id);
 create index on pill_favorites (user_id);
 create index on issued_certificates (user_id);
 create index on issued_certificates (code);
+create index on support_tickets (user_id);
+create index on support_tickets (status);
+create index on support_messages (ticket_id);
 create index on track_pills (track_id);
 create index on track_pills (pill_id);
 create index on user_progress (user_id);
@@ -918,6 +981,8 @@ alter table pill_favorites enable row level security;
 alter table dashboard_sections enable row level security;
 alter table app_settings enable row level security;
 alter table issued_certificates enable row level security;
+alter table support_tickets enable row level security;
+alter table support_messages enable row level security;
 alter table profiles enable row level security;
 alter table user_progress enable row level security;
 alter table quizzes enable row level security;
@@ -1011,6 +1076,34 @@ create policy "issue own certificate" on issued_certificates for insert
   with check (user_id = auth.uid());
 create policy "admin manages certificates" on issued_certificates for all
   using (current_role_is('admin')) with check (current_role_is('admin'));
+
+-- Suporte: aluno vê/abre só os próprios chamados. O único update que o
+-- aluno pode fazer direto é encerrar um chamado (status='fechado') —
+-- reabrir ou marcar como respondido é sempre via o trigger da mensagem
+-- (support_message_updates_ticket acima), nunca direto pelo client.
+create policy "read own tickets" on support_tickets for select
+  using (user_id = auth.uid() or current_role_is('admin'));
+create policy "open own tickets" on support_tickets for insert
+  with check (user_id = auth.uid());
+create policy "close own tickets" on support_tickets for update
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid() and status = 'fechado');
+create policy "admin manages tickets" on support_tickets for all
+  using (current_role_is('admin')) with check (current_role_is('admin'));
+
+create policy "read own ticket messages" on support_messages for select
+  using (
+    exists (select 1 from support_tickets t where t.id = support_messages.ticket_id and t.user_id = auth.uid())
+    or current_role_is('admin')
+  );
+create policy "reply own ticket" on support_messages for insert
+  with check (
+    author_id = auth.uid()
+    and not is_admin
+    and exists (select 1 from support_tickets t where t.id = support_messages.ticket_id and t.user_id = auth.uid())
+  );
+create policy "admin replies ticket" on support_messages for insert
+  with check (author_id = auth.uid() and is_admin and current_role_is('admin'));
 
 create policy "read own favorites" on pill_favorites for select using (user_id = auth.uid());
 create policy "add own favorites" on pill_favorites for insert with check (user_id = auth.uid());

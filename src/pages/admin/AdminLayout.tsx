@@ -15,6 +15,7 @@ const LINKS = [
   { to: '/admin/gamificacao', label: 'Gamificação' },
   { to: '/admin/usuarios', label: 'Usuários' },
   { to: '/admin/analytics', label: 'Analytics' },
+  { to: '/admin/suporte', label: 'Suporte' },
   { to: '/admin/configuracoes', label: 'Configurações' },
 ]
 

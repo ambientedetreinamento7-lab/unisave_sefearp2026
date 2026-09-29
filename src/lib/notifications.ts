@@ -69,3 +69,12 @@ export async function notifyPoints(userId: string, points: number, label: string
     link: '/meu-perfil',
   })
 }
+
+export async function notifySupportReply(userId: string, subject: string) {
+  await createNotification({
+    userId,
+    type: 'support',
+    title: `Resposta do suporte: "${subject}"`,
+    link: '/suporte',
+  })
+}

@@ -82,7 +82,7 @@ export async function updateModuleCompletionSettings(settings: ModuleCompletionS
   await supabase.from('app_settings').upsert({ key: 'module_completion', value: settings })
 }
 
-const DEFAULT_COMMUNITY: CommunitySettings = { requireModeration: false, allowRankingOptOut: false }
+const DEFAULT_COMMUNITY: CommunitySettings = { requireModeration: false, allowRankingOptOut: false, storyDurationSeconds: 6 }
 
 export async function getCommunitySettings(): Promise<CommunitySettings> {
   return getAppSetting('community', DEFAULT_COMMUNITY)

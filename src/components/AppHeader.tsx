@@ -17,6 +17,7 @@ const NAV_LINKS = [
   { to: '/conquistas', label: 'Conquistas' },
   { to: '/certificados', label: 'Certificados' },
   { to: '/ranking', label: 'Ranking' },
+  { to: '/suporte', label: 'Suporte' },
 ]
 
 function daysLeft(createdAt: string, trialDays: number) {

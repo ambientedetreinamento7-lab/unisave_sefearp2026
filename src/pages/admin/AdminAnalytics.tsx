@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { AdminLayout } from './AdminLayout'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { getIssuedCertificates, getNpsResponses } from '../../lib/api'
 import type { NpsResponseRow } from '../../lib/api'
 import { getLevels, getRules, levelForPoints } from '../../lib/gamification'
@@ -98,6 +99,7 @@ type StudentRow = {
 type StudentSortField = 'nome' | 'pontos' | 'cursosConcluidos' | 'streak'
 
 export function AdminAnalytics() {
+  const confirm = useConfirm()
   const [subTab, setSubTab] = useState<SubTab>('geral')
   const [funnel, setFunnel] = useState<{ stage: string; value: number }[]>([])
   const [byProgram, setByProgram] = useState<{ program: string; alunos: number }[]>([])
@@ -386,18 +388,75 @@ export function AdminAnalytics() {
   }, [])
 
   const [npsCourseFilter, setNpsCourseFilter] = useState('')
+  const [npsCategoryFilter, setNpsCategoryFilter] = useState<'' | 'promotor' | 'neutro' | 'detrator'>('')
+  const [npsDateFrom, setNpsDateFrom] = useState('')
+  const [npsDateTo, setNpsDateTo] = useState('')
+  const [npsSelected, setNpsSelected] = useState<Set<string>>(new Set())
+  const [npsDeleting, setNpsDeleting] = useState(false)
 
   const npsCourseOf = (r: NpsResponseRow) => r.trackTitle ?? r.pillTitle
+  const npsCategoryOf = (value: number): 'promotor' | 'neutro' | 'detrator' =>
+    value >= 9 ? 'promotor' : value >= 7 ? 'neutro' : 'detrator'
 
   const npsCourseOptions = useMemo(
     () => Array.from(new Set(npsRows.map(npsCourseOf))).sort((a, b) => a.localeCompare(b)),
     [npsRows],
   )
 
+  // Filtro de curso vale pros gráficos/agregados da aba inteira; data e
+  // categoria (promotor/neutro/detrator) são específicos da tabela "Todas
+  // as respostas" — não faz sentido reduzir o NPS geral/por curso a uma
+  // janela de datas ou só detratores, por exemplo.
   const filteredNpsRows = useMemo(
     () => (npsCourseFilter ? npsRows.filter((r) => npsCourseOf(r) === npsCourseFilter) : npsRows),
     [npsRows, npsCourseFilter],
   )
+
+  const filteredNpsResponseRows = useMemo(
+    () =>
+      filteredNpsRows.filter((r) => {
+        if (npsCategoryFilter && npsCategoryOf(r.value) !== npsCategoryFilter) return false
+        const day = r.submittedAt.slice(0, 10)
+        if (npsDateFrom && day < npsDateFrom) return false
+        if (npsDateTo && day > npsDateTo) return false
+        return true
+      }),
+    [filteredNpsRows, npsCategoryFilter, npsDateFrom, npsDateTo],
+  )
+
+  function toggleNpsSelected(id: string) {
+    setNpsSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAllNpsSelected(ids: string[]) {
+    setNpsSelected((prev) => (prev.size === ids.length && ids.every((id) => prev.has(id)) ? new Set() : new Set(ids)))
+  }
+
+  async function deleteNpsResponses(ids: string[]) {
+    if (ids.length === 0) return
+    const label = ids.length === 1 ? 'esta resposta' : `${ids.length} respostas selecionadas`
+    if (
+      !(await confirm(`Excluir ${label} da pesquisa de reação? Essa ação não pode ser desfeita.`, {
+        danger: true,
+        confirmLabel: 'Excluir',
+      }))
+    )
+      return
+    setNpsDeleting(true)
+    await supabase.from('reaction_responses').delete().in('id', ids)
+    setNpsRows((prev) => prev.filter((r) => !ids.includes(r.responseId)))
+    setNpsSelected((prev) => {
+      const next = new Set(prev)
+      for (const id of ids) next.delete(id)
+      return next
+    })
+    setNpsDeleting(false)
+  }
 
   const npsOverall = useMemo(() => npsFromValues(filteredNpsRows.map((r) => r.value)), [filteredNpsRows])
 
@@ -472,6 +531,38 @@ export function AdminAnalytics() {
       rows: npsDetailedRows.map((r) => [r.userName, r.course, r.value, r.date, ...r.answers]),
     }),
     [npsDetailedRows, npsQuestionColumns],
+  )
+
+  // "Todas as respostas" tem filtros próprios (categoria/data) além do
+  // filtro de curso da aba inteira — por isso deriva de
+  // filteredNpsResponseRows, não de filteredNpsRows como as outras seções.
+  const npsReportRows = useMemo(
+    () => [...filteredNpsResponseRows].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)),
+    [filteredNpsResponseRows],
+  )
+
+  const npsReportDetailedRows = useMemo(
+    () =>
+      npsReportRows.map((r) => {
+        const answerByQuestion = new Map(r.otherAnswers.map((a) => [a.questionText, a.valueNumber ?? a.valueText ?? '']))
+        return {
+          responseId: r.responseId,
+          userName: r.userName,
+          course: npsCourseOf(r),
+          value: r.value,
+          date: new Date(r.submittedAt).toLocaleDateString('pt-BR'),
+          answers: npsQuestionColumns.map((q) => answerByQuestion.get(q) ?? ''),
+        }
+      }),
+    [npsReportRows, npsQuestionColumns],
+  )
+
+  const npsReportCsv = useMemo(
+    () => ({
+      headers: ['Aluno', 'Curso', 'Nota NPS', 'Data', ...npsQuestionColumns],
+      rows: npsReportDetailedRows.map((r) => [r.userName, r.course, r.value, r.date, ...r.answers]),
+    }),
+    [npsReportDetailedRows, npsQuestionColumns],
   )
 
   function toggleStudentSort(field: StudentSortField) {
@@ -885,17 +976,80 @@ export function AdminAnalytics() {
               </div>
 
               <div className="card p-5">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="font-bold text-ink">Todas as respostas</h2>
-                  <CsvButton filename="respostas-detalhadas-nps.csv" headers={npsDetailedCsv.headers} rows={npsDetailedCsv.rows} />
+                  <CsvButton filename="respostas-detalhadas-nps.csv" headers={npsReportCsv.headers} rows={npsReportCsv.rows} />
                 </div>
                 <p className="mt-1 text-xs text-ink-soft">
                   Cada linha é uma resposta, com a nota NPS e as demais perguntas da pesquisa de reação daquele curso.
                 </p>
+
+                <div className="mt-3 flex flex-wrap items-end gap-3">
+                  <label className="flex flex-col gap-1 text-xs font-medium text-ink-soft">
+                    Categoria
+                    <select
+                      className="rounded-lg border border-navy-light px-3 py-1.5 text-sm text-ink"
+                      value={npsCategoryFilter}
+                      onChange={(e) => setNpsCategoryFilter(e.target.value as typeof npsCategoryFilter)}
+                    >
+                      <option value="">Todas</option>
+                      <option value="promotor">Promotores (9-10)</option>
+                      <option value="neutro">Neutros (7-8)</option>
+                      <option value="detrator">Detratores (0-6)</option>
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-medium text-ink-soft">
+                    De
+                    <input
+                      type="date"
+                      className="rounded-lg border border-navy-light px-3 py-1.5 text-sm text-ink"
+                      value={npsDateFrom}
+                      onChange={(e) => setNpsDateFrom(e.target.value)}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-medium text-ink-soft">
+                    Até
+                    <input
+                      type="date"
+                      className="rounded-lg border border-navy-light px-3 py-1.5 text-sm text-ink"
+                      value={npsDateTo}
+                      onChange={(e) => setNpsDateTo(e.target.value)}
+                    />
+                  </label>
+                  {(npsCategoryFilter || npsDateFrom || npsDateTo) && (
+                    <button
+                      onClick={() => {
+                        setNpsCategoryFilter('')
+                        setNpsDateFrom('')
+                        setNpsDateTo('')
+                      }}
+                      className="text-xs font-semibold text-ink-soft hover:underline"
+                    >
+                      Limpar filtros
+                    </button>
+                  )}
+                  {npsSelected.size > 0 && (
+                    <button
+                      onClick={() => deleteNpsResponses(Array.from(npsSelected))}
+                      disabled={npsDeleting}
+                      className="ml-auto rounded-lg bg-brand-red px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-red-dark disabled:opacity-50"
+                    >
+                      Excluir selecionadas ({npsSelected.size})
+                    </button>
+                  )}
+                </div>
+
                 <div className="mt-4 max-h-96 overflow-auto">
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr className="text-xs uppercase text-ink-soft">
+                        <th className="w-8 pb-2 pr-2">
+                          <input
+                            type="checkbox"
+                            checked={npsReportDetailedRows.length > 0 && npsSelected.size === npsReportDetailedRows.length}
+                            onChange={() => toggleAllNpsSelected(npsReportDetailedRows.map((r) => r.responseId))}
+                          />
+                        </th>
                         <th className="pb-2 pr-4">Aluno</th>
                         <th className="pb-2 pr-4">Curso</th>
                         <th className="pb-2 pr-4 text-right">Nota NPS</th>
@@ -903,11 +1057,19 @@ export function AdminAnalytics() {
                         {npsQuestionColumns.map((q) => (
                           <th key={q} className="pb-2 pr-4">{q}</th>
                         ))}
+                        <th className="pb-2 pr-4">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {npsDetailedRows.map((r) => (
+                      {npsReportDetailedRows.map((r) => (
                         <tr key={r.responseId} className="border-t border-navy-light/60">
+                          <td className="py-2 pr-2">
+                            <input
+                              type="checkbox"
+                              checked={npsSelected.has(r.responseId)}
+                              onChange={() => toggleNpsSelected(r.responseId)}
+                            />
+                          </td>
                           <td className="py-2 pr-4 font-medium text-ink">{r.userName}</td>
                           <td className="py-2 pr-4 text-ink-soft">{r.course}</td>
                           <td
@@ -921,10 +1083,19 @@ export function AdminAnalytics() {
                           {r.answers.map((a, i) => (
                             <td key={i} className="py-2 pr-4 text-ink-soft">{a}</td>
                           ))}
+                          <td className="py-2 pr-4">
+                            <button
+                              onClick={() => deleteNpsResponses([r.responseId])}
+                              disabled={npsDeleting}
+                              className="text-xs font-semibold text-brand-red hover:underline disabled:opacity-50"
+                            >
+                              Excluir
+                            </button>
+                          </td>
                         </tr>
                       ))}
-                      {npsDetailedRows.length === 0 && (
-                        <tr><td colSpan={4 + npsQuestionColumns.length} className="py-3 text-ink-soft">Sem dados ainda.</td></tr>
+                      {npsReportDetailedRows.length === 0 && (
+                        <tr><td colSpan={6 + npsQuestionColumns.length} className="py-3 text-ink-soft">Sem dados ainda.</td></tr>
                       )}
                     </tbody>
                   </table>

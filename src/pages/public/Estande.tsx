@@ -350,6 +350,14 @@ export function Estande() {
                       </a>
                     ) : (
                       'Termos de Uso'
+                    )}{' '}
+                    e a{' '}
+                    {legal.privacyUrl ? (
+                      <a href={legal.privacyUrl} target="_blank" rel="noreferrer" className="font-semibold text-navy hover:underline">
+                        Política de Privacidade
+                      </a>
+                    ) : (
+                      'Política de Privacidade'
                     )}
                     .
                   </span>

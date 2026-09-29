@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { HeroBrandBar } from '../../components/HeroBrandBar'
 import { Icon } from '../../components/Icon'
+import { applyCertificateVariables } from '../../lib/certificate'
+import { formatCargaHoraria } from '../../lib/format'
 import { verifyCertificateByCode } from '../../lib/api'
 import type { PublicCertificate } from '../../types/database'
 
@@ -12,11 +14,13 @@ export function ValidarCertificado() {
   const [code, setCode] = useState(searchParams.get('codigo') ?? '')
   const [result, setResult] = useState<Result>('idle')
   const [certificate, setCertificate] = useState<PublicCertificate | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   async function verify(value: string) {
     const trimmed = value.trim()
     if (!trimmed) return
     setResult('checking')
+    setPreviewOpen(false)
     const found = await verifyCertificateByCode(trimmed)
     setCertificate(found)
     setResult(found ? 'found' : 'not_found')
@@ -70,7 +74,7 @@ export function ValidarCertificado() {
           {result === 'found' && certificate && (
             <div className="alert-success mt-5 flex items-start gap-3 rounded-xl border p-4">
               <span className="mt-0.5 shrink-0 text-xl">✅</span>
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="font-bold text-ink">Certificado válido</p>
                 <p className="mt-1 text-sm text-ink-soft">
                   <strong className="text-ink">{certificate.student_name}</strong> concluiu o curso{' '}
@@ -82,6 +86,24 @@ export function ValidarCertificado() {
                     <> · concluído em {new Date(certificate.completed_at).toLocaleDateString('pt-BR')}</>
                   )}
                 </p>
+
+                <button
+                  type="button"
+                  onClick={() => setPreviewOpen(true)}
+                  className="mt-3 flex w-40 flex-col overflow-hidden rounded-lg border border-navy-light text-left shadow-sm transition hover:shadow-md"
+                >
+                  <div
+                    className="flex aspect-[1400/895] w-full items-center justify-center bg-cover bg-center"
+                    style={
+                      certificate.template_background_url
+                        ? { backgroundImage: `url(${certificate.template_background_url})` }
+                        : { background: 'linear-gradient(135deg,#1A3B6E,#373896)' }
+                    }
+                  >
+                    {!certificate.template_background_url && <span className="text-xl">🏆</span>}
+                  </div>
+                  <span className="bg-surface px-2 py-1.5 text-[11px] font-semibold text-navy">Ver certificado →</span>
+                </button>
               </div>
             </div>
           )}
@@ -97,6 +119,48 @@ export function ValidarCertificado() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {previewOpen && certificate && <CertificatePreviewModal certificate={certificate} onClose={() => setPreviewOpen(false)} />}
+    </div>
+  )
+}
+
+function CertificatePreviewModal({ certificate, onClose }: { certificate: PublicCertificate; onClose: () => void }) {
+  const html = applyCertificateVariables(
+    certificate.template_message || 'Certificamos que {NOME_COMPLETO} concluiu o curso {NOME_DO_CURSO}.',
+    {
+      nomeCompleto: certificate.student_name,
+      nomeDoCurso: certificate.track_title,
+      cargaHorariaCurso: formatCargaHoraria(certificate.carga_horaria_total),
+      dataConclusao: certificate.completed_at
+        ? new Date(certificate.completed_at).toLocaleDateString('pt-BR')
+        : new Date(certificate.issued_at).toLocaleDateString('pt-BR'),
+    },
+  )
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-end pb-2">
+          <button
+            onClick={onClose}
+            aria-label="Fechar"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-ink-soft hover:bg-white"
+          >
+            <Icon name="x" size={18} />
+          </button>
+        </div>
+        <div
+          className="relative flex aspect-[1400/895] w-full items-center justify-center rounded-xl bg-cover bg-center p-10 text-center shadow-2xl"
+          style={
+            certificate.template_background_url
+              ? { backgroundImage: `url(${certificate.template_background_url})`, backgroundColor: '#fff' }
+              : { background: 'linear-gradient(135deg,#1A3B6E,#373896)', color: '#fff' }
+          }
+        >
+          <div className="max-w-lg text-base font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
         </div>
       </div>
     </div>

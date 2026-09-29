@@ -11,6 +11,7 @@ const TYPE_ICON: Record<NotificationType, IconName> = {
   course_completed: 'graduation-cap',
   pdi_progress: 'target',
   points: 'sparkles',
+  support: 'help-circle',
 }
 
 export function NotificationBell({ mobile = false }: { mobile?: boolean }) {

@@ -11,7 +11,7 @@ export type PdiJornadaBucket = 'pratica' | 'mentoria' | 'formacao'
 export type SocialScope = 'global' | 'curso'
 export type SocialPostType = 'texto' | 'imagem' | 'carrossel' | 'enquete' | 'video'
 export type SocialStoryMediaType = 'imagem' | 'video'
-export type NotificationType = 'reaction' | 'course_completed' | 'pdi_progress' | 'points'
+export type NotificationType = 'reaction' | 'course_completed' | 'pdi_progress' | 'points' | 'support'
 export type QuestionType = 'single_choice' | 'multiple_choice' | 'true_false' | 'open_text'
 export type ReactionQuestionType = 'likert5' | 'nps' | 'open_text'
 
@@ -212,6 +212,9 @@ export interface ModuleCompletionSettings {
 export interface CommunitySettings {
   requireModeration: boolean
   allowRankingOptOut: boolean
+  /** Quanto tempo (segundos) cada story fica em exibição antes de avançar
+   * pro próximo/fechar. Limitado a 60 na tela de admin. */
+  storyDurationSeconds: number
 }
 
 export interface SessionSettings {
@@ -285,6 +288,29 @@ export interface PublicCertificate {
   track_title: string
   completed_at: string | null
   issued_at: string
+  carga_horaria_total: number | null
+  template_background_url: string | null
+  template_message: string | null
+}
+
+export type SupportTicketStatus = 'aberto' | 'respondido' | 'fechado'
+
+export interface SupportTicket {
+  id: string
+  user_id: string
+  subject: string
+  status: SupportTicketStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface SupportMessage {
+  id: string
+  ticket_id: string
+  author_id: string
+  is_admin: boolean
+  body: string
+  created_at: string
 }
 
 export interface BottonRedemption {
@@ -553,6 +579,8 @@ export interface Database {
       issued_certificates: { Row: IssuedCertificate; Insert: Partial<IssuedCertificate>; Update: Partial<IssuedCertificate> }
       botton_redemptions: { Row: BottonRedemption; Insert: Partial<BottonRedemption>; Update: Partial<BottonRedemption> }
       public_certificates: { Row: PublicCertificate; Insert: never; Update: never }
+      support_tickets: { Row: SupportTicket; Insert: Partial<SupportTicket>; Update: Partial<SupportTicket> }
+      support_messages: { Row: SupportMessage; Insert: Partial<SupportMessage>; Update: Partial<SupportMessage> }
       user_progress: { Row: UserProgress; Insert: Partial<UserProgress>; Update: Partial<UserProgress> }
       quizzes: { Row: Quiz; Insert: Partial<Quiz>; Update: Partial<Quiz> }
       questions: { Row: QuizQuestion; Insert: Partial<QuizQuestion>; Update: Partial<QuizQuestion> }
