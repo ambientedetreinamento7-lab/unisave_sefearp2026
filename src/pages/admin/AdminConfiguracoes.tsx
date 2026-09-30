@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { AdminLayout } from './AdminLayout'
 import {
+  getAnnouncementSettings,
   getBrandingSettings,
   getCommunitySettings,
   getCourseDefaultsSettings,
@@ -15,6 +16,7 @@ import {
   getSignupSettings,
   getTrialSettings,
   getTvPanelSettings,
+  updateAnnouncementSettings,
   updateBrandingSettings,
   updateCommunitySettings,
   updateCourseDefaultsSettings,
@@ -33,6 +35,7 @@ import {
 import { sanitizeFileName } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import type {
+  AnnouncementBannerSettings,
   BrandingSettings,
   CommunitySettings,
   CourseDefaultsSettings,
@@ -67,6 +70,7 @@ export function AdminConfiguracoes() {
         <BrandingSection />
         <CourseDefaultsSection />
         <CourseIntegritySection />
+        <AnnouncementSection />
         <SignupSection />
         <ModuleCompletionSection />
         <CommunitySection />
@@ -691,6 +695,104 @@ function CourseIntegritySection() {
               </p>
             </div>
           )}
+        </div>
+      )}
+    </SectionShell>
+  )
+}
+
+function isoToLocalInput(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function localInputToIso(value: string): string | null {
+  return value ? new Date(value).toISOString() : null
+}
+
+function AnnouncementSection() {
+  const [settings, setSettings] = useState<AnnouncementBannerSettings | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    getAnnouncementSettings().then(setSettings)
+  }, [])
+
+  async function save() {
+    if (!settings) return
+    setSaving(true)
+    setSaved(false)
+    await updateAnnouncementSettings(settings)
+    setSaving(false)
+    setSaved(true)
+  }
+
+  return (
+    <SectionShell
+      title="Banner de anúncio"
+      description="Uma faixa no topo, em toda a plataforma, pra anunciar algo com link clicável (ex.: uma palestra ao vivo). Some sozinha fora do período, se você definir datas."
+      loading={!settings}
+      onSave={save}
+      saving={saving}
+      saved={saved}
+    >
+      {settings && (
+        <div className="mt-4 space-y-3">
+          <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
+            <input
+              type="checkbox"
+              checked={settings.enabled}
+              onChange={(e) => setSettings({ ...settings, enabled: e.target.checked })}
+            />
+            Exibir banner
+          </label>
+
+          <div>
+            <label className="block text-xs font-semibold text-ink-soft">Texto do aviso</label>
+            <input
+              className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5 text-sm"
+              placeholder="Ex: Palestra ao vivo hoje às 19h — participe!"
+              value={settings.text}
+              onChange={(e) => setSettings({ ...settings, text: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-ink-soft">Link (opcional)</label>
+            <input
+              className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5 text-sm"
+              placeholder="https://…"
+              value={settings.linkUrl ?? ''}
+              onChange={(e) => setSettings({ ...settings, linkUrl: e.target.value || null })}
+            />
+            <p className="mt-1 text-xs text-ink-soft">
+              Sem link, o banner só mostra o texto (sem "Saiba mais" nem clique).
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft">Começa em (opcional)</label>
+              <input
+                type="datetime-local"
+                className="mt-1 rounded-xl border border-navy-light px-3 py-2 text-sm"
+                value={isoToLocalInput(settings.startAt)}
+                onChange={(e) => setSettings({ ...settings, startAt: localInputToIso(e.target.value) })}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft">Termina em (opcional)</label>
+              <input
+                type="datetime-local"
+                className="mt-1 rounded-xl border border-navy-light px-3 py-2 text-sm"
+                value={isoToLocalInput(settings.endAt)}
+                onChange={(e) => setSettings({ ...settings, endAt: localInputToIso(e.target.value) })}
+              />
+            </div>
+          </div>
         </div>
       )}
     </SectionShell>

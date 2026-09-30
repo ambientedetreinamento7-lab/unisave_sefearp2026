@@ -251,6 +251,15 @@ export interface CourseIntegritySettings {
   minExecutionPercent: number
 }
 
+export interface AnnouncementBannerSettings {
+  enabled: boolean
+  text: string
+  linkUrl: string | null
+  /** ISO — null = sem data de início/fim (fica sempre visível enquanto enabled). */
+  startAt: string | null
+  endAt: string | null
+}
+
 export interface CourseDefaultsSettings {
   courseCoverUrl: string | null
   courseThumbnailUrl: string | null

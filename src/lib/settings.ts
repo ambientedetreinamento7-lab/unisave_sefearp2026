@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type {
+  AnnouncementBannerSettings,
   BrandingSettings,
   CommunitySettings,
   CourseDefaultsSettings,
@@ -169,6 +170,22 @@ export async function getCourseIntegritySettings(): Promise<CourseIntegritySetti
 
 export async function updateCourseIntegritySettings(settings: CourseIntegritySettings) {
   await supabase.from('app_settings').upsert({ key: 'course_integrity', value: settings })
+}
+
+const DEFAULT_ANNOUNCEMENT: AnnouncementBannerSettings = {
+  enabled: false,
+  text: '',
+  linkUrl: null,
+  startAt: null,
+  endAt: null,
+}
+
+export async function getAnnouncementSettings(): Promise<AnnouncementBannerSettings> {
+  return getAppSetting('announcement_banner', DEFAULT_ANNOUNCEMENT)
+}
+
+export async function updateAnnouncementSettings(settings: AnnouncementBannerSettings) {
+  await supabase.from('app_settings').upsert({ key: 'announcement_banner', value: settings })
 }
 
 const DEFAULT_PDI_TABS: PdiTabsSettings = { hideBalanco: false, hideBiblioteca: false }
