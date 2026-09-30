@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { AnnouncementBanner } from '../../components/AnnouncementBanner'
 import { AppHeader } from '../../components/AppHeader'
 import { Icon } from '../../components/Icon'
 import { ProgressBar } from '../../components/ProgressBar'
@@ -324,6 +325,8 @@ export function Dashboard() {
                 </button>
               )}
             </div>
+
+            <AnnouncementBanner />
 
             {bannerTracks.length > 0 && (
               <BannerCarousel

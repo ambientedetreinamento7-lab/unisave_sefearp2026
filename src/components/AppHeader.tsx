@@ -5,7 +5,6 @@ import { usePlatformSettings } from '../context/PlatformSettingsContext'
 import { useTheme } from '../context/ThemeContext'
 import { colorForName, initials } from '../lib/avatar'
 import { getTrialSettings } from '../lib/settings'
-import { AnnouncementBanner } from './AnnouncementBanner'
 import { Icon } from './Icon'
 import { InstallAppButton } from './InstallAppButton'
 import { InstallHelpModal } from './InstallHelpModal'
@@ -52,7 +51,6 @@ export function AppHeader() {
 
   return (
     <header className="bg-navy text-white">
-      <AnnouncementBanner />
       <div className="mx-auto flex max-w-7xl items-center gap-x-4 gap-y-3 px-5 py-3">
         <Link to="/dashboard" className="flex items-center gap-2 shrink-0">
           <img src={branding.logoUrl ?? '/logos/UniSave.png'} alt={branding.platformName ?? 'UniSave'} className="h-6 w-auto" />

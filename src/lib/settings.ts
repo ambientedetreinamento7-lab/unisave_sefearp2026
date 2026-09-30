@@ -176,6 +176,7 @@ const DEFAULT_ANNOUNCEMENT: AnnouncementBannerSettings = {
   enabled: false,
   text: '',
   linkUrl: null,
+  imageUrl: null,
   startAt: null,
   endAt: null,
 }

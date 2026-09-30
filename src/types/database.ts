@@ -255,6 +255,10 @@ export interface AnnouncementBannerSettings {
   enabled: boolean
   text: string
   linkUrl: string | null
+  /** Imagem opcional (tamanho recomendado 1326x495px) — quando definida,
+   * substitui a faixa de texto por um banner de imagem em tela cheia,
+   * mantendo o mesmo link/clique. `text` vira o alt da imagem. */
+  imageUrl: string | null
   /** ISO — null = sem data de início/fim (fica sempre visível enquanto enabled). */
   startAt: string | null
   endAt: string | null

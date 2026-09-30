@@ -714,6 +714,8 @@ function localInputToIso(value: string): string | null {
 
 function AnnouncementSection() {
   const [settings, setSettings] = useState<AnnouncementBannerSettings | null>(null)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [removeImage, setRemoveImage] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -725,7 +727,12 @@ function AnnouncementSection() {
     if (!settings) return
     setSaving(true)
     setSaved(false)
-    await updateAnnouncementSettings(settings)
+    const imageUrl = imageFile ? await uploadBrandingAsset(imageFile, 'announcement') : removeImage ? null : settings.imageUrl
+    const next = { ...settings, imageUrl }
+    await updateAnnouncementSettings(next)
+    setSettings(next)
+    setImageFile(null)
+    setRemoveImage(false)
     setSaving(false)
     setSaved(true)
   }
@@ -758,6 +765,39 @@ function AnnouncementSection() {
               value={settings.text}
               onChange={(e) => setSettings({ ...settings, text: e.target.value })}
             />
+            <p className="mt-1 text-xs text-ink-soft">
+              Com imagem (abaixo), esse texto vira o texto alternativo (acessibilidade) — quem enxerga a imagem não
+              vê esse texto na tela.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-ink-soft">Imagem (opcional)</label>
+            <p className="mt-0.5 text-xs text-ink-soft">
+              Tamanho recomendado: 1326 x 495px. Com imagem, o banner vira a imagem inteira (clicável, se tiver
+              link) em vez da faixa de texto.
+            </p>
+            {settings.imageUrl && !imageFile && !removeImage && (
+              <div className="mt-2 flex items-center gap-2">
+                <img src={settings.imageUrl} alt="" className="h-16 w-auto rounded-lg border border-navy-light object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setRemoveImage(true)}
+                  className="text-xs font-semibold text-brand-red hover:underline"
+                >
+                  Remover
+                </button>
+              </div>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                setImageFile(e.target.files?.[0] ?? null)
+                setRemoveImage(false)
+              }}
+              className="mt-2 w-full text-sm"
+            />
           </div>
 
           <div>
@@ -768,9 +808,7 @@ function AnnouncementSection() {
               value={settings.linkUrl ?? ''}
               onChange={(e) => setSettings({ ...settings, linkUrl: e.target.value || null })}
             />
-            <p className="mt-1 text-xs text-ink-soft">
-              Sem link, o banner só mostra o texto (sem "Saiba mais" nem clique).
-            </p>
+            <p className="mt-1 text-xs text-ink-soft">Sem link, o banner só mostra o texto/imagem (sem clique).</p>
           </div>
 
           <div className="flex flex-wrap gap-3">
