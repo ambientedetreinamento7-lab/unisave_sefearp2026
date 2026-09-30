@@ -4,6 +4,7 @@ import {
   getBrandingSettings,
   getCommunitySettings,
   getCourseDefaultsSettings,
+  getCourseIntegritySettings,
   getLegalSettings,
   getMaintenanceSettings,
   getModuleCompletionSettings,
@@ -17,6 +18,7 @@ import {
   updateBrandingSettings,
   updateCommunitySettings,
   updateCourseDefaultsSettings,
+  updateCourseIntegritySettings,
   updateLegalSettings,
   updateMaintenanceSettings,
   updateModuleCompletionSettings,
@@ -34,6 +36,7 @@ import type {
   BrandingSettings,
   CommunitySettings,
   CourseDefaultsSettings,
+  CourseIntegritySettings,
   LegalSettings,
   MaintenanceSettings,
   ModuleCompletionSettings,
@@ -63,6 +66,7 @@ export function AdminConfiguracoes() {
         <TrialSection />
         <BrandingSection />
         <CourseDefaultsSection />
+        <CourseIntegritySection />
         <SignupSection />
         <ModuleCompletionSection />
         <CommunitySection />
@@ -620,6 +624,73 @@ function SignupSection() {
               </label>
             </div>
           </div>
+        </div>
+      )}
+    </SectionShell>
+  )
+}
+
+function CourseIntegritySection() {
+  const [settings, setSettings] = useState<CourseIntegritySettings | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    getCourseIntegritySettings().then(setSettings)
+  }, [])
+
+  async function save() {
+    if (!settings) return
+    setSaving(true)
+    setSaved(false)
+    await updateCourseIntegritySettings(settings)
+    setSaving(false)
+    setSaved(true)
+  }
+
+  return (
+    <SectionShell
+      title="Integridade de conclusão de curso"
+      description="Trava o certificado e o bônus de conclusão até o aluno ter passado tempo suficiente desde que começou o curso — evita conclusões rápidas demais. Pontos por aula individual não são afetados."
+      loading={!settings}
+      onSave={save}
+      saving={saving}
+      saved={saved}
+    >
+      {settings && (
+        <div className="mt-4 space-y-3">
+          <label className="flex items-center gap-2 rounded-xl border border-navy-light p-3 text-sm font-medium text-ink">
+            <input
+              type="checkbox"
+              checked={settings.enabled}
+              onChange={(e) => setSettings({ ...settings, enabled: e.target.checked })}
+            />
+            Ativar trava de tempo mínimo
+          </label>
+          {settings.enabled && (
+            <div>
+              <label className="block text-xs font-semibold text-ink-soft">
+                % mínimo da carga horária cadastrada do curso
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                className="mt-1 w-24 rounded-lg border border-navy-light px-3 py-1.5 text-sm"
+                value={settings.minExecutionPercent}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    minExecutionPercent: Math.min(100, Math.max(1, Number(e.target.value) || 1)),
+                  })
+                }
+              />
+              <p className="mt-1 text-xs text-ink-soft">
+                Tempo corrido desde a primeira aula iniciada do curso. Só se aplica a cursos com carga horária
+                cadastrada — sem isso preenchido, a trava não entra em ação pra esse curso.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </SectionShell>

@@ -6,7 +6,15 @@ import { useAuth } from '../../context/AuthContext'
 import { applyCertificateVariables } from '../../lib/certificate'
 import { awardPoints } from '../../lib/gamification'
 import { formatCargaHoraria } from '../../lib/format'
-import { getAllTracks, getOrCreateCertificate, getTrackWithPills, getUserProgressMap, trackProgressPct } from '../../lib/api'
+import {
+  getAllTracks,
+  getOrCreateCertificate,
+  getTrackExecutionMinutes,
+  getTrackWithPills,
+  getUserProgressMap,
+  trackProgressPct,
+} from '../../lib/api'
+import { getCourseIntegritySettings } from '../../lib/settings'
 import { supabase } from '../../lib/supabase'
 import { QrCode } from '../../components/QrCode'
 import type { CertificateTemplate, Pill, Track } from '../../types/database'
@@ -18,6 +26,9 @@ interface CertificateEntry {
   pct: number
   completedAt: string | null
   code: string | null
+  /** Minutos que faltam pra bater o tempo mínimo de execução do curso
+   * (integridade de conclusão) — null/0 = liberado; > 0 = travado. */
+  minutesRemaining: number | null
 }
 
 export function Certificados() {
@@ -30,10 +41,11 @@ export function Certificados() {
     if (!profile) return
     let cancelled = false
     async function load() {
-      const [tracks, progressMap, { data: templatesData }] = await Promise.all([
+      const [tracks, progressMap, { data: templatesData }, integrity] = await Promise.all([
         getAllTracks(),
         getUserProgressMap(profile!.id),
         supabase.from('certificate_templates').select('*'),
+        getCourseIntegritySettings(),
       ])
       const templates = (templatesData as CertificateTemplate[]) ?? []
       const eligible = tracks.filter((t) => t.certificate_enabled)
@@ -55,6 +67,7 @@ export function Certificados() {
           pct: trackProgressPct(pills, progressMap),
           completedAt,
           code: null,
+          minutesRemaining: null,
         }
       })
 
@@ -62,18 +75,42 @@ export function Certificados() {
       setLoading(false)
 
       for (const entry of list) {
-        if (entry.pct === 100 && entry.pills.length > 0) {
-          await awardPoints(profile!.id, 'certificate_earned', entry.track.id)
-          const cert = await getOrCreateCertificate(
-            profile!.id,
-            entry.track.id,
-            profile!.name,
-            entry.track.title,
-            entry.completedAt,
-          )
-          if (cancelled || !cert) continue
-          setEntries((prev) => prev.map((e) => (e.track.id === entry.track.id ? { ...e, code: cert.code } : e)))
+        if (entry.pct !== 100 || entry.pills.length === 0) continue
+
+        // Integridade de conclusão: só emite certificado/bônus depois que o
+        // aluno passou tempo suficiente desde que começou o curso — sem
+        // isso, quem pula/acelera as aulas conseguia o certificado quase
+        // instantaneamente.
+        if (integrity.enabled && entry.track.carga_horaria_total) {
+          const elapsed = await getTrackExecutionMinutes(profile!.id, entry.pills.map((p) => p.id))
+          const required = entry.track.carga_horaria_total * (integrity.minExecutionPercent / 100)
+          const remaining = elapsed == null ? 0 : Math.max(0, required - elapsed)
+          if (remaining > 0) {
+            if (!cancelled) {
+              setEntries((prev) =>
+                prev.map((e) => (e.track.id === entry.track.id ? { ...e, minutesRemaining: remaining } : e)),
+              )
+            }
+            continue
+          }
         }
+
+        await awardPoints(profile!.id, 'certificate_earned', entry.track.id)
+        // Idempotente (chave única por user+regra+ref_id) — reintenta a cada
+        // visita caso tenha ficado travado por tempo mínimo antes (ver
+        // awardTrackCompletionBonus em lib/api.ts, que só tenta uma vez).
+        await awardPoints(profile!.id, 'track_completed', entry.track.id)
+        const cert = await getOrCreateCertificate(
+          profile!.id,
+          entry.track.id,
+          profile!.name,
+          entry.track.title,
+          entry.completedAt,
+        )
+        if (cancelled || !cert) continue
+        setEntries((prev) =>
+          prev.map((e) => (e.track.id === entry.track.id ? { ...e, code: cert.code, minutesRemaining: 0 } : e)),
+        )
       }
     }
     load()
@@ -91,7 +128,8 @@ export function Certificados() {
     )
   }
 
-  const earned = entries.filter((e) => e.pct === 100 && e.pills.length > 0)
+  const earned = entries.filter((e) => e.pct === 100 && e.pills.length > 0 && !e.minutesRemaining)
+  const pendingRelease = entries.filter((e) => e.pct === 100 && e.pills.length > 0 && !!e.minutesRemaining)
   const inProgress = entries.filter((e) => !(e.pct === 100 && e.pills.length > 0))
   const openEntry = entries.find((e) => e.track.id === openTrackId) ?? null
 
@@ -131,6 +169,30 @@ export function Certificados() {
             </p>
           )}
         </div>
+
+        {pendingRelease.length > 0 && (
+          <div className="mt-10">
+            <h2 className="text-lg font-bold text-ink">Aguardando liberação</h2>
+            <p className="mt-1 text-sm text-ink-soft">
+              Você concluiu todas as aulas — o certificado libera depois de um tempo mínimo de dedicação ao curso.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {pendingRelease.map((entry) => (
+                <div key={entry.track.id} className="card flex items-center gap-3 p-4">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-gold text-lg text-gold">
+                    ⏳
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-ink">{entry.track.title}</p>
+                    <p className="text-xs text-ink-soft">
+                      Libera em ~{formatCargaHoraria(Math.ceil(entry.minutesRemaining ?? 0))}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {inProgress.length > 0 && (
           <div className="mt-10">

@@ -241,6 +241,16 @@ export interface PwaSettings {
   installableEnabled: boolean
 }
 
+export interface CourseIntegritySettings {
+  /** Trava certificado + bônus de conclusão de curso até o aluno ter
+   * passado tempo suficiente desde que começou o curso (anti-conclusão
+   * rápida demais) — pontos por aula individual não são afetados. */
+  enabled: boolean
+  /** % da carga horária cadastrada do curso que precisa ter decorrido
+   * (tempo corrido desde a 1ª aula iniciada) antes de liberar. */
+  minExecutionPercent: number
+}
+
 export interface CourseDefaultsSettings {
   courseCoverUrl: string | null
   courseThumbnailUrl: string | null

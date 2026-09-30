@@ -3,6 +3,7 @@ import { computeTier } from './pdiTier'
 import { awardPoints } from './gamification'
 import { generateCertificateCode } from './certificate'
 import { notifyCourseCompleted, notifyPdiProgress } from './notifications'
+import { getCourseIntegritySettings } from './settings'
 import type {
   Category,
   DashboardSection,
@@ -419,15 +420,56 @@ export async function completePill(
 }
 
 /**
+ * Minutos corridos desde a primeira pílula iniciada do curso (evento
+ * 'pill_started' em user_points_events, gravado uma vez por pílula) até
+ * agora — usado pra travar certificado/bônus de conclusão até bater um
+ * mínimo de carga horária (evita conclusões rápidas demais). Retorna
+ * null se não há nenhum evento de início registrado pra esse curso (ex.:
+ * progresso anterior a esse recurso existir) — quem chama deve liberar
+ * por padrão nesse caso, não travar por falta de dado.
+ */
+export async function getTrackExecutionMinutes(userId: string, pillIds: string[]): Promise<number | null> {
+  if (pillIds.length === 0) return null
+  const { data } = await supabase
+    .from('user_points_events')
+    .select('created_at')
+    .eq('user_id', userId)
+    .eq('rule_key', 'pill_started')
+    .in('ref_id', pillIds)
+    .order('created_at', { ascending: true })
+    .limit(1)
+  const first = (data as { created_at: string }[] | null)?.[0]
+  if (!first) return null
+  return (Date.now() - new Date(first.created_at).getTime()) / 60_000
+}
+
+/** true se a trava de tempo mínimo estiver desligada, o curso não tiver
+ * carga horária cadastrada, ou o aluno já tiver passado tempo suficiente
+ * desde que começou — nesses casos libera certificado/bônus. */
+async function meetsMinExecutionTime(userId: string, pillIds: string[], cargaHorariaTotal: number | null): Promise<boolean> {
+  const settings = await getCourseIntegritySettings()
+  if (!settings.enabled || !cargaHorariaTotal) return true
+  const elapsed = await getTrackExecutionMinutes(userId, pillIds)
+  if (elapsed == null) return true
+  return elapsed >= cargaHorariaTotal * (settings.minExecutionPercent / 100)
+}
+
+/**
  * Bônus por concluir TODAS as pílulas de um curso (trilha) — separado dos
  * pontos por pílula individual (regra 'course_completed'), concedido uma
  * única vez por trilha via awardPoints (idempotente por ref_id=trackId).
+ * Travado pela integridade de conclusão (ver meetsMinExecutionTime) — se
+ * o aluno ainda não bateu o tempo mínimo, não é concedido agora e não
+ * repete sozinho depois (as pílulas já estão todas 'completed', então
+ * completePill não roda de novo pra elas). Pra cursos com certificado
+ * habilitado, a tela de Certificados tenta de novo a cada visita — ver o
+ * awardPoints('track_completed', ...) lá.
  */
 async function awardTrackCompletionBonus(userId: string, pillId: string) {
   const { data: pillRow } = await supabase.from('pills').select('track_id').eq('id', pillId).maybeSingle()
   const trackId = (pillRow as { track_id: string } | null)?.track_id ?? null
   if (!trackId) return
-  const { pills } = await getTrackWithPills(trackId)
+  const { track, pills } = await getTrackWithPills(trackId)
   if (pills.length === 0) return
   const { data: progressRows } = await supabase
     .from('user_progress')
@@ -439,9 +481,9 @@ async function awardTrackCompletionBonus(userId: string, pillId: string) {
       .filter((r) => r.status === 'completed')
       .map((r) => r.pill_id),
   )
-  if (pills.every((p) => completedIds.has(p.id))) {
-    await awardPoints(userId, 'track_completed', trackId)
-  }
+  if (!pills.every((p) => completedIds.has(p.id))) return
+  if (!(await meetsMinExecutionTime(userId, pills.map((p) => p.id), track?.carga_horaria_total ?? null))) return
+  await awardPoints(userId, 'track_completed', trackId)
 }
 
 /**

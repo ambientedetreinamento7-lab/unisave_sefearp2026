@@ -3,6 +3,7 @@ import type {
   BrandingSettings,
   CommunitySettings,
   CourseDefaultsSettings,
+  CourseIntegritySettings,
   LegalSettings,
   MaintenanceSettings,
   ModuleCompletionSettings,
@@ -158,6 +159,16 @@ export async function getCourseDefaultsSettings(): Promise<CourseDefaultsSetting
 
 export async function updateCourseDefaultsSettings(settings: CourseDefaultsSettings) {
   await supabase.from('app_settings').upsert({ key: 'course_defaults', value: settings })
+}
+
+const DEFAULT_COURSE_INTEGRITY: CourseIntegritySettings = { enabled: true, minExecutionPercent: 50 }
+
+export async function getCourseIntegritySettings(): Promise<CourseIntegritySettings> {
+  return getAppSetting('course_integrity', DEFAULT_COURSE_INTEGRITY)
+}
+
+export async function updateCourseIntegritySettings(settings: CourseIntegritySettings) {
+  await supabase.from('app_settings').upsert({ key: 'course_integrity', value: settings })
 }
 
 const DEFAULT_PDI_TABS: PdiTabsSettings = { hideBalanco: false, hideBiblioteca: false }
