@@ -16,6 +16,7 @@ const LINKS = [
   { to: '/admin/usuarios', label: 'Usuários' },
   { to: '/admin/analytics', label: 'Analytics' },
   { to: '/admin/suporte', label: 'Suporte' },
+  { to: '/admin/tempo-execucao', label: 'Tempo de Execução' },
   { to: '/admin/configuracoes', label: 'Configurações' },
 ]
 

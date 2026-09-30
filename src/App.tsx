@@ -17,6 +17,7 @@ import { AdminProgramas } from './pages/admin/AdminProgramas'
 import { AdminQuizzes } from './pages/admin/AdminQuizzes'
 import { AdminScormLibrary } from './pages/admin/AdminScormLibrary'
 import { AdminSuporte } from './pages/admin/AdminSuporte'
+import { AdminTempoExecucao } from './pages/admin/AdminTempoExecucao'
 import { AdminH5pLibrary } from './pages/admin/AdminH5pLibrary'
 import { AdminTrilhas } from './pages/admin/AdminTrilhas'
 import { AdminUsuarios } from './pages/admin/AdminUsuarios'
@@ -339,6 +340,14 @@ function App() {
           element={
             <RouteGuard allow={['admin']}>
               <AdminSuporte />
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/admin/tempo-execucao"
+          element={
+            <RouteGuard allow={['admin']}>
+              <AdminTempoExecucao />
             </RouteGuard>
           }
         />
