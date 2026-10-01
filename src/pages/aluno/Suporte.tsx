@@ -131,8 +131,11 @@ function NewTicketModal({
     try {
       const ticket = await createTicket(userId, subject.trim(), body.trim())
       onCreated(ticket)
-    } catch {
-      setError('Não foi possível abrir o chamado. Tente de novo.')
+    } catch (err) {
+      console.error('Falha ao abrir chamado de suporte:', err)
+      const message =
+        err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : String(err)
+      setError(`Não foi possível abrir o chamado: ${message}`)
       setSending(false)
     }
   }
