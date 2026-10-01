@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { colorForName, initials } from '../lib/avatar'
+import { sanitizeDisplayText } from '../lib/format'
 import { getLevels, levelBadgeIcon, levelForPoints, nextLevel } from '../lib/gamification'
 import { PROGRAMS } from '../lib/quiz'
 import type { GamificationLevel } from '../types/database'
@@ -62,7 +63,7 @@ export function NivelCard({
           <p className="flex flex-wrap items-center gap-1 text-sm text-ink-soft">
             {current ? (
               <>
-                <BadgeIcon icon={levelBadgeIcon(current, levels, programId ?? null)} size={16} /> {current.name}
+                <BadgeIcon icon={levelBadgeIcon(current, levels, programId ?? null)} size={16} /> {sanitizeDisplayText(current.name)}
               </>
             ) : (
               'Sem nível'
@@ -79,7 +80,7 @@ export function NivelCard({
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-ink-soft">
             Faltam {next.min_points - totalPoints} pontos para{' '}
-            <BadgeIcon icon={levelBadgeIcon(next, levels, programId ?? null)} size={14} /> {next.name}
+            <BadgeIcon icon={levelBadgeIcon(next, levels, programId ?? null)} size={14} /> {sanitizeDisplayText(next.name)}
           </p>
         </div>
       )}
@@ -92,12 +93,12 @@ export function NivelCard({
               <button
                 key={l.id}
                 type="button"
-                title={l.name}
+                title={sanitizeDisplayText(l.name)}
                 onClick={() => setSelectedBadge({ ...l, badge_icon: levelBadgeIcon(l, levels, programId ?? null) ?? l.badge_icon })}
                 className="flex items-center gap-1.5 rounded-full bg-lavender px-3 py-1.5 text-sm font-semibold text-lavender-ink transition hover:brightness-95"
               >
                 <BadgeIcon icon={levelBadgeIcon(l, levels, programId ?? null)} size={16} />
-                {l.name}
+                {sanitizeDisplayText(l.name)}
               </button>
             ))}
           </div>

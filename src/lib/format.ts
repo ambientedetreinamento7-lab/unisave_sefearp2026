@@ -10,8 +10,34 @@ export function normalizeEmail(email: string): string {
  * outros caracteres fora de [a-zA-Z0-9._-] com "Invalid key" — sanitiza o
  * nome original do arquivo antes de compor o path de upload. */
 export function sanitizeFileName(name: string): string {
-  const withoutAccents = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const withoutAccents = name.normalize('NFD').replace(/[̀-ͯ]/g, '')
   return withoutAccents.replace(/[^a-zA-Z0-9._-]/g, '-')
+}
+
+// Zero-width space/joiner, marcas de direção, seletores de variação, BOM —
+// construído por código de caractere (em vez de um literal \uXXXX no
+// regex) porque colar o próprio caractere invisível no arquivo-fonte
+// quebra a ferramenta de edição (ela não enxerga o caractere, então não
+// consegue casar a string de novo numa edição seguinte).
+const INVISIBLE_CHAR_CODES = [
+  0x200b, 0x200c, 0x200d, 0x200e, 0x200f, // zero-width space/joiner/marcas de direção
+  0x2028, 0x2029, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x202f, // separadores/formatação direcional
+  0xfe00, 0xfe01, 0xfe02, 0xfe03, 0xfe04, 0xfe05, 0xfe06, 0xfe07, 0xfe08, 0xfe09, 0xfe0a,
+  0xfe0b, 0xfe0c, 0xfe0d, 0xfe0e, 0xfe0f, // seletores de variação
+  0xfeff, // BOM / zero-width no-break space
+]
+const INVISIBLE_CHARS_PATTERN = new RegExp(`[${INVISIBLE_CHAR_CODES.map((c) => String.fromCharCode(c)).join('')}]`, 'g')
+
+/** Remove caracteres Unicode invisíveis que às vezes acabam colados sem
+ * querer num campo de texto editado pelo admin (ex.: copiado de um emoji
+ * picker ou de outro app/WhatsApp). Na maioria dos dispositivos esses
+ * caracteres ficam invisíveis, mas em fontes mais limitadas (alguns
+ * Android/MIUI) aparecem como um glifo quebrado — às vezes bem parecido
+ * com uma cruz — no meio ou no lugar do texto. Usar ao exibir texto curto
+ * vindo do admin (rótulos, nomes de nível etc.).
+ */
+export function sanitizeDisplayText(text: string): string {
+  return text.replace(INVISIBLE_CHARS_PATTERN, '').trim()
 }
 
 /** tracks.carga_horaria_total é armazenado em minutos — formata pra

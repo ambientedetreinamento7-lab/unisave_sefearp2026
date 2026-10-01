@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AdminLayout } from './AdminLayout'
 import { BadgeIcon } from '../../components/BadgeIcon'
 import { useConfirm } from '../../components/ConfirmDialog'
-import { sanitizeFileName } from '../../lib/format'
+import { sanitizeDisplayText, sanitizeFileName } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import type { GamificationLevel, GamificationRule } from '../../types/database'
 
@@ -63,7 +63,7 @@ export function AdminGamificacao() {
           {rules.map((rule) => (
             <div key={rule.key} className="card flex flex-wrap items-center justify-between gap-3 p-4">
               <div>
-                <p className="font-semibold text-ink">{rule.label}</p>
+                <p className="font-semibold text-ink">{sanitizeDisplayText(rule.label)}</p>
                 <p className="text-xs text-ink-soft">
                   {rule.points} pontos{rule.recurrence_days ? ` · a cada ${rule.recurrence_days} dia(s)` : ''}
                   {!rule.enabled && ' · desativada'}
@@ -109,7 +109,7 @@ export function AdminGamificacao() {
               <div className="flex items-center gap-3">
                 <BadgeIcon icon={level.badge_icon} size={28} />
                 <div>
-                  <p className="font-semibold text-ink">{level.name}</p>
+                  <p className="font-semibold text-ink">{sanitizeDisplayText(level.name)}</p>
                   <p className="text-xs text-ink-soft">A partir de {level.min_points} pontos</p>
                 </div>
               </div>

@@ -6,6 +6,7 @@ import { Icon } from '../../components/Icon'
 import { useAuth } from '../../context/AuthContext'
 import { colorForName, initials } from '../../lib/avatar'
 import { getLevels, getRanking, getRules, levelBadgeIcon, levelForPoints } from '../../lib/gamification'
+import { sanitizeDisplayText } from '../../lib/format'
 import type { GamificationLevel, GamificationRule, PublicProfile } from '../../types/database'
 
 export function Ranking() {
@@ -72,7 +73,7 @@ export function Ranking() {
                 >
                   <BadgeIcon icon={levelBadgeIcon(level, levels, profile?.program_id ?? null)} size={36} />
                   <div>
-                    <p className="font-semibold text-ink">{level.name}</p>
+                    <p className="font-semibold text-ink">{sanitizeDisplayText(level.name)}</p>
                     <p className="text-xs text-ink-soft">A partir de {level.min_points} pontos</p>
                   </div>
                 </div>
@@ -91,7 +92,7 @@ export function Ranking() {
             {rules.map((rule) => (
               <div key={rule.key} className="card flex items-center justify-between gap-3 p-4">
                 <div>
-                  <p className="font-semibold text-ink">{rule.label}</p>
+                  <p className="font-semibold text-ink">{sanitizeDisplayText(rule.label)}</p>
                   {rule.key === 'daily_access' && (
                     <p className="text-xs text-ink-soft">Resgatável a cada {rule.recurrence_days ?? 1} dia(s)</p>
                   )}
