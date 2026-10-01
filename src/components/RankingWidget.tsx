@@ -4,6 +4,7 @@ import { colorForName, initials } from '../lib/avatar'
 import { getLevels, getRanking, levelBadgeIcon, levelForPoints } from '../lib/gamification'
 import type { GamificationLevel, PublicProfile } from '../types/database'
 import { BadgeIcon } from './BadgeIcon'
+import { Icon } from './Icon'
 
 export function RankingWidget({ currentUserId }: { currentUserId: string }) {
   const [ranking, setRanking] = useState<PublicProfile[] | null>(null)
@@ -21,7 +22,10 @@ export function RankingWidget({ currentUserId }: { currentUserId: string }) {
 
   return (
     <div className="card flex max-h-[80vh] flex-col p-5">
-      <h2 className="shrink-0 font-bold text-ink">🏆 Ranking geral</h2>
+      <h2 className="flex shrink-0 items-center gap-1.5 font-bold text-ink">
+        <Icon name="trophy" size={16} />
+        Ranking geral
+      </h2>
       <div className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto">
         {ranking.map((p, i) => (
           <RankingRow

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppHeader } from '../../components/AppHeader'
 import { BadgeIcon } from '../../components/BadgeIcon'
+import { Icon } from '../../components/Icon'
 import { useAuth } from '../../context/AuthContext'
 import { colorForName, initials } from '../../lib/avatar'
 import { getLevels, getRanking, getRules, levelBadgeIcon, levelForPoints } from '../../lib/gamification'
@@ -40,7 +41,10 @@ export function Ranking() {
         <p className="mt-1 text-ink-soft">Veja sua posição geral, as badges disponíveis e como ganhar pontos.</p>
 
         <section className="card mt-6 p-5">
-          <h2 className="font-bold text-ink">🏆 Ranking geral</h2>
+          <h2 className="flex items-center gap-1.5 font-bold text-ink">
+            <Icon name="trophy" size={16} />
+            Ranking geral
+          </h2>
           <div className="mt-3 space-y-1.5">
             {ranking.map((p, i) => (
               <RankingRow
