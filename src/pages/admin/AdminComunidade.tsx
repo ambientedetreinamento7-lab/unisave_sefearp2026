@@ -2,9 +2,24 @@ import { useEffect, useState } from 'react'
 import { AdminLayout } from './AdminLayout'
 import { useConfirm } from '../../components/ConfirmDialog'
 import { useAuth } from '../../context/AuthContext'
-import { deletePost, getModerationFeed, getReports, setPostPublished, type FeedPost, type ReportWithPost } from '../../lib/social'
+import {
+  deletePost,
+  getModerationFeed,
+  getReports,
+  pinPost,
+  setPostPublished,
+  unpinPost,
+  type FeedPost,
+  type ReportWithPost,
+} from '../../lib/social'
 
 type Tab = 'posts' | 'denuncias'
+
+const PIN_DURATION_OPTIONS = [1, 3, 7, 15, 30]
+
+function isPinned(post: FeedPost): boolean {
+  return !!post.pinned_until && new Date(post.pinned_until).getTime() > Date.now()
+}
 
 export function AdminComunidade() {
   const confirm = useConfirm()
@@ -13,6 +28,7 @@ export function AdminComunidade() {
   const [posts, setPosts] = useState<FeedPost[]>([])
   const [reports, setReports] = useState<ReportWithPost[]>([])
   const [loading, setLoading] = useState(true)
+  const [pinDays, setPinDays] = useState<Record<string, number>>({})
 
   async function reload() {
     if (!profile) return
@@ -36,6 +52,16 @@ export function AdminComunidade() {
   async function remove(postId: string) {
     if (!(await confirm('Excluir este post em definitivo?', { danger: true, confirmLabel: 'Excluir' }))) return
     await deletePost(postId)
+    reload()
+  }
+
+  async function handlePin(postId: string) {
+    await pinPost(postId, pinDays[postId] ?? 7)
+    reload()
+  }
+
+  async function handleUnpin(postId: string) {
+    await unpinPost(postId)
     reload()
   }
 
@@ -73,13 +99,46 @@ export function AdminComunidade() {
                     >
                       {post.published ? 'Publicado' : 'Despublicado'}
                     </span>
+                    {isPinned(post) && (
+                      <span className="ml-1 rounded-full bg-lavender px-2 py-0.5 text-[11px] font-semibold text-lavender-ink">
+                        📌 Fixado até {new Date(post.pinned_until!).toLocaleDateString('pt-BR')}
+                      </span>
+                    )}
                   </p>
                   <p className="text-xs text-ink-faint">
                     {new Date(post.created_at).toLocaleString('pt-BR')} · {post.scope === 'global' ? 'Global' : 'Meu curso'} ·{' '}
                     {post.post_type}
                   </p>
                 </div>
-                <div className="flex shrink-0 gap-2">
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  {isPinned(post) ? (
+                    <button
+                      onClick={() => handleUnpin(post.id)}
+                      className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
+                    >
+                      Desafixar
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <select
+                        value={pinDays[post.id] ?? 7}
+                        onChange={(e) => setPinDays((prev) => ({ ...prev, [post.id]: Number(e.target.value) }))}
+                        className="rounded-lg border border-navy-light px-2 py-1.5 text-xs"
+                      >
+                        {PIN_DURATION_OPTIONS.map((d) => (
+                          <option key={d} value={d}>
+                            {d} {d === 1 ? 'dia' : 'dias'}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => handlePin(post.id)}
+                        className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
+                      >
+                        Fixar
+                      </button>
+                    </div>
+                  )}
                   <button
                     onClick={() => togglePublished(post)}
                     className="rounded-lg border border-navy-light px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy"
@@ -96,7 +155,7 @@ export function AdminComunidade() {
               </div>
               {post.body && <p className="mt-2 text-sm text-ink-soft">{post.body}</p>}
               {post.media.length > 0 && (
-                <div className="mt-2 flex gap-2 overflow-x-auto">
+                <div className="scroll-x-soft mt-2 flex gap-2 overflow-x-auto pb-2">
                   {post.media.map((m) => (
                     <img key={m.id} src={m.url} alt="" className="h-20 w-20 shrink-0 rounded-lg border border-navy-light object-cover" />
                   ))}

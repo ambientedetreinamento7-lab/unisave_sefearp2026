@@ -115,6 +115,20 @@ async function enrichPosts(posts: SocialPost[], viewerId: string): Promise<FeedP
   })
 }
 
+/** Fixados ativos (pinned_until no futuro) primeiro — entre eles, o mais
+ * recentemente fixado fica no topo; o resto segue por created_at normal. */
+function sortFeedWithPins(posts: SocialPost[]): SocialPost[] {
+  const now = Date.now()
+  const isPinned = (p: SocialPost) => !!p.pinned_until && new Date(p.pinned_until).getTime() > now
+  return [...posts].sort((a, b) => {
+    const pinnedA = isPinned(a)
+    const pinnedB = isPinned(b)
+    if (pinnedA !== pinnedB) return pinnedA ? -1 : 1
+    if (pinnedA && pinnedB) return b.pinned_until!.localeCompare(a.pinned_until!)
+    return b.created_at.localeCompare(a.created_at)
+  })
+}
+
 export async function getFeed({
   scope,
   programId,
@@ -127,7 +141,18 @@ export async function getFeed({
   let query = supabase.from('social_posts').select('*').eq('scope', scope).order('created_at', { ascending: false })
   if (scope === 'curso') query = query.eq('program_id', programId)
   const { data } = await query
-  return enrichPosts((data as SocialPost[]) ?? [], viewerId)
+  return enrichPosts(sortFeedWithPins((data as SocialPost[]) ?? []), viewerId)
+}
+
+/** Fixa um post no topo do mural por `days` dias a partir de agora —
+ * idempotente/sobrescreve se já estava fixado (reseta a contagem). */
+export async function pinPost(postId: string, days: number) {
+  const pinnedUntil = new Date(Date.now() + days * 86_400_000).toISOString()
+  await supabase.from('social_posts').update({ pinned_until: pinnedUntil }).eq('id', postId)
+}
+
+export async function unpinPost(postId: string) {
+  await supabase.from('social_posts').update({ pinned_until: null }).eq('id', postId)
 }
 
 export async function createPost(input: {

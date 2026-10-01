@@ -553,6 +553,11 @@ create table social_posts (
   -- público (privacy.view='anybody'), então não precisa de hash extra
   -- na URL do embed.
   vimeo_id text,
+  -- Fixação temporária no topo do mural (spec: admin fixa um post por um
+  -- período) — null = não fixado; preenchido = fixado até essa data,
+  -- depois volta a ordenar por created_at normalmente sozinho (getFeed só
+  -- considera "fixado" quando pinned_until > now()).
+  pinned_until timestamptz,
   created_at timestamptz not null default now()
 );
 

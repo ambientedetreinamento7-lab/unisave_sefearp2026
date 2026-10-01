@@ -532,6 +532,9 @@ function PostCard({
             {courseName && <span className="font-medium text-ink-soft"> · {courseName}</span>}
           </p>
           <p className="text-xs text-ink-faint">
+            {post.pinned_until && new Date(post.pinned_until).getTime() > Date.now() && (
+              <span className="mr-1 font-semibold text-navy">📌 Fixado ·</span>
+            )}
             {relativeTime(post.created_at)} · {post.scope === 'global' ? 'Global' : 'Meu curso'}
           </p>
         </div>

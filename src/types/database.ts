@@ -469,6 +469,7 @@ export interface SocialPost {
   published: boolean
   poll_closed: boolean
   vimeo_id: string | null
+  pinned_until: string | null
   created_at: string
 }
 
