@@ -75,6 +75,29 @@ export async function awardPoints(
   await notifyPoints(userId, points, rule.label)
 }
 
+/**
+ * Ajuste manual de pontos pelo admin (Admin > Usuários) — ao contrário de
+ * awardPoints, aceita valor negativo (descontar) e não é idempotente por
+ * natureza: cada chamada é uma ação deliberada do admin, não o replay de
+ * um evento do aluno, então usa um ref_id novo (uuid) sempre, permitindo
+ * vários ajustes para o mesmo aluno. O motivo digitado pelo admin vai na
+ * notificação do aluno; não há coluna própria pra motivo em
+ * user_points_events, então não fica registrado além da notificação.
+ */
+export async function grantManualPoints(userId: string, points: number, reason: string) {
+  if (points === 0) return
+  const refId = crypto.randomUUID()
+  const { error } = await supabase
+    .from('user_points_events')
+    .insert({ user_id: userId, rule_key: 'manual_grant', ref_id: refId, points })
+  if (error) throw error
+
+  const { data: profile } = await supabase.from('profiles').select('total_points').eq('id', userId).single()
+  const currentTotal = (profile as { total_points: number } | null)?.total_points ?? 0
+  await supabase.from('profiles').update({ total_points: currentTotal + points }).eq('id', userId)
+  await notifyPoints(userId, points, reason.trim() || 'Ajuste manual da administração')
+}
+
 const BRASILIA_TZ = 'America/Sao_Paulo'
 
 // Dia civil em Brasília (não UTC) — o resgate de pontos de acesso deve

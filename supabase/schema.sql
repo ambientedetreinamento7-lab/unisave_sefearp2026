@@ -1811,7 +1811,11 @@ insert into gamification_rules (key, label, points, recurrence_days, streak_days
   ('first_post_enquete', 'Primeira enquete criada', 5, null, null),
   ('first_story', 'Primeiro story publicado', 5, null, null),
   ('nav_tutorial', 'Concluiu o tutorial de navegação', 15, null, null),
-  ('pdi_tutorial', 'Concluiu o tutorial do Meu PDI', 15, null, null)
+  ('pdi_tutorial', 'Concluiu o tutorial do Meu PDI', 15, null, null),
+  -- 'points' aqui é só o valor-padrão da regra (não usado na prática) —
+  -- toda concessão manual passa o valor explícito via overridePoints, já
+  -- que não existe "quantidade padrão" pra um ajuste manual do admin.
+  ('manual_grant', 'Pontos concedidos manualmente pela administração', 0, null, null)
 on conflict (key) do nothing;
 
 insert into gamification_levels (name, min_points, badge_icon) values

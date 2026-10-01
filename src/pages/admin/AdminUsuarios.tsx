@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AdminLayout } from './AdminLayout'
 import { useConfirm } from '../../components/ConfirmDialog'
+import { grantManualPoints } from '../../lib/gamification'
 import { supabase } from '../../lib/supabase'
 import type { Profile, UserRole } from '../../types/database'
 
@@ -10,6 +11,7 @@ export function AdminUsuarios() {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
+  const [grantingIds, setGrantingIds] = useState<string[] | null>(null)
 
   async function reload() {
     const { data } = await supabase.from('profiles').select('*').order('name')
@@ -78,6 +80,16 @@ export function AdminUsuarios() {
     setBusy(false)
   }
 
+  async function applyGrant(ids: string[], points: number, reason: string) {
+    setBusy(true)
+    await Promise.all(ids.map((id) => grantManualPoints(id, points, reason)))
+    const { data } = await supabase.from('profiles').select('id, total_points').in('id', ids)
+    const totalsById = new Map(((data as { id: string; total_points: number }[]) ?? []).map((r) => [r.id, r.total_points]))
+    setUsers((prev) => prev.map((u) => (totalsById.has(u.id) ? { ...u, total_points: totalsById.get(u.id)! } : u)))
+    setBusy(false)
+    setGrantingIds(null)
+  }
+
   async function deleteUsers(ids: string[]) {
     const label = ids.length === 1 ? 'este usuário' : `${ids.length} usuários selecionados`
     if (
@@ -126,6 +138,13 @@ export function AdminUsuarios() {
             className="rounded-lg border border-navy-light bg-surface px-3 py-1.5 text-xs font-semibold text-navy hover:border-navy disabled:opacity-50"
           >
             Resetar progresso
+          </button>
+          <button
+            onClick={() => setGrantingIds(selectedIds)}
+            disabled={busy}
+            className="rounded-lg border border-success/30 bg-surface px-3 py-1.5 text-xs font-semibold text-success hover:border-success disabled:opacity-50"
+          >
+            Conceder pontos
           </button>
           <button
             onClick={() => resetPoints(selectedIds)}
@@ -225,6 +244,13 @@ export function AdminUsuarios() {
                       Resetar progresso
                     </button>
                     <button
+                      onClick={() => setGrantingIds([u.id])}
+                      disabled={busy}
+                      className="rounded-lg border border-success/30 px-2.5 py-1 text-xs font-semibold text-success hover:border-success disabled:opacity-50"
+                    >
+                      Conceder pontos
+                    </button>
+                    <button
                       onClick={() => resetPoints([u.id])}
                       disabled={busy}
                       className="rounded-lg border border-brand-red/30 px-2.5 py-1 text-xs font-semibold text-brand-red hover:border-brand-red disabled:opacity-50"
@@ -253,6 +279,67 @@ export function AdminUsuarios() {
         </table>
         {users.length === 0 && <p className="p-4 text-ink-soft">Nenhum usuário cadastrado.</p>}
       </div>
+
+      {grantingIds && (
+        <GrantPointsModal
+          count={grantingIds.length}
+          busy={busy}
+          onClose={() => setGrantingIds(null)}
+          onConfirm={(points, reason) => applyGrant(grantingIds, points, reason)}
+        />
+      )}
     </AdminLayout>
+  )
+}
+
+function GrantPointsModal({
+  count,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  count: number
+  busy: boolean
+  onClose: () => void
+  onConfirm: (points: number, reason: string) => void
+}) {
+  const [points, setPoints] = useState(0)
+  const [reason, setReason] = useState('')
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className="card w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+        <h2 className="font-bold text-ink">
+          Conceder pontos {count === 1 ? 'a este aluno' : `a ${count} alunos selecionados`}
+        </h2>
+        <label className="mt-4 block text-xs font-semibold text-ink-soft">Pontos (negativo pra descontar)</label>
+        <input
+          type="number"
+          className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5 text-sm"
+          value={points}
+          onChange={(e) => setPoints(Number(e.target.value))}
+          autoFocus
+        />
+        <label className="mt-3 block text-xs font-semibold text-ink-soft">Motivo (aparece na notificação do aluno)</label>
+        <input
+          className="mt-1 w-full rounded-xl border border-navy-light px-4 py-2.5 text-sm"
+          placeholder="Ex: Participação na palestra de hoje"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-soft hover:text-ink">
+            Cancelar
+          </button>
+          <button
+            onClick={() => onConfirm(points, reason)}
+            disabled={busy || points === 0}
+            className="rounded-xl bg-success px-4 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {busy ? 'Aplicando…' : 'Confirmar'}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }

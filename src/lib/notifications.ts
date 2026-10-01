@@ -64,7 +64,7 @@ export async function notifyPoints(userId: string, points: number, label: string
   await createNotification({
     userId,
     type: 'points',
-    title: `+${points} pontos`,
+    title: `${points > 0 ? '+' : ''}${points} pontos`,
     body: label,
     link: '/meu-perfil',
   })
