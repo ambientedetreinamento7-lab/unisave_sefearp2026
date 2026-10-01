@@ -1309,6 +1309,7 @@ function TvPanelSection() {
   const [settings, setSettings] = useState<TvPanelSettings | null>(null)
   const [bgImageFile, setBgImageFile] = useState<File | null>(null)
   const [removeBgImage, setRemoveBgImage] = useState(false)
+  const [newCarouselFiles, setNewCarouselFiles] = useState<File[]>([])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -1325,13 +1326,23 @@ function TvPanelSection() {
       : removeBgImage
         ? null
         : settings.backgroundImageUrl
-    const next = { ...settings, backgroundImageUrl }
+    const uploadedCarouselUrls = await Promise.all(
+      newCarouselFiles.map((f) => uploadBrandingAsset(f, 'tv-panel-carousel')),
+    )
+    const carouselImages = [...settings.carouselImages, ...uploadedCarouselUrls]
+    const next = { ...settings, backgroundImageUrl, carouselImages }
     await updateTvPanelSettings(next)
     setSettings(next)
     setBgImageFile(null)
     setRemoveBgImage(false)
+    setNewCarouselFiles([])
     setSaving(false)
     setSaved(true)
+  }
+
+  function removeCarouselImage(url: string) {
+    if (!settings) return
+    setSettings({ ...settings, carouselImages: settings.carouselImages.filter((u) => u !== url) })
   }
 
   return (
@@ -1528,6 +1539,62 @@ function TvPanelSection() {
                 className="mt-1 h-10 w-16 rounded-lg border border-navy-light"
                 value={settings.thirdPlaceColor}
                 onChange={(e) => setSettings({ ...settings, thirdPlaceColor: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-navy-light pt-4">
+            <label className="block text-xs font-semibold text-ink-soft">Carrossel de imagens (abaixo do Top 5)</label>
+            <p className="mt-0.5 text-xs text-ink-soft">
+              Tamanho recomendado: 1326 x 495px. Com uma ou mais imagens, um carrossel aparece embaixo do pódio,
+              trocando de imagem sozinho. Sem nenhuma imagem, esse espaço fica vazio.
+            </p>
+
+            {settings.carouselImages.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {settings.carouselImages.map((url) => (
+                  <div key={url} className="relative">
+                    <img src={url} alt="" className="h-16 w-28 rounded-lg border border-navy-light object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeCarouselImage(url)}
+                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-brand-red text-xs font-bold text-white hover:bg-brand-red-dark"
+                      aria-label="Remover imagem"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => setNewCarouselFiles(Array.from(e.target.files ?? []))}
+              className="mt-2 w-full text-sm"
+            />
+            {newCarouselFiles.length > 0 && (
+              <p className="mt-1 text-xs text-ink-soft">
+                {newCarouselFiles.length} imagem(ns) selecionada(s) — adicionadas ao salvar.
+              </p>
+            )}
+
+            <div className="mt-3">
+              <label className="block text-xs font-semibold text-ink-soft">Segundos por imagem</label>
+              <input
+                type="number"
+                min={2}
+                max={60}
+                className="mt-1 w-24 rounded-lg border border-navy-light px-3 py-1.5 text-sm"
+                value={settings.carouselIntervalSeconds}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    carouselIntervalSeconds: Math.min(60, Math.max(2, Number(e.target.value) || 2)),
+                  })
+                }
               />
             </div>
           </div>

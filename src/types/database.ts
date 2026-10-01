@@ -291,6 +291,11 @@ export interface TvPanelSettings {
   firstPlaceColor: string
   secondPlaceColor: string
   thirdPlaceColor: string
+  /** Imagens do carrossel exibido abaixo do Top 5 (tamanho recomendado
+   * 1326x495px) — vazio = carrossel não aparece. */
+  carouselImages: string[]
+  /** Segundos que cada imagem do carrossel fica em tela antes de trocar. */
+  carouselIntervalSeconds: number
 }
 
 export interface IssuedCertificate {

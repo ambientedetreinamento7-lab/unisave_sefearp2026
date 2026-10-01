@@ -212,6 +212,8 @@ const DEFAULT_TV_PANEL: TvPanelSettings = {
   firstPlaceColor: '#eab308',
   secondPlaceColor: '#94a3b8',
   thirdPlaceColor: '#b45309',
+  carouselImages: [],
+  carouselIntervalSeconds: 6,
 }
 
 export async function getTvPanelSettings(): Promise<TvPanelSettings> {

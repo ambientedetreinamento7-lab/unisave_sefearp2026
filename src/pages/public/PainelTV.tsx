@@ -120,6 +120,8 @@ export function PainelTV() {
                 {fifth && <NextRow position={5} profile={fifth} panelBg={panelBgLight} />}
               </div>
             )}
+
+            <TvCarousel images={settings.carouselImages} intervalSeconds={settings.carouselIntervalSeconds} />
           </section>
 
           <section className="rounded-3xl p-6" style={{ background: panelBg }}>
@@ -188,6 +190,36 @@ function PodiumSpot({
       >
         {position}
       </div>
+    </div>
+  )
+}
+
+/** Carrossel de imagens (tamanho recomendado 1326x495, configurável em
+ * Admin > Configurações > Painel de TV) exibido abaixo do Top 5 —
+ * troca de imagem sozinho, sem interação (ninguém mexe numa TV). */
+function TvCarousel({ images, intervalSeconds }: { images: string[]; intervalSeconds: number }) {
+  const [index, setIndex] = useState(0)
+
+  useEffect(() => {
+    if (images.length <= 1) return
+    const timer = setInterval(() => setIndex((i) => (i + 1) % images.length), intervalSeconds * 1000)
+    return () => clearInterval(timer)
+  }, [images.length, intervalSeconds])
+
+  if (images.length === 0) return null
+
+  return (
+    <div className="relative mx-auto mt-10 w-full max-w-3xl overflow-hidden rounded-2xl bg-black/20" style={{ aspectRatio: '1326 / 495' }}>
+      {images.map((url, i) => (
+        <img
+          key={url}
+          src={url}
+          alt=""
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
+            i === index ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+      ))}
     </div>
   )
 }
