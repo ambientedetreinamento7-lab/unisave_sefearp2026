@@ -13,6 +13,7 @@ import {
 } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { ProgressBar } from '../ProgressBar'
+import { TargetDateSelect } from '../TargetDateSelect'
 import type { PdiItemStatus, PdiJornadaBucket, PdiPlanItem, PdiPlanSkillRating, SkillCategory, Track } from '../../types/database'
 
 const TOTAL_STEPS = 5
@@ -76,14 +77,10 @@ function ItemEditRow({
       ) : (
         <span className="min-w-0 flex-1 truncate text-sm text-ink">{label}</span>
       )}
-      <div className="flex shrink-0 gap-2">
-        <input
-          type="date"
-          value={targetDate ?? ''}
-          onChange={(e) => onDateChange(e.target.value)}
-          title="Data em que pretende concluir"
-          className="min-w-0 flex-1 rounded-lg border border-navy-light px-2 py-1 text-xs text-ink-soft outline-none focus:border-navy sm:flex-none"
-        />
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div title="Data em que pretende concluir">
+          <TargetDateSelect value={targetDate ?? ''} onChange={onDateChange} />
+        </div>
         <select
           value={status}
           disabled={!editableStatus}
@@ -128,8 +125,8 @@ export function CompetencyWizard({
   const [suggested, setSuggested] = useState<Track[] | null>(null)
   const [addingTrackId, setAddingTrackId] = useState<string | null>(null)
 
-  async function loadItems() {
-    setLoadingItems(true)
+  async function loadItems(silent = false) {
+    if (!silent) setLoadingItems(true)
     const rows = await getCompetencyPlanItems(planId, category.id)
     setItems(rows)
 
@@ -183,13 +180,13 @@ export function CompetencyWizard({
 
   async function handleStatusChange(item: PdiPlanItem, status: PdiItemStatus) {
     await setItemStatus(planId, item.id, status)
-    await loadItems()
+    await loadItems(true)
     onSaved()
   }
 
   async function handleDateChange(item: PdiPlanItem, date: string) {
     await setItemTargetDate(item.id, date || null)
-    await loadItems()
+    await loadItems(true)
   }
 
   async function handleAddTask(bucket: PdiJornadaBucket) {
@@ -197,14 +194,14 @@ export function CompetencyWizard({
     if (!text) return
     await addFreeTextItemToCompetency(planId, category.id, bucket, text)
     setNewTaskText((prev) => ({ ...prev, [bucket]: '' }))
-    await loadItems()
+    await loadItems(true)
     onSaved()
   }
 
   async function handleAddTrack(trackId: string) {
     setAddingTrackId(trackId)
     await addTrackToCompetency(planId, category.id, trackId)
-    await loadItems()
+    await loadItems(true)
     onSaved()
     setAddingTrackId(null)
   }

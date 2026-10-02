@@ -995,6 +995,35 @@ export async function removePlan(planId: string) {
  * desse item é mantido em dia por syncTrackProgressToPdi conforme o aluno
  * conclui as pílulas do curso.
  */
+/**
+ * Progresso real (user_progress) das pílulas de um curso pra um aluno —
+ * usado tanto por syncTrackProgressToPdi (recálculo contínuo) quanto pelos
+ * add*ToPlan abaixo, pra já nascer com o status certo quando o curso é
+ * adicionado ao PDI depois de já ter sido concluído por fora.
+ */
+async function computeTrackProgress(userId: string, trackId: string) {
+  const { pills } = await getTrackWithPills(trackId)
+  const { data: progressRows } = await supabase
+    .from('user_progress')
+    .select('pill_id, status')
+    .eq('user_id', userId)
+    .in('pill_id', pills.map((p) => p.id))
+  const completedIds = new Set(
+    ((progressRows as { pill_id: string; status: string }[]) ?? [])
+      .filter((r) => r.status === 'completed')
+      .map((r) => r.pill_id),
+  )
+  const total = Math.max(1, pills.length)
+  const completedCount = pills.filter((p) => completedIds.has(p.id)).length
+  const status: PdiItemStatus = completedCount >= total ? 'concluido' : completedCount > 0 ? 'em_andamento' : 'nao_iniciado'
+  return { progress_current: completedCount, progress_total: total, status }
+}
+
+async function getPlanUserId(planId: string): Promise<string | null> {
+  const { data } = await supabase.from('pdi_plans').select('user_id').eq('id', planId).maybeSingle()
+  return (data as { user_id: string } | null)?.user_id ?? null
+}
+
 export async function addTrackToPlan(planId: string, trackId: string) {
   const { data: existing } = await supabase
     .from('pdi_plan_items')
@@ -1005,7 +1034,10 @@ export async function addTrackToPlan(planId: string, trackId: string) {
     .maybeSingle()
   if (existing) return
 
-  const { pills } = await getTrackWithPills(trackId)
+  const userId = await getPlanUserId(planId)
+  const { progress_current, progress_total, status } = userId
+    ? await computeTrackProgress(userId, trackId)
+    : { progress_current: 0, progress_total: 1, status: 'nao_iniciado' as const }
 
   const { count } = await supabase
     .from('pdi_plan_items')
@@ -1017,9 +1049,9 @@ export async function addTrackToPlan(planId: string, trackId: string) {
     plan_id: planId,
     item_type: 'trilha' as const,
     ref_id: trackId,
-    progress_current: 0,
-    progress_total: Math.max(1, pills.length),
-    status: 'nao_iniciado' as const,
+    progress_current,
+    progress_total,
+    status,
     order_index: orderIndex,
     jornada_bucket: bucketForIndex(orderIndex),
   })
@@ -1037,6 +1069,18 @@ export async function addPillToPlan(planId: string, pillId: string) {
     .maybeSingle()
   if (existing) return
 
+  const userId = await getPlanUserId(planId)
+  let alreadyCompleted = false
+  if (userId) {
+    const { data: progress } = await supabase
+      .from('user_progress')
+      .select('status')
+      .eq('user_id', userId)
+      .eq('pill_id', pillId)
+      .maybeSingle()
+    alreadyCompleted = (progress as { status: string } | null)?.status === 'completed'
+  }
+
   const { count } = await supabase
     .from('pdi_plan_items')
     .select('id', { count: 'exact', head: true })
@@ -1047,9 +1091,9 @@ export async function addPillToPlan(planId: string, pillId: string) {
     plan_id: planId,
     item_type: 'pill' as const,
     ref_id: pillId,
-    progress_current: 0,
+    progress_current: alreadyCompleted ? 1 : 0,
     progress_total: 1,
-    status: 'nao_iniciado' as const,
+    status: alreadyCompleted ? ('concluido' as const) : ('nao_iniciado' as const),
     order_index: orderIndex,
     jornada_bucket: bucketForIndex(orderIndex),
   })
@@ -1074,7 +1118,11 @@ export async function addTrackToCompetency(planId: string, skillCategoryId: stri
     .maybeSingle()
   if (existing) return
 
-  const { pills } = await getTrackWithPills(trackId)
+  const userId = await getPlanUserId(planId)
+  const { progress_current, progress_total, status } = userId
+    ? await computeTrackProgress(userId, trackId)
+    : { progress_current: 0, progress_total: 1, status: 'nao_iniciado' as const }
+
   const { count } = await supabase
     .from('pdi_plan_items')
     .select('id', { count: 'exact', head: true })
@@ -1086,9 +1134,9 @@ export async function addTrackToCompetency(planId: string, skillCategoryId: stri
     item_type: 'trilha' as const,
     ref_id: trackId,
     skill_category_id: skillCategoryId,
-    progress_current: 0,
-    progress_total: Math.max(1, pills.length),
-    status: 'nao_iniciado' as const,
+    progress_current,
+    progress_total,
+    status,
     order_index: orderIndex,
     jornada_bucket: 'formacao' as const,
   })
