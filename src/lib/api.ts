@@ -210,10 +210,46 @@ export async function markPillInProgress(
     { onConflict: 'user_id,pill_id' },
   )
   await awardPoints(userId, 'pill_started', pillId)
+  if (!alreadyCompleted) await syncPillStartToPdi(userId, pillId)
 
   // Só conta pra "Mais acessados" na primeira vez desse aluno nessa
   // pílula — refazer/continuar não deve inflar o contador.
   if (!existing) await supabase.rpc('increment_pill_access_count', { p_pill_id: pillId })
+}
+
+/**
+ * Propaga o início de um curso (status 'in_progress' em user_progress)
+ * pros itens do PDI que ainda estavam 'nao_iniciado' — sem isso, um curso
+ * começado mas não concluído ficava preso em "Não iniciado" no PDI até a
+ * primeira pílula do curso ser concluída (completePill é o único outro
+ * gatilho de sincronização). Só mexe no status, não no
+ * progress_current/progress_total — esses continuam contando só pílulas
+ * de fato concluídas.
+ */
+async function syncPillStartToPdi(userId: string, pillId: string) {
+  const { data: plans } = await supabase.from('pdi_plans').select('id').eq('user_id', userId)
+  const planIds = ((plans as { id: string }[]) ?? []).map((p) => p.id)
+  if (planIds.length === 0) return
+
+  await supabase
+    .from('pdi_plan_items')
+    .update({ status: 'em_andamento' })
+    .in('plan_id', planIds)
+    .eq('item_type', 'pill')
+    .eq('ref_id', pillId)
+    .eq('status', 'nao_iniciado')
+
+  const { data: pillRow } = await supabase.from('pills').select('track_id').eq('id', pillId).maybeSingle()
+  const trackId = (pillRow as { track_id: string } | null)?.track_id ?? null
+  if (!trackId) return
+
+  await supabase
+    .from('pdi_plan_items')
+    .update({ status: 'em_andamento' })
+    .in('plan_id', planIds)
+    .eq('item_type', 'trilha')
+    .eq('ref_id', trackId)
+    .eq('status', 'nao_iniciado')
 }
 
 /** Marca um tutorial guiado (nav ou PDI) como já visto — concluído ou
@@ -561,26 +597,13 @@ async function syncTrackProgressToPdi(userId: string, trackId: string, planIds: 
   const rows = (trackItems as PdiPlanItem[]) ?? []
   if (rows.length === 0) return []
 
-  const { pills } = await getTrackWithPills(trackId)
-  const { data: progressRows } = await supabase
-    .from('user_progress')
-    .select('pill_id, status')
-    .eq('user_id', userId)
-    .in('pill_id', pills.map((p) => p.id))
-  const completedIds = new Set(
-    ((progressRows as { pill_id: string; status: string }[]) ?? [])
-      .filter((r) => r.status === 'completed')
-      .map((r) => r.pill_id),
-  )
-  const total = Math.max(1, pills.length)
-  const completedCount = pills.filter((p) => completedIds.has(p.id)).length
-  const status: PdiItemStatus = completedCount >= total ? 'concluido' : completedCount > 0 ? 'em_andamento' : 'nao_iniciado'
+  const { progress_current, progress_total, status } = await computeTrackProgress(userId, trackId)
 
   await Promise.all(
     rows.map((item) =>
       supabase
         .from('pdi_plan_items')
-        .update({ progress_current: completedCount, progress_total: total, status })
+        .update({ progress_current, progress_total, status })
         .eq('id', item.id),
     ),
   )
@@ -1008,14 +1031,13 @@ async function computeTrackProgress(userId: string, trackId: string) {
     .select('pill_id, status')
     .eq('user_id', userId)
     .in('pill_id', pills.map((p) => p.id))
-  const completedIds = new Set(
-    ((progressRows as { pill_id: string; status: string }[]) ?? [])
-      .filter((r) => r.status === 'completed')
-      .map((r) => r.pill_id),
-  )
+  const rows = (progressRows as { pill_id: string; status: string }[]) ?? []
+  const completedIds = new Set(rows.filter((r) => r.status === 'completed').map((r) => r.pill_id))
+  const hasStarted = rows.some((r) => r.status === 'in_progress' || r.status === 'completed')
   const total = Math.max(1, pills.length)
   const completedCount = pills.filter((p) => completedIds.has(p.id)).length
-  const status: PdiItemStatus = completedCount >= total ? 'concluido' : completedCount > 0 ? 'em_andamento' : 'nao_iniciado'
+  const status: PdiItemStatus =
+    completedCount >= total ? 'concluido' : completedCount > 0 || hasStarted ? 'em_andamento' : 'nao_iniciado'
   return { progress_current: completedCount, progress_total: total, status }
 }
 
@@ -1070,7 +1092,7 @@ export async function addPillToPlan(planId: string, pillId: string) {
   if (existing) return
 
   const userId = await getPlanUserId(planId)
-  let alreadyCompleted = false
+  let status: PdiItemStatus = 'nao_iniciado'
   if (userId) {
     const { data: progress } = await supabase
       .from('user_progress')
@@ -1078,7 +1100,8 @@ export async function addPillToPlan(planId: string, pillId: string) {
       .eq('user_id', userId)
       .eq('pill_id', pillId)
       .maybeSingle()
-    alreadyCompleted = (progress as { status: string } | null)?.status === 'completed'
+    const pillStatus = (progress as { status: string } | null)?.status
+    status = pillStatus === 'completed' ? 'concluido' : pillStatus === 'in_progress' ? 'em_andamento' : 'nao_iniciado'
   }
 
   const { count } = await supabase
@@ -1091,9 +1114,9 @@ export async function addPillToPlan(planId: string, pillId: string) {
     plan_id: planId,
     item_type: 'pill' as const,
     ref_id: pillId,
-    progress_current: alreadyCompleted ? 1 : 0,
+    progress_current: status === 'concluido' ? 1 : 0,
     progress_total: 1,
-    status: alreadyCompleted ? ('concluido' as const) : ('nao_iniciado' as const),
+    status,
     order_index: orderIndex,
     jornada_bucket: bucketForIndex(orderIndex),
   })
