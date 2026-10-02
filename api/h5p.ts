@@ -69,6 +69,12 @@ export default async function handler(req: VercelLikeRequest, res: VercelLikeRes
   const buffer = Buffer.from(await upstream.arrayBuffer())
   res.statusCode = 200
   res.setHeader('Content-Type', contentTypeFor(objectPath))
-  res.setHeader('Cache-Control', 'public, max-age=3600')
+  // Cada pacote sobe numa pasta com um uuid novo (ver AdminH5pLibrary.tsx)
+  // — nunca sobrescrita — então o conteúdo neste path é imutável de
+  // verdade. s-maxage é o que importa pro consumo do Supabase: sem ele,
+  // essa função ia no Storage de novo a CADA aluno que abrisse a aula,
+  // mesmo servindo o mesmíssimo arquivo; com s-maxage, o CDN da Vercel
+  // guarda a resposta e serve o resto dos alunos sem voltar no Supabase.
+  res.setHeader('Cache-Control', 'public, max-age=31536000, s-maxage=31536000, immutable')
   res.end(buffer)
 }

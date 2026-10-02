@@ -755,7 +755,11 @@ create or replace function support_message_updates_ticket()
 returns trigger as $$
 begin
   update support_tickets
-    set status = case when new.is_admin then 'respondido' else 'aberto' end,
+    -- O cast explícito é obrigatório aqui: um CASE resolve pro tipo text
+    -- (diferente de atribuir um literal direto, que o Postgres converte
+    -- sozinho) — sem o ::support_ticket_status, dá "column is of type
+    -- support_ticket_status but expression is of type text".
+    set status = (case when new.is_admin then 'respondido' else 'aberto' end)::support_ticket_status,
         updated_at = new.created_at
     where id = new.ticket_id;
   return new;
