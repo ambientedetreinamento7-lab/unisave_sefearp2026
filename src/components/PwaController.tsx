@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { usePlatformSettings } from '../context/PlatformSettingsContext'
 
 function isStandalone() {
@@ -26,29 +26,46 @@ function isStandalone() {
  */
 export function PwaController() {
   const { pwa, loading } = usePlatformSettings()
+  const [updateReady, setUpdateReady] = useState(false)
+  const [applyUpdate, setApplyUpdate] = useState<(() => void) | null>(null)
 
   useEffect(() => {
     if (loading) return
     if (pwa.installableEnabled || isStandalone()) {
       import('virtual:pwa-register').then(({ registerSW }) => {
-        registerSW({
+        const updateSW = registerSW({
           immediate: true,
-          // Por padrão (registerType: 'autoUpdate'), o vite-plugin-pwa
-          // recarrega a página sozinho, sem avisar, assim que uma versão
-          // nova do service worker termina de ativar — mesmo com um curso
-          // em andamento. Adia a atualização pra quando a aba não estiver
-          // em uso (fica invisível pra quem está usando o app).
+          // Nunca recarrega sozinho sem avisar — isso derrubava o que o
+          // aluno estivesse fazendo no meio de um curso. Mas também não
+          // pode ficar esperando pra sempre: quem deixa a aba sempre em
+          // primeiro plano (ex.: admin testando) nunca via a atualização
+          // sem forçar um hard refresh manualmente. Agora mostra um aviso
+          // que a pessoa decide quando aplicar, e ainda aplica sozinho se
+          // a aba for pro segundo plano antes disso (sem pedir nada).
           onNeedReload() {
+            setUpdateReady(true)
+            setApplyUpdate(() => () => updateSW())
             const reloadIfHidden = () => {
-              if (document.visibilityState === 'hidden') window.location.reload()
+              if (document.visibilityState === 'hidden') updateSW()
             }
             document.addEventListener('visibilitychange', reloadIfHidden)
-            reloadIfHidden()
           },
         })
       })
     }
   }, [pwa.installableEnabled, loading])
 
-  return null
+  if (!updateReady) return null
+
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-[100] flex items-center justify-center gap-3 bg-navy px-4 py-3 text-sm font-semibold text-white shadow-lg">
+      <span>Uma nova versão da plataforma está disponível.</span>
+      <button
+        onClick={() => applyUpdate?.()}
+        className="rounded-full bg-brand-red px-4 py-1.5 text-xs font-bold text-white hover:bg-brand-red-dark"
+      >
+        Atualizar agora
+      </button>
+    </div>
+  )
 }
