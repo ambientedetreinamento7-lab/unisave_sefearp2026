@@ -193,6 +193,7 @@ function TicketModal({
   const [reply, setReply] = useState('')
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [replyError, setReplyError] = useState('')
 
   async function reload() {
     setMessages(await getTicketMessages(ticketId))
@@ -214,11 +215,19 @@ function TicketModal({
   async function sendReply() {
     if (!reply.trim()) return
     setSending(true)
-    await replyAsStudent(ticketId, userId, reply.trim())
-    setReply('')
-    await reload()
-    setTicket((t) => (t ? { ...t, status: 'aberto', updated_at: new Date().toISOString() } : t))
-    onChanged()
+    setReplyError('')
+    try {
+      await replyAsStudent(ticketId, userId, reply.trim())
+      setReply('')
+      await reload()
+      setTicket((t) => (t ? { ...t, status: 'aberto', updated_at: new Date().toISOString() } : t))
+      onChanged()
+    } catch (err) {
+      console.error('Falha ao responder chamado de suporte:', err)
+      const message =
+        err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : String(err)
+      setReplyError(`Não foi possível enviar: ${message}`)
+    }
     setSending(false)
   }
 
@@ -277,6 +286,7 @@ function TicketModal({
                 Enviar
               </button>
             </div>
+            {replyError && <p className="mt-1.5 text-xs text-brand-red">{replyError}</p>}
             <button onClick={handleClose} className="mt-2 text-xs font-semibold text-ink-soft hover:underline">
               Encerrar chamado
             </button>

@@ -43,12 +43,25 @@ export async function createTicket(userId: string, subject: string, body: string
     .select('*')
     .single()
   if (error || !ticket) throw error ?? new Error('Não foi possível abrir o chamado.')
-  await supabase.from('support_messages').insert({ ticket_id: ticket.id, author_id: userId, is_admin: false, body })
+
+  // Esse insert nunca tinha o erro checado antes — se a policy de RLS (ou
+  // qualquer outra coisa) barrasse, o ticket ficava criado mas sem
+  // nenhuma mensagem, em silêncio total (o cliente supabase-js não lança
+  // exceção sozinho, só devolve { error }). Agora propaga o erro real pra
+  // quem chamou poder mostrar pro usuário em vez de mascarar a falha.
+  const { error: messageError } = await supabase
+    .from('support_messages')
+    .insert({ ticket_id: ticket.id, author_id: userId, is_admin: false, body })
+  if (messageError) throw messageError
+
   return ticket as SupportTicket
 }
 
 export async function replyAsStudent(ticketId: string, userId: string, body: string) {
-  await supabase.from('support_messages').insert({ ticket_id: ticketId, author_id: userId, is_admin: false, body })
+  const { error } = await supabase
+    .from('support_messages')
+    .insert({ ticket_id: ticketId, author_id: userId, is_admin: false, body })
+  if (error) throw error
 }
 
 /** Resposta do admin — notifica o aluno dono do chamado (link /suporte). */
@@ -58,11 +71,15 @@ export async function replyAsAdmin(ticketId: string, adminId: string, body: stri
     .select('user_id, subject')
     .eq('id', ticketId)
     .single()
-  await supabase.from('support_messages').insert({ ticket_id: ticketId, author_id: adminId, is_admin: true, body })
+  const { error } = await supabase
+    .from('support_messages')
+    .insert({ ticket_id: ticketId, author_id: adminId, is_admin: true, body })
+  if (error) throw error
   const row = ticket as { user_id: string; subject: string } | null
   if (row) await notifySupportReply(row.user_id, row.subject)
 }
 
 export async function closeTicket(ticketId: string) {
-  await supabase.from('support_tickets').update({ status: 'fechado' }).eq('id', ticketId)
+  const { error } = await supabase.from('support_tickets').update({ status: 'fechado' }).eq('id', ticketId)
+  if (error) throw error
 }

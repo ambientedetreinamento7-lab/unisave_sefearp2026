@@ -142,6 +142,7 @@ function TicketDetailModal({
   const [loading, setLoading] = useState(true)
   const [reply, setReply] = useState('')
   const [sending, setSending] = useState(false)
+  const [replyError, setReplyError] = useState('')
 
   async function reload() {
     setMessages(await getTicketMessages(ticketId))
@@ -156,10 +157,18 @@ function TicketDetailModal({
   async function send() {
     if (!reply.trim()) return
     setSending(true)
-    await replyAsAdmin(ticketId, adminId, reply.trim())
-    setReply('')
-    await reload()
-    onChanged()
+    setReplyError('')
+    try {
+      await replyAsAdmin(ticketId, adminId, reply.trim())
+      setReply('')
+      await reload()
+      onChanged()
+    } catch (err) {
+      console.error('Falha ao responder chamado de suporte:', err)
+      const message =
+        err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : String(err)
+      setReplyError(`Não foi possível enviar: ${message}`)
+    }
     setSending(false)
   }
 
@@ -214,6 +223,7 @@ function TicketDetailModal({
               Enviar
             </button>
           </div>
+          {replyError && <p className="mt-1.5 text-xs text-brand-red">{replyError}</p>}
         </div>
       </div>
     </div>
