@@ -12,6 +12,7 @@ export function AdminUsuarios() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [grantingIds, setGrantingIds] = useState<string[] | null>(null)
+  const [grantError, setGrantError] = useState('')
 
   async function reload() {
     const { data } = await supabase.from('profiles').select('*').order('name')
@@ -82,12 +83,20 @@ export function AdminUsuarios() {
 
   async function applyGrant(ids: string[], points: number, reason: string) {
     setBusy(true)
-    await Promise.all(ids.map((id) => grantManualPoints(id, points, reason)))
-    const { data } = await supabase.from('profiles').select('id, total_points').in('id', ids)
-    const totalsById = new Map(((data as { id: string; total_points: number }[]) ?? []).map((r) => [r.id, r.total_points]))
-    setUsers((prev) => prev.map((u) => (totalsById.has(u.id) ? { ...u, total_points: totalsById.get(u.id)! } : u)))
+    setGrantError('')
+    try {
+      await Promise.all(ids.map((id) => grantManualPoints(id, points, reason)))
+      const { data } = await supabase.from('profiles').select('id, total_points').in('id', ids)
+      const totalsById = new Map(((data as { id: string; total_points: number }[]) ?? []).map((r) => [r.id, r.total_points]))
+      setUsers((prev) => prev.map((u) => (totalsById.has(u.id) ? { ...u, total_points: totalsById.get(u.id)! } : u)))
+      setGrantingIds(null)
+    } catch (err) {
+      console.error('Falha ao conceder pontos:', err)
+      const message =
+        err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : String(err)
+      setGrantError(`Não foi possível aplicar: ${message}`)
+    }
     setBusy(false)
-    setGrantingIds(null)
   }
 
   async function deleteUsers(ids: string[]) {
@@ -284,7 +293,11 @@ export function AdminUsuarios() {
         <GrantPointsModal
           count={grantingIds.length}
           busy={busy}
-          onClose={() => setGrantingIds(null)}
+          error={grantError}
+          onClose={() => {
+            setGrantingIds(null)
+            setGrantError('')
+          }}
           onConfirm={(points, reason) => applyGrant(grantingIds, points, reason)}
         />
       )}
@@ -295,11 +308,13 @@ export function AdminUsuarios() {
 function GrantPointsModal({
   count,
   busy,
+  error,
   onClose,
   onConfirm,
 }: {
   count: number
   busy: boolean
+  error: string
   onClose: () => void
   onConfirm: (points: number, reason: string) => void
 }) {
@@ -327,6 +342,7 @@ function GrantPointsModal({
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
+        {error && <p className="mt-3 text-sm text-brand-red">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">
           <button onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-soft hover:text-ink">
             Cancelar
