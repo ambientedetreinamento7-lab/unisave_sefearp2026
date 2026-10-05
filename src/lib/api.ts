@@ -1077,7 +1077,12 @@ export async function addTrackToPlan(planId: string, trackId: string) {
     order_index: orderIndex,
     jornada_bucket: bucketForIndex(orderIndex),
   })
-  if (error) throw error
+  // 23505 = unique_violation — dois cliques quase simultâneos no mesmo
+  // curso passam ambos pelo check de "existing" acima antes que o
+  // primeiro insert termine (select-then-insert não é atômico); a
+  // constraint única no banco pega essa corrida, e aqui tratamos como
+  // "já estava adicionado" em vez de estourar erro pro aluno.
+  if (error && error.code !== '23505') throw error
 }
 
 /** Adds a single avulso curso (from the Biblioteca de Cursos) to a plan. */
@@ -1120,7 +1125,7 @@ export async function addPillToPlan(planId: string, pillId: string) {
     order_index: orderIndex,
     jornada_bucket: bucketForIndex(orderIndex),
   })
-  if (error) throw error
+  if (error && error.code !== '23505') throw error
 }
 
 /**
@@ -1163,7 +1168,7 @@ export async function addTrackToCompetency(planId: string, skillCategoryId: stri
     order_index: orderIndex,
     jornada_bucket: 'formacao' as const,
   })
-  if (error) throw error
+  if (error && error.code !== '23505') throw error
   await recomputePlanProgress(planId)
 }
 

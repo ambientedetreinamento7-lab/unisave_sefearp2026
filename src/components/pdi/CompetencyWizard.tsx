@@ -199,6 +199,7 @@ export function CompetencyWizard({
   }
 
   async function handleAddTrack(trackId: string) {
+    if (addingTrackId) return
     setAddingTrackId(trackId)
     await addTrackToCompetency(planId, category.id, trackId)
     await loadItems(true)
