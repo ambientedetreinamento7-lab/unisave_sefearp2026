@@ -341,6 +341,19 @@ export interface SupportMessage {
   created_at: string
 }
 
+export type OccurrenceType = 'positivo' | 'atencao'
+
+/** Registro de admin/moderador sobre um aluno (ex.: formação presencial)
+ * — nunca exposto ao próprio aluno, ver RLS de student_occurrences. */
+export interface StudentOccurrence {
+  id: string
+  student_id: string
+  author_id: string | null
+  type: OccurrenceType
+  note: string
+  created_at: string
+}
+
 export interface BottonRedemption {
   id: string
   code: string
@@ -610,6 +623,7 @@ export interface Database {
       public_certificates: { Row: PublicCertificate; Insert: never; Update: never }
       support_tickets: { Row: SupportTicket; Insert: Partial<SupportTicket>; Update: Partial<SupportTicket> }
       support_messages: { Row: SupportMessage; Insert: Partial<SupportMessage>; Update: Partial<SupportMessage> }
+      student_occurrences: { Row: StudentOccurrence; Insert: Partial<StudentOccurrence>; Update: Partial<StudentOccurrence> }
       user_progress: { Row: UserProgress; Insert: Partial<UserProgress>; Update: Partial<UserProgress> }
       quizzes: { Row: Quiz; Insert: Partial<Quiz>; Update: Partial<Quiz> }
       questions: { Row: QuizQuestion; Insert: Partial<QuizQuestion>; Update: Partial<QuizQuestion> }

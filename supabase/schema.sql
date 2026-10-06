@@ -771,6 +771,26 @@ create trigger support_message_updates_ticket
   for each row execute function support_message_updates_ticket();
 
 -- ============================================================
+-- OCORRÊNCIAS (registro de admin/moderador sobre um aluno, em
+-- formações presenciais — nunca visível pro próprio aluno)
+-- ============================================================
+
+create type occurrence_type as enum ('positivo', 'atencao');
+
+create table student_occurrences (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references profiles(id) on update cascade on delete cascade,
+  -- on delete set null (não cascade): remover a conta de quem escreveu não
+  -- pode apagar o histórico do aluno.
+  author_id uuid references profiles(id) on update cascade on delete set null,
+  type occurrence_type not null,
+  note text not null,
+  created_at timestamptz not null default now()
+);
+
+create index on student_occurrences (student_id);
+
+-- ============================================================
 -- GAMIFICAÇÃO
 -- ============================================================
 
@@ -992,6 +1012,7 @@ alter table app_settings enable row level security;
 alter table issued_certificates enable row level security;
 alter table support_tickets enable row level security;
 alter table support_messages enable row level security;
+alter table student_occurrences enable row level security;
 alter table profiles enable row level security;
 alter table user_progress enable row level security;
 alter table quizzes enable row level security;
@@ -1113,6 +1134,13 @@ create policy "reply own ticket" on support_messages for insert
   );
 create policy "admin replies ticket" on support_messages for insert
   with check (author_id = auth.uid() and is_admin and current_role_is('admin'));
+
+-- Ocorrências: só admin/moderador leem e escrevem — o próprio aluno nunca
+-- tem select aqui, de propósito (é um registro interno sobre ele, não um
+-- feedback endereçado a ele).
+create policy "admin and moderador manage occurrences" on student_occurrences for all
+  using (current_role_is('admin') or current_role_is('moderador'))
+  with check ((current_role_is('admin') or current_role_is('moderador')) and author_id = auth.uid());
 
 create policy "read own favorites" on pill_favorites for select using (user_id = auth.uid());
 create policy "add own favorites" on pill_favorites for insert with check (user_id = auth.uid());
